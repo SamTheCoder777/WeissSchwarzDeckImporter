@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>qml/ResultsPanel.qml</file>
+        <file>qml/DownloadPage.qml</file>
+    </qresource>
+</RCC>
