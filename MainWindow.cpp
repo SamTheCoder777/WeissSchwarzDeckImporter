@@ -42,7 +42,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
 
 
-
     // ── vertical nav rail ──────────────────────────────────────────────────
     QToolBar* sideBar = new QToolBar("SideBar", this);
     sideBar->setObjectName("SideBar");        // matches the stylesheet in main.cpp
@@ -192,11 +191,18 @@ QWidget* MainWindow::buildDetectPage() {
     selModel_     = new SelectionModel(this);
     bridge_       = new UiBridge(this);
     cropProvider_ = new CropImageProvider;      // engine takes ownership below
+    db_ = new CardDatabase(this); // For global cards json
+
+    candModel_->setCardDatabase(db_);
+
+    //load cards_globa.json
+    db_->load(QUrl("https://huggingface.co/datasets/SamTheCoder777/ws-index/resolve/main/cards_global.json"));
 
     qmlPanel_ = new QQuickWidget;
     qmlPanel_->engine()->addImageProvider("crop", cropProvider_);
     qmlPanel_->rootContext()->setContextProperty("bridge",   bridge_);
     qmlPanel_->rootContext()->setContextProperty("candModel", candModel_);
+    qmlPanel_->rootContext()->setContextProperty("cardDatabase", db_);
     qmlPanel_->rootContext()->setContextProperty("selModel",  selModel_);
     qmlPanel_->rootContext()->setContextProperty("catalog",          catalog_);
     qmlPanel_->rootContext()->setContextProperty("installedIndexes", installedProxy_);

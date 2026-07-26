@@ -8,6 +8,7 @@
 #include "tcg_infer.h"
 #include "Config.h"
 #include "IndexSearchProxy.h"
+#include "CardDatabase.h"
 
 class ImageCanvas;
 class CandidateModel;
@@ -72,6 +73,7 @@ private:
     ImageCanvas*    canvas_;
     QQuickWidget*   qmlPanel_;
     CandidateModel* candModel_;
+    CardDatabase* db_ = nullptr;
     SelectionModel* selModel_;
     CropImageProvider* cropProvider_;
     UiBridge*       bridge_;
