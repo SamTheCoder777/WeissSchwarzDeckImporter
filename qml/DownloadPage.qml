@@ -65,6 +65,19 @@ Rectangle {
             }
         }
 
+        TextField {
+                    Layout.fillWidth: true
+                    placeholderText: "Search indexes… [set title or set code]"
+                    color: root.text1
+                    placeholderTextColor: root.text2
+                    onTextChanged: indexList.setSearch(text)
+                    background: Rectangle {
+                        radius: 8
+                        color: "#24272c"
+                        border.color: activeFocus ? root.accent : "#33373d"
+                    }
+        }
+
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -85,7 +98,7 @@ Rectangle {
                 id: list
                 anchors.fill: parent
                 anchors.margins: 10
-                model: catalog
+                model: indexList
                 spacing: 10
                 clip: true
                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }

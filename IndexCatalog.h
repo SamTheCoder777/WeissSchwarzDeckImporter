@@ -63,6 +63,14 @@ public:
     Q_INVOKABLE void use(int row);            // tell the app to use this index
     Q_INVOKABLE void removeIndex(int row);    // delete local files
     Q_INVOKABLE void useById(const QString& id);
+    Q_INVOKABLE void downloadById(const QString& id) {
+        for (int i = 0; i < rows_.size(); ++i)
+            if (rows_[i].id == id) { download(i); return; }
+    }
+    Q_INVOKABLE void removeById(const QString& id) {
+        for (int i = 0; i < rows_.size(); ++i)
+            if (rows_[i].id == id) { removeIndex(i); return; }
+    }
 
 signals:
     void stateChanged();

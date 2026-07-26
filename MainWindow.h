@@ -7,6 +7,7 @@
 #include <opencv2/core.hpp>
 #include "tcg_infer.h"
 #include "Config.h"
+#include "IndexSearchProxy.h"
 
 class ImageCanvas;
 class CandidateModel;
@@ -76,6 +77,7 @@ private:
     UiBridge*       bridge_;
     IndexCatalog*   catalog_ = nullptr;
     QSortFilterProxyModel* installedProxy_ = nullptr;
+    IndexSearchProxy* searchProxy_ = nullptr;
 
     // notif setting
     bool indexNotifSilent_ = false;

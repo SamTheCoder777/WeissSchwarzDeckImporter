@@ -11,7 +11,7 @@
 
 // ── EDIT ME: where your published manifest lives ────────────────────────────
 static const char* MANIFEST_URL =
-    "https://raw.githubusercontent.com/SamTheCoder777/index-test/refs/heads/main/mainifest.json";
+    "https://huggingface.co/datasets/SamTheCoder777/ws-index/raw/main/manifest.json";
 
 IndexCatalog::IndexCatalog(QObject* parent) : QAbstractListModel(parent) {
     QDir().mkpath(installRoot());

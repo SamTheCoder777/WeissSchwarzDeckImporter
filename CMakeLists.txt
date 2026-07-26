@@ -42,6 +42,7 @@ add_executable(tcg_app WIN32
     tcg_infer.cpp    tcg_infer.h
     qml.qrc
     Config.h Config.cpp
+    IndexSearchProxy.h
 )
 target_include_directories(tcg_app PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(tcg_app PRIVATE

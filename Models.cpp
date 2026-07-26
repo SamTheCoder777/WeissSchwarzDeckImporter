@@ -11,6 +11,9 @@ QString toDeckCode(const std::string& cardId) {
         QString set = parts.takeFirst().toUpper();
         return QString("BD/%1-%2").arg(set, parts.join('-').toUpper());
     }
+
+    return s; // TODO already has CODE/card
+
     return "BD/" + s.toUpper();
 }
 

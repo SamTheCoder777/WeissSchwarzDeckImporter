@@ -25,6 +25,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
      // Faiss catalog
     catalog_ = new IndexCatalog(this);
 
+    searchProxy_ = new IndexSearchProxy(this);
+    searchProxy_->setSourceModel(catalog_);
+
     installedProxy_ = new QSortFilterProxyModel(this);
     installedProxy_->setSourceModel(catalog_);
     installedProxy_->setFilterRole(IndexCatalog::StatusRole);
@@ -76,6 +79,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 QWidget* MainWindow::buildFaissPage() {
     auto* qw = new QQuickWidget;
     qw->rootContext()->setContextProperty("catalog", catalog_);
+    qw->rootContext()->setContextProperty("indexList", searchProxy_);
     qw->rootContext()->setContextProperty("config", &Config::instance());
     qw->setResizeMode(QQuickWidget::SizeRootObjectToView);
     qw->setSource(QUrl("qrc:/qml/DownloadPage.qml"));
