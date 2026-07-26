@@ -9,16 +9,26 @@ set(CMAKE_AUTOUIC ON)
 
 # ── ONNXRuntime: PREBUILT zip from Microsoft (NOT a vcpkg source build) ─────
 # https://github.com/microsoft/onnxruntime/releases -> onnxruntime-win-x64-<ver>.zip
-set(ONNXRUNTIME_ROOT "D:/Coding/onnxruntime-win-x64-1.23.2" CACHE PATH "ONNXRuntime prebuilt dir")
+if(WIN32)
+    set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/onnxruntime-win-x64-1.23.2" CACHE PATH "ONNXRuntime prebuilt dir")
+elseif(APPLE)
+    set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/onnxruntime-osx-arm64-1.23.2" CACHE PATH "ONNXRuntime prebuilt dir")
+endif()
 if (NOT EXISTS "${ONNXRUNTIME_ROOT}/include/onnxruntime_cxx_api.h")
     message(FATAL_ERROR "ONNXRuntime not found at ${ONNXRUNTIME_ROOT}. "
                         "Download the prebuilt zip and set -DONNXRUNTIME_ROOT=<path>.")
 endif()
 add_library(onnxruntime SHARED IMPORTED)
-set_target_properties(onnxruntime PROPERTIES
-    IMPORTED_IMPLIB   "${ONNXRUNTIME_ROOT}/lib/onnxruntime.lib"
-    IMPORTED_LOCATION "${ONNXRUNTIME_ROOT}/lib/onnxruntime.dll"
-    INTERFACE_INCLUDE_DIRECTORIES "${ONNXRUNTIME_ROOT}/include")
+if(WIN32)
+    set_target_properties(onnxruntime PROPERTIES
+        IMPORTED_IMPLIB   "${ONNXRUNTIME_ROOT}/lib/onnxruntime.lib"
+        IMPORTED_LOCATION "${ONNXRUNTIME_ROOT}/lib/onnxruntime.dll"
+        INTERFACE_INCLUDE_DIRECTORIES "${ONNXRUNTIME_ROOT}/include")
+elseif(APPLE)
+    set_target_properties(onnxruntime PROPERTIES
+        IMPORTED_LOCATION "${ONNXRUNTIME_ROOT}/lib/libonnxruntime.dylib"
+        INTERFACE_INCLUDE_DIRECTORIES "${ONNXRUNTIME_ROOT}/include")
+endif()
 
 # ── vcpkg deps ──────────────────────────────────────────────────────────────
 #   -DCMAKE_TOOLCHAIN_FILE=D:/Coding/vcpkg/scripts/buildsystems/vcpkg.cmake

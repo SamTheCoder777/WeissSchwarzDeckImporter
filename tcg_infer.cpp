@@ -10,6 +10,7 @@
 #include <opencv2/imgproc.hpp>
 #include <faiss/index_io.h>
 #include <faiss/Index.h>
+#include <thread>
 
 // tiny JSON array-of-strings reader for id_map.json (avoids a JSON dep)
 static std::vector<std::string> read_json_string_array(const std::string& path) {

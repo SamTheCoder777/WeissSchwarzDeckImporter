@@ -1,7 +1,10 @@
+# Mac
+.DS_Store
+
 # Model
 *.onnx
 *.onnx.*
-onnxruntime-win-x64-1.27.1/
+onnxruntime-*
 manifest.*
 
 # C++ objects and libs
