@@ -145,13 +145,18 @@ Rectangle {
                     color: "#111318"
                     border.color: "#33373d"; border.width: 1
                     clip: true
-                    Image {
-                        anchors.fill: parent
-                        anchors.margins: 4
-                        fillMode: Image.PreserveAspectFit
-                        cache: false
-                        source: bridge.currentIndex >= 0
-                                ? "image://crop/current?rev=" + bridge.cropRev : ""
+                    MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: bridge.openCompare()
+                            Image {
+                                anchors.fill: parent
+                                anchors.margins: 4
+                                fillMode: Image.PreserveAspectFit
+                                cache: false
+                                source: bridge.currentIndex >= 0
+                                        ? "image://crop/current?rev=" + bridge.cropRev : ""
+                            }
                     }
                     Label {
                         anchors.centerIn: parent

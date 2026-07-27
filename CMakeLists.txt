@@ -52,6 +52,7 @@ add_executable(tcg_app WIN32
     tcg_infer.cpp    tcg_infer.h
     qml.qrc
     CardDetector.cpp  CardDetector.h
+    CompareDialog.cpp  CompareDialog.h
     Config.h Config.cpp
     IndexSearchProxy.h
     CardDatabase.h

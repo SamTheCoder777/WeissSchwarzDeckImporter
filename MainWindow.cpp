@@ -4,6 +4,7 @@
 #include "Models.h"
 #include "UiBridge.h"
 #include "IndexCatalog.h"
+#include "CompareDialog.h"
 
 #include <QtWidgets>
 #include <QQuickWidget>
@@ -192,9 +193,6 @@ QWidget* MainWindow::buildDetectPage() {
     auto* detBtn  = new QPushButton("Detect");
     autoBtn_  = new QPushButton("Auto Detect Card Tool");
 
-    autoBtn_ ->setCheckable(true);
-    bar->addWidget(autoBtn_ );
-
     connect(autoBtn_ , &QPushButton::clicked, this, [this](bool on){
         autoDetectMode_ = on;
         // make it exclusive with the drawing tools
@@ -202,8 +200,8 @@ QWidget* MainWindow::buildDetectPage() {
             canvas_->setMode(ImageCanvas::Rectangle); }  // parked; clicks are intercepted
     });
 
-    rectBtn_->setCheckable(true); polyBtn_->setCheckable(true); rectBtn_->setChecked(true);
-    for (auto* b : {openBtn, rectBtn_, polyBtn_, undoBtn, clrBtn, detBtn}) bar->addWidget(b);
+    rectBtn_->setCheckable(true); polyBtn_->setCheckable(true); rectBtn_->setChecked(true); autoBtn_ ->setCheckable(true);
+    for (auto* b : {openBtn, autoBtn_, rectBtn_, polyBtn_, undoBtn, clrBtn, detBtn}) bar->addWidget(b);
     bar->addStretch();
     outer->addLayout(bar);
 
@@ -289,6 +287,7 @@ QWidget* MainWindow::buildDetectPage() {
             pushStateToQml();
         }
     });
+    connect(bridge_, &UiBridge::openCompareRequested, this, &MainWindow::openCompareDialog);
 
     // Left/Right arrows cycle through cards to confirm
     auto* nextSc = new QShortcut(QKeySequence(Qt::Key_Right), this);
@@ -303,6 +302,10 @@ QWidget* MainWindow::buildDetectPage() {
         int n = (currentSel_ <= 0) ? sel_.size() - 1 : currentSel_ - 1;
         showSelectionResults(n);
     });
+
+    // Space to open compare page
+    auto* cmpSc = new QShortcut(QKeySequence(Qt::Key_Space), this);
+    connect(cmpSc, &QShortcut::activated, this, &MainWindow::openCompareDialog);
 
     return w;
 }
@@ -391,6 +394,27 @@ void MainWindow::detectCards() {
     syncSelections();          // grow sel_ to match the new selection count
     pushStateToQml();
     statusBar()->showMessage(QString("Detected %1 card(s)").arg(dets.size()), 5000);
+}
+
+void MainWindow::openCompareDialog() {
+    if (currentSel_ < 0 || currentSel_ >= sel_.size()) return;
+    const auto& cands = sel_[currentSel_].cands;
+    if (cands.empty()) return;
+
+    cv::Mat crop = cropForSelection(currentSel_);
+    QImage cropImg = crop.empty() ? QImage() : matToQImage(crop);
+
+    // start on the already-confirmed card if there is one, else rank 1
+    int start = 0;
+    if (!sel_[currentSel_].cardId.empty())
+        for (int i = 0; i < (int)cands.size(); ++i)
+            if (cands[i].card_id == sel_[currentSel_].cardId) { start = i; break; }
+
+    CompareDialog dlg(cropImg, cands, start, db_, this);
+    if (dlg.exec() == QDialog::Accepted) {
+        int idx = dlg.confirmedIndex();
+        if (idx >= 0) confirmCandidate(idx);   // reuse your existing confirm path
+    }
 }
 
 void MainWindow::syncSelections() {

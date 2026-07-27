@@ -43,6 +43,7 @@ private slots:
     void exportDeck();
     void detectCards();                     // run YOLO, add all card quads
     void onCanvasClickedImagePoint(const QPointF& imgPt);   // claim the card under a click
+    void openCompareDialog();
 
 private:
     QWidget* buildSettingsPage();

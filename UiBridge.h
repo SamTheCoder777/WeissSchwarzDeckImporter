@@ -22,6 +22,7 @@ public:
     Q_INVOKABLE void setQuantity(int qty)       { emit quantityRequested(qty); }
     Q_INVOKABLE void exportDeck()               { emit exportRequested(); }
     Q_INVOKABLE void runDetection()             { emit detectRequested(); }
+    Q_INVOKABLE void openCompare() { emit openCompareRequested(); }
 
     // ── state pushed FROM C++ ──────────────────────────────────────────────
     QString summaryText()   const { return summary_; }
@@ -47,6 +48,7 @@ signals:
     void quantityRequested(int qty);
     void exportRequested();
     void detectRequested();
+    void openCompareRequested();
 
 private:
     QString summary_ = "0 selected · 0 confirmed";
