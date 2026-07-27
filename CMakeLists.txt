@@ -34,7 +34,7 @@ endif()
 #   -DCMAKE_TOOLCHAIN_FILE=D:/Coding/vcpkg/scripts/buildsystems/vcpkg.cmake
 find_package(faiss CONFIG REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickWidgets Network)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickWidgets Network Concurrent)
 
 # ── headless retrieval test (Piece 1 acceptance test) ──────────────────────
 # add_executable(tcg_infer_test main_infer_test.cpp tcg_infer.cpp)
@@ -51,6 +51,7 @@ add_executable(tcg_app WIN32
     UiBridge.h
     tcg_infer.cpp    tcg_infer.h
     qml.qrc
+    CardDetector.cpp  CardDetector.h
     Config.h Config.cpp
     IndexSearchProxy.h
     CardDatabase.h
@@ -61,6 +62,7 @@ target_link_libraries(tcg_app PRIVATE
     Qt6::Quick
     Qt6::QuickWidgets
     Qt6::Network
+    Qt6::Concurrent
     onnxruntime
     faiss
     ${OpenCV_LIBS}

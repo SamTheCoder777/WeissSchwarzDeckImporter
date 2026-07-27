@@ -16,6 +16,16 @@ ImageCanvas::ImageCanvas(QWidget* parent) : QWidget(parent) {
     setMinimumSize(400, 300);
 }
 
+void ImageCanvas::reorder(const QVector<int>& order) {
+    if (order.size() != sel_.size()) return;
+    QVector<Sel> reordered;
+    reordered.reserve(sel_.size());
+    for (int idx : order) reordered.push_back(sel_[idx]);
+    sel_ = reordered;
+    highlight_ = -1;            // indices changed; clear stale highlight
+    update();
+}
+
 void ImageCanvas::setImage(const QImage& img) {
     image_ = img;
     sel_.clear();
@@ -57,6 +67,17 @@ void ImageCanvas::undo() {
 }
 
 void ImageCanvas::setHighlight(int index) { highlight_ = index; update(); }
+
+void ImageCanvas::addQuadSelection(const QPolygonF& quad) {
+    if (quad.size() < 3) return;
+    sel_.push_back({quad, false, QString()});
+    update();
+    emit selectionsChanged();
+}
+
+int ImageCanvas::selectionAtWidgetPoint(const QPointF& widgetPt) const {
+    return hitTestSelection(widgetPt);   // existing private helper (image-space test inside)
+}
 
 void ImageCanvas::setSelectionState(int index, bool confirmed, const QString& label) {
     if (index < 0 || index >= sel_.size()) return;
@@ -199,6 +220,7 @@ void ImageCanvas::mousePressEvent(QMouseEvent* e) {
     const QPointF ip = toImage(e->position());
 
     if (e->button() == Qt::LeftButton) {
+        emit canvasClickedImagePoint(toImage(e->position()));
         // 1) grab a vertex to move it (works in both modes)
         int si, vi;
         if (polyInProgress_.isEmpty() && hitTestVertex(e->position(), si, vi)) {

@@ -78,5 +78,15 @@ QHash<int, QByteArray> SelectionModel::roleNames() const {
 }
 
 void SelectionModel::setRows(const QVector<Row>& rows) {
-    beginResetModel(); rows_ = rows; endResetModel();
+    if (rows.size() != rows_.size()) {
+        // count changed -> a real structural change, reset is correct
+        beginResetModel();
+        rows_ = rows;
+        endResetModel();
+    } else {
+        // same count -> just update values, DON'T reset (preserves scroll)
+        rows_ = rows;
+        if (!rows_.isEmpty())
+            emit dataChanged(index(0), index(rows_.size() - 1));
+    }
 }

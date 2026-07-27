@@ -40,10 +40,18 @@ public:
     // confirmed state drives the colour + label drawn on the canvas
     void setSelectionState(int index, bool confirmed, const QString& label);
 
+    // Add a detected card (4 corners in IMAGE coords) as a committed selection.
+    void addQuadSelection(const QPolygonF& quadImageCoords);
+    // Which committed selection contains this WIDGET-space point? -1 if none.
+    int  selectionAtWidgetPoint(const QPointF& widgetPt) const;
+
+    void reorder(const QVector<int>& newOrder);   // permute selections in place
+
 signals:
     void selectionsChanged();              // count changed (added/removed/cleared)
     void selectionGeometryChanged(int i);  // vertices moved -> crop must be recomputed
     void selectionClicked(int index);      // user clicked a selection on the image
+    void canvasClickedImagePoint(const QPointF& imagePt);
 
 protected:
     void paintEvent(QPaintEvent*) override;

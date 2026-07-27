@@ -13,6 +13,9 @@
 #include <QRegularExpression>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
+#include <QtConcurrent>
+#include <QFutureWatcher>
+#include <QShortcut>
 
 static QImage matToQImage(const cv::Mat& bgr) {
     cv::Mat rgb;
@@ -127,6 +130,7 @@ QWidget* MainWindow::buildSettingsPage() {
     browseRow(onnxEdit_,    "ONNX model (.onnx):", false);
     browseRow(indexEdit_,   "FAISS index folder:", true);
     browseRow(mastersEdit_, "Masters folder:",     true);
+    browseRow(yoloEdit_, "YOLO detector (.onnx):", false);
 
     imgSizeSpin_ = new QSpinBox;
     imgSizeSpin_->setRange(64, 1024); imgSizeSpin_->setSingleStep(16); imgSizeSpin_->setValue(336);
@@ -154,6 +158,15 @@ void MainWindow::loadModel() {
             mastersEdit_->text().toStdString(),
             nativeCheck_->isChecked(),
             imgSizeSpin_->value());
+
+        if (!yoloEdit_->text().isEmpty()) {
+            try { detector_ = std::make_unique<CardDetector>(yoloEdit_->text().toStdString()); }
+            catch (const std::exception& e) {
+                detector_.reset();
+                QMessageBox::warning(this, "Detector", QString("YOLO load failed: %1").arg(e.what()));
+            }
+        }
+
         modelStatus_->setText("Model + index loaded OK. Go to Detection.");
     } catch (const std::exception& e) {
         retriever_.reset();
@@ -172,19 +185,34 @@ QWidget* MainWindow::buildDetectPage() {
     auto* bar = new QHBoxLayout;
     bar->setContentsMargins(8, 8, 8, 0);
     auto* openBtn = new QPushButton("Open image");
-    auto* rectBtn = new QPushButton("Rectangle");
-    auto* polyBtn = new QPushButton("Polygon");
+    rectBtn_ = new QPushButton("Rectangle");
+    polyBtn_ = new QPushButton("Polygon");
     auto* undoBtn = new QPushButton("Undo (Ctrl+Z)");
     auto* clrBtn  = new QPushButton("Clear");
     auto* detBtn  = new QPushButton("Detect");
-    rectBtn->setCheckable(true); polyBtn->setCheckable(true); rectBtn->setChecked(true);
-    for (auto* b : {openBtn, rectBtn, polyBtn, undoBtn, clrBtn, detBtn}) bar->addWidget(b);
+    autoBtn_  = new QPushButton("Auto Detect Card Tool");
+
+    autoBtn_ ->setCheckable(true);
+    bar->addWidget(autoBtn_ );
+
+    connect(autoBtn_ , &QPushButton::clicked, this, [this](bool on){
+        autoDetectMode_ = on;
+        // make it exclusive with the drawing tools
+        if (on) { rectBtn_->setChecked(false); polyBtn_->setChecked(false);
+            canvas_->setMode(ImageCanvas::Rectangle); }  // parked; clicks are intercepted
+    });
+
+    rectBtn_->setCheckable(true); polyBtn_->setCheckable(true); rectBtn_->setChecked(true);
+    for (auto* b : {openBtn, rectBtn_, polyBtn_, undoBtn, clrBtn, detBtn}) bar->addWidget(b);
     bar->addStretch();
     outer->addLayout(bar);
 
     auto* split = new QSplitter(Qt::Horizontal);
     canvas_ = new ImageCanvas;
     split->addWidget(canvas_);
+
+    connect(canvas_, &ImageCanvas::canvasClickedImagePoint,
+            this, &MainWindow::onCanvasClickedImagePoint);
 
     // ── QML panel ──────────────────────────────────────────────────────────
     candModel_    = new CandidateModel(this);
@@ -216,13 +244,15 @@ QWidget* MainWindow::buildDetectPage() {
 
     // toolbar wiring
     connect(openBtn, &QPushButton::clicked, this, &MainWindow::openImage);
-    connect(rectBtn, &QPushButton::clicked, this, [this, rectBtn, polyBtn] {
+    connect(rectBtn_, &QPushButton::clicked, this, [this] {
         canvas_->setMode(ImageCanvas::Rectangle);
-        rectBtn->setChecked(true); polyBtn->setChecked(false);
+        rectBtn_->setChecked(true); polyBtn_->setChecked(false);
+        autoDetectMode_ = false; autoBtn_ ->setChecked(false);
     });
-    connect(polyBtn, &QPushButton::clicked, this, [this, rectBtn, polyBtn] {
+    connect(polyBtn_, &QPushButton::clicked, this, [this] {
         canvas_->setMode(ImageCanvas::Polygon);
-        polyBtn->setChecked(true); rectBtn->setChecked(false);
+        polyBtn_->setChecked(true); rectBtn_->setChecked(false);
+        autoDetectMode_ = false; autoBtn_ ->setChecked(false);
     });
     connect(undoBtn, &QPushButton::clicked, this, [this] { canvas_->undo(); });
     connect(clrBtn,  &QPushButton::clicked, this, [this] { canvas_->clearSelections(); });
@@ -230,8 +260,11 @@ QWidget* MainWindow::buildDetectPage() {
 
     // canvas -> app
     connect(canvas_, &ImageCanvas::selectionsChanged, this, [this] {
-        syncSelections(); pushStateToQml();
+        syncSelections();
+        sortSelectionsByPosition();
+        pushStateToQml();
     });
+
     connect(canvas_, &ImageCanvas::selectionClicked, this, &MainWindow::showSelectionResults);
     connect(canvas_, &ImageCanvas::selectionGeometryChanged, this, [this](int i) {
         if (i >= 0 && i < sel_.size()) {
@@ -257,7 +290,107 @@ QWidget* MainWindow::buildDetectPage() {
         }
     });
 
+    // Left/Right arrows cycle through cards to confirm
+    auto* nextSc = new QShortcut(QKeySequence(Qt::Key_Right), this);
+    connect(nextSc, &QShortcut::activated, this, [this] {
+        if (sel_.isEmpty()) return;
+        int n = (currentSel_ < 0) ? 0 : (currentSel_ + 1) % sel_.size();
+        showSelectionResults(n);
+    });
+    auto* prevSc = new QShortcut(QKeySequence(Qt::Key_Left), this);
+    connect(prevSc, &QShortcut::activated, this, [this] {
+        if (sel_.isEmpty()) return;
+        int n = (currentSel_ <= 0) ? sel_.size() - 1 : currentSel_ - 1;
+        showSelectionResults(n);
+    });
+
     return w;
+}
+
+void MainWindow::forceRectangleTool() {
+    canvas_->setMode(ImageCanvas::Rectangle);
+    if (rectBtn_) rectBtn_->setChecked(true);
+    if (polyBtn_) polyBtn_->setChecked(false);
+    if (autoBtn_) autoBtn_->setChecked(false);
+    autoDetectMode_ = false;
+}
+
+void MainWindow::onCanvasClickedImagePoint(const QPointF& imgPt) {
+    if (!autoDetectMode_ || autoDets_.empty()) return;
+
+    // find the detection whose TIGHT polygon contains the click
+    cv::Point2f click((float)imgPt.x(), (float)imgPt.y());
+    int best = -1;
+    for (int i = 0; i < (int)autoDets_.size(); ++i) {
+        const auto& poly = autoDets_[i].polygon;
+        std::vector<cv::Point2f> cvpoly(poly.begin(), poly.end());
+        if (cvpoly.size() >= 3 &&
+            cv::pointPolygonTest(cvpoly, click, false) >= 0) { best = i; break; }
+    }
+    // fallback: nearest centroid if the click just missed the outline
+    if (best < 0) {
+        double bd = 1e18;
+        for (int i = 0; i < (int)autoDets_.size(); ++i) {
+            double dx = autoDets_[i].centroid.x - click.x;
+            double dy = autoDets_[i].centroid.y - click.y;
+            double d = dx*dx + dy*dy;
+            if (d < bd) { bd = d; best = i; }
+        }
+        // ignore if the nearest card is very far (user clicked blank space)
+        if (best >= 0) {
+            double diag = std::hypot(sourceBgr_.cols, sourceBgr_.rows);
+            if (std::sqrt(bd) > diag * 0.08) best = -1;
+        }
+    }
+    if (best < 0) return;
+
+    // add its tight polygon as a selection (image coords)
+    QPolygonF poly;
+    for (const auto& p : autoDets_[best].polygon) poly << QPointF(p.x, p.y);
+
+    // check for dupe
+    for (int i = 0; i < canvas_->selectionCount(); ++i) {
+        QPolygonF ex = canvas_->selection(i);
+        if (ex.containsPoint(QPointF(autoDets_[best].centroid.x,
+                                     autoDets_[best].centroid.y), Qt::OddEvenFill)) {
+            canvas_->setHighlight(i);            // already selected — just focus it
+            showSelectionResults(i);
+            return;
+        }
+    }
+
+    canvas_->addQuadSelection(poly);   // (name is historical; it takes any polygon)
+
+    syncSelections();
+    pushStateToQml();
+}
+
+void MainWindow::detectCards() {
+    if (!detector_) {
+        QMessageBox::information(this, "No detector",
+                                 "Set the YOLO detector .onnx in Settings and press Load.");
+        return;
+    }
+    if (sourceBgr_.empty()) {
+        QMessageBox::information(this, "No image", "Open an image first.");
+        return;
+    }
+
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    std::vector<CardDetection> dets = detector_->detect(sourceBgr_);
+    QApplication::restoreOverrideCursor();
+
+    // add every detected card as a 4-point polygon selection (IMAGE coords).
+    // These go through the SAME crop path as hand-drawn 4-point polygons.
+    for (const auto& d : dets) {
+        QPolygonF poly;
+        for (const auto& p : d.quad) poly << QPointF(p.x, p.y);
+        canvas_->addQuadSelection(poly);
+    }
+
+    syncSelections();          // grow sel_ to match the new selection count
+    pushStateToQml();
+    statusBar()->showMessage(QString("Detected %1 card(s)").arg(dets.size()), 5000);
 }
 
 void MainWindow::syncSelections() {
@@ -265,6 +398,42 @@ void MainWindow::syncSelections() {
     while (sel_.size() > n) sel_.removeLast();
     while (sel_.size() < n) sel_.push_back(SelState{});
     if (currentSel_ >= n) currentSel_ = -1;
+}
+
+void MainWindow::sortSelectionsByPosition() {
+    int n = canvas_->selectionCount();
+    if (n < 2 || sourceBgr_.empty()) return;
+
+    auto centroid = [&](int i) {
+        QPolygonF p = canvas_->selection(i);
+        QPointF c;
+        for (const QPointF& q : p) c += q;
+        return c / p.size();
+    };
+
+    QVector<int> order(n);
+    std::iota(order.begin(), order.end(), 0);
+
+    double rowTol = std::max(1.0, sourceBgr_.rows * 0.08);   // same 8% as your Python
+    std::sort(order.begin(), order.end(), [&](int a, int b) {
+        QPointF ca = centroid(a), cb = centroid(b);
+        long ra = std::lround(ca.y() / rowTol), rb = std::lround(cb.y() / rowTol);
+        if (ra != rb) return ra < rb;          // different row band -> top first
+        return ca.x() < cb.x();                // same band -> left first
+    });
+
+    // already sorted? (avoid needless work / recursion)
+    bool identity = true;
+    for (int i = 0; i < n; ++i) if (order[i] != i) { identity = false; break; }
+    if (identity) return;
+
+    // apply the SAME permutation to canvas selections and sel_
+    canvas_->reorder(order);
+    QVector<SelState> reordered;
+    reordered.reserve(n);
+    for (int idx : order) reordered.push_back(sel_[idx]);
+    sel_ = reordered;
+    currentSel_ = -1;
 }
 
 // push list + summary + per-card state into the QML models/bridge
@@ -300,6 +469,15 @@ void MainWindow::openImage() {
     if (sourceBgr_.empty()) { QMessageBox::warning(this, "Error", "Could not read image."); return; }
     sourcePath_ = p;
     canvas_->setImage(matToQImage(sourceBgr_));
+    autoDets_.clear();
+    if (detector_) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        try { autoDets_ = detector_->detect(sourceBgr_); } catch (...) {}
+        QApplication::restoreOverrideCursor();
+        statusBar()->showMessage(
+            QString("%1 card(s) ready — use Auto Detect Card Tool to pick").arg(autoDets_.size()),
+            4000);
+    }
     sel_.clear();
     currentSel_ = -1;
     candModel_->clear();
@@ -363,14 +541,31 @@ void MainWindow::runDetection() {
     syncSelections();
     if (sel_.isEmpty()) { QMessageBox::information(this, "No selection", "Select at least one card."); return; }
 
+    forceRectangleTool();
+
+    // snapshot the crops on the UI thread (cv::Mat/Qt objects shouldn't be built off-thread)
+    auto crops = std::make_shared<std::vector<cv::Mat>>();
+    for (int i = 0; i < sel_.size(); ++i)
+        crops->push_back(sel_[i].confirmed ? cv::Mat() : cropForSelection(i));
+
+    // disable the button, show progress
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    for (int i = 0; i < sel_.size(); ++i) {
-        if (sel_[i].confirmed) continue;
-        cv::Mat crop = cropForSelection(i);
-        if (!crop.empty()) sel_[i].cands = retriever_->search(crop, 15);
-    }
-    QApplication::restoreOverrideCursor();
-    showSelectionResults(0);
+
+    auto results = std::make_shared<std::vector<std::vector<Candidate>>>(sel_.size());
+    QFuture<void> fut = QtConcurrent::run([this, crops, results] {
+        for (size_t i = 0; i < crops->size(); ++i)
+            if (!(*crops)[i].empty())
+                (*results)[i] = retriever_->search((*crops)[i], 15);   // runs OFF the UI thread
+    });
+
+    detectWatcher_.setFuture(fut);
+    connect(&detectWatcher_, &QFutureWatcher<void>::finished, this, [this, results] {
+        for (int i = 0; i < sel_.size() && i < (int)results->size(); ++i)
+            if (!(*results)[i].empty()) sel_[i].cands = (*results)[i];
+        QApplication::restoreOverrideCursor();
+        if (!sel_.isEmpty()) { showSelectionResults(0); }
+        pushStateToQml();
+    }, Qt::SingleShotConnection);
 }
 
 void MainWindow::showSelectionResults(int index) {

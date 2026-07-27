@@ -1,7 +1,9 @@
 // MainWindow.h — Widgets shell (canvas + toolbar) with a QML results panel.
 #pragma once
 
+#include <QFutureWatcher>
 #include <QMainWindow>
+#include <QPushButton>
 #include <QVector>
 #include <memory>
 #include <opencv2/core.hpp>
@@ -9,6 +11,7 @@
 #include "Config.h"
 #include "IndexSearchProxy.h"
 #include "CardDatabase.h"
+#include "CardDetector.h"
 
 class ImageCanvas;
 class CandidateModel;
@@ -38,6 +41,8 @@ private slots:
     void showSelectionResults(int index);
     void confirmCandidate(int candIndex);
     void exportDeck();
+    void detectCards();                     // run YOLO, add all card quads
+    void onCanvasClickedImagePoint(const QPointF& imgPt);   // claim the card under a click
 
 private:
     QWidget* buildSettingsPage();
@@ -46,6 +51,8 @@ private:
     cv::Mat  cropForSelection(int index) const;
     void     syncSelections();
     void     pushStateToQml();
+    void sortSelectionsByPosition();
+    void forceRectangleTool();
 
     struct SelState {
         std::vector<Candidate> cands;
@@ -59,6 +66,15 @@ private:
     QString  sourcePath_;
     QVector<SelState> sel_;
     int      currentSel_ = -1;
+    std::unique_ptr<CardDetector> detector_;
+    QLineEdit* yoloEdit_ = nullptr;         // Settings: path to best.onnx
+    std::vector<CardDetection> autoDets_;           // cached detections for current image
+    bool autoDetectMode_ = false;                   // is the tool active?
+
+    // buttons
+    QPushButton* rectBtn_ = nullptr;
+    QPushButton* polyBtn_ = nullptr;
+    QPushButton* autoBtn_ = nullptr;
 
     // settings widgets
     QLineEdit* onnxEdit_;
@@ -80,6 +96,7 @@ private:
     IndexCatalog*   catalog_ = nullptr;
     QSortFilterProxyModel* installedProxy_ = nullptr;
     IndexSearchProxy* searchProxy_ = nullptr;
+    QFutureWatcher<void> detectWatcher_;
 
     // notif setting
     bool indexNotifSilent_ = false;
