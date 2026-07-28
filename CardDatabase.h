@@ -7,6 +7,8 @@
 #include <QJsonObject>
 #include <QHash>
 #include <QNetworkReply>
+#include <QFutureWatcher>
+#include <QtConcurrent>
 
 class CardDatabase : public QObject {
     Q_OBJECT
@@ -22,9 +24,20 @@ public:
                 emit loadFailed(reply->errorString());
                 return;
             }
-            parse(reply->readAll());
-            loaded_ = true;
-            emit loaded();
+
+            const QByteArray raw = reply->readAll();
+
+            auto* watcher = new QFutureWatcher<QHash<QString, QString>>(this);
+            connect(watcher, &QFutureWatcher<QHash<QString, QString>>::finished, this, [this, watcher](){
+                pictureByCardId_ = watcher->result();
+                loaded_ = true;
+                emit loaded();
+                watcher->deleteLater();
+            });
+
+            watcher->setFuture(QtConcurrent::run([this, raw](){
+                return CardDatabase::parse(raw);
+            }));
         });
     }
 
@@ -40,15 +53,17 @@ signals:
     void loadFailed(const QString& error);
 
 private:
-    void parse(const QByteArray& data) {
+    QHash<QString, QString> parse(const QByteArray& data) {
         const auto arr = QJsonDocument::fromJson(data).array();
+        QHash<QString, QString> result;
         for (const auto& v : arr) {
             const auto obj = v.toObject();
             const QString cardNumber = obj.value("card_number").toString();
             const QString picture    = obj.value("picture").toString();
             if (!cardNumber.isEmpty())
-                pictureByCardId_.insert(cardNumber, picture);
+                result.insert(cardNumber, picture);
         }
+        return result;
     }
 
     QNetworkAccessManager nam_;
