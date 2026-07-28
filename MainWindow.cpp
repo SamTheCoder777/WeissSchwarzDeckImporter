@@ -129,10 +129,27 @@ QWidget* MainWindow::buildSettingsPage() {
         });
     };
     browseRow(onnxEdit_,    "ONNX model (.onnx):", false);
+
+    // No longer needed
     browseRow(indexEdit_,   "FAISS index folder:", true);
     browseRow(mastersEdit_, "Masters folder:",     true);
+    // ---
     browseRow(yoloEdit_, "YOLO detector (.onnx):", false);
 
+    // Try to load models
+    bool modelPathLoaded = !Config::instance().getCurModelPath().isNull() && !Config::instance().getCurModelPath().isEmpty();
+    onnxEdit_->setText(modelPathLoaded ? Config::instance().getCurModelPath() : "");
+
+    bool yoloModelPathLoaded = !Config::instance().getCurYoloModelPath().isNull() && !Config::instance().getCurYoloModelPath().isEmpty();
+    yoloEdit_->setText(yoloModelPathLoaded ? Config::instance().getCurYoloModelPath() : "");
+
+    if (modelPathLoaded && yoloModelPathLoaded){
+        QTimer::singleShot(0, this, [this]() {
+            MainWindow::loadModel(true);
+        });
+    }
+
+    // No longer needed
     imgSizeSpin_ = new QSpinBox;
     imgSizeSpin_->setRange(64, 1024); imgSizeSpin_->setSingleStep(16); imgSizeSpin_->setValue(336);
     form->addRow("Image size:", imgSizeSpin_);
@@ -140,6 +157,7 @@ QWidget* MainWindow::buildSettingsPage() {
     nativeCheck_ = new QCheckBox("native aspect (letterbox + mask) — MUST match training/index");
     nativeCheck_->setChecked(true);
     form->addRow("", nativeCheck_);
+    // ---
 
     auto* loadBtn = new QPushButton("Load model + index");
     form->addRow("", loadBtn);
@@ -151,7 +169,7 @@ QWidget* MainWindow::buildSettingsPage() {
     return w;
 }
 
-void MainWindow::loadModel() {
+void MainWindow::loadModel(bool silent) {
     try {
         retriever_ = std::make_unique<TCGRetriever>(
             onnxEdit_->text().toStdString(),
@@ -164,18 +182,29 @@ void MainWindow::loadModel() {
             try { detector_ = std::make_unique<CardDetector>(yoloEdit_->text().toStdString()); }
             catch (const std::exception& e) {
                 detector_.reset();
-                QMessageBox::warning(this, "Detector", QString("YOLO load failed: %1").arg(e.what()));
+                if (!silent)
+                    QMessageBox::warning(this, "Detector", QString("YOLO load failed: %1").arg(e.what()));
+                return;
             }
         }
 
-        modelStatus_->setText("Model + index loaded OK. Go to Detection.");
+        // Remember paths
+        Config::instance().setCurModelPath(onnxEdit_->text());
+        Config::instance().setCurYoloModelPath(yoloEdit_->text());
+
+        if (!silent)
+            modelStatus_->setText("Model + index loaded OK. Go to Detection.");
     } catch (const std::exception& e) {
         retriever_.reset();
-        modelStatus_->setText(QString("FAILED: %1").arg(e.what()));
-        QMessageBox::critical(this, "Load failed", e.what());
+        if(!silent){
+            modelStatus_->setText(QString("FAILED: %1").arg(e.what()));
+            QMessageBox::critical(this, "Load failed", e.what());
+        }
     }
     pushStateToQml();
 }
+
+
 
 // ── DETECTION: Widgets canvas on the left, QML panel on the right ──────────
 QWidget* MainWindow::buildDetectPage() {

@@ -20,6 +20,7 @@ void Config::load() {
     settings_->beginGroup("Path");
 
     curModelPath_ = settings_->value("ModelPath").toString();
+    curYoloModelPath_ = settings_->value("YoloModelPath").toString();
     curIndexId_ = settings_->value("IndexId").toString();
 
     settings_->endGroup();
@@ -29,6 +30,7 @@ void Config::save() {
     settings_->beginGroup("Path");
 
     settings_->setValue("ModelPath", curModelPath_);
+    settings_->setValue("YoloModelPath", curYoloModelPath_);
     settings_->setValue("IndexId", curIndexId_);
 
     settings_->endGroup();
@@ -40,8 +42,13 @@ void Config::save() {
 }
 
 void Config::setCurModelPath(const QString &curModelPath){
-    if (curModelPath_ == curModelPath) return;
+    //if (curModelPath_ == curModelPath) return;
     curModelPath_ = curModelPath;
+    save();
+}
+
+void Config::setCurYoloModelPath(const QString &curYoloModelPath){
+    curYoloModelPath_ = curYoloModelPath;
     save();
 }
 

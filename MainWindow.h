@@ -35,7 +35,7 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
 
 private slots:
-    void loadModel();
+    void loadModel(bool silent = false);
     void openImage();
     void runDetection();
     void showSelectionResults(int index);
