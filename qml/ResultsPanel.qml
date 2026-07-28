@@ -89,6 +89,14 @@ Rectangle {
             clip: true
             ListView {
                 id: selView
+                WheelHandler {
+                        onWheel: (event) => {
+                            selView.contentY = Math.max(0,
+                                Math.min(selView.contentHeight - selView.height,
+                                         selView.contentY - event.angleDelta.y));
+                            event.accepted = true;
+                        }
+                }
                 anchors.fill: parent
                 anchors.margins: 6
                 model: selModel
@@ -250,6 +258,15 @@ Rectangle {
                 model: candModel
                 spacing: 8
                 clip: true
+                WheelHandler {
+                        onWheel: (event) => {
+                            candView.contentY = Math.max(0,
+                                Math.min(candView.contentHeight - candView.height,
+                                         candView.contentY - event.angleDelta.y));
+                            event.accepted = true;
+                        }
+                }
+
                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                 delegate: Rectangle {
                     width: ListView.view.width

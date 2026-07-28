@@ -96,6 +96,14 @@ Rectangle {
 
             ListView {
                 id: list
+                WheelHandler {
+                        onWheel: (event) => {
+                            list.contentY = Math.max(0,
+                                Math.min(list.contentHeight - list.height,
+                                         list.contentY - event.angleDelta.y));
+                            event.accepted = true;
+                        }
+                }
                 anchors.fill: parent
                 anchors.margins: 10
                 model: indexList
