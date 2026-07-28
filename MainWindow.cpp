@@ -95,7 +95,7 @@ QWidget* MainWindow::buildFaissPage() {
 
     // "Use" on a downloaded index -> point the app at it and (re)load the model
     connect(catalog_, &IndexCatalog::useIndexRequested, this, [this](const QString& dir) {
-        indexEdit_->setText(dir);
+        currentIndexDir_ = dir;
         if (!onnxEdit_->text().isEmpty()) loadModel();     // hot-swap if a model is set
         else if(!indexNotifSilent_) QMessageBox::information(this, "Index selected",
                  "Index set. Choose the ONNX model in Settings, then press Load.");
@@ -128,12 +128,8 @@ QWidget* MainWindow::buildSettingsPage() {
             if (!p.isEmpty()) edit->setText(p);
         });
     };
-    browseRow(onnxEdit_,    "ONNX model (.onnx):", false);
 
-    // No longer needed
-    browseRow(indexEdit_,   "FAISS index folder:", true);
-    browseRow(mastersEdit_, "Masters folder:",     true);
-    // ---
+    browseRow(onnxEdit_,    "ONNX model (.onnx):", false);
     browseRow(yoloEdit_, "YOLO detector (.onnx):", false);
 
     // Try to load models
@@ -149,17 +145,39 @@ QWidget* MainWindow::buildSettingsPage() {
         });
     }
 
-    // No longer needed
-    imgSizeSpin_ = new QSpinBox;
-    imgSizeSpin_->setRange(64, 1024); imgSizeSpin_->setSingleStep(16); imgSizeSpin_->setValue(336);
-    form->addRow("Image size:", imgSizeSpin_);
+    // Advanced settings
+    auto* advToggle = new QPushButton("▸ Advanced settings");
+    advToggle->setCheckable(true);
+    advToggle->setStyleSheet(
+        "QPushButton{ text-align:left; border:none; color:#9aa0a6;"
+        " padding:6px 0; background:transparent; }"
+        "QPushButton:hover{ color:#e8eaed; }");
+    form->addRow(advToggle);
 
-    nativeCheck_ = new QCheckBox("native aspect (letterbox + mask) — MUST match training/index");
+    auto* advWidget = new QWidget;
+    auto* advForm = new QFormLayout(advWidget);
+    advForm->setContentsMargins(12, 4, 0, 4);
+
+    imgSizeSpin_ = new QSpinBox;
+    imgSizeSpin_->setRange(64, 1024);
+    imgSizeSpin_->setSingleStep(16);
+    imgSizeSpin_->setValue(336);
+    advForm->addRow("Image size:", imgSizeSpin_);
+
+    nativeCheck_ = new QCheckBox("native aspect");
     nativeCheck_->setChecked(true);
-    form->addRow("", nativeCheck_);
+    advForm->addRow("", nativeCheck_);
+
+    advWidget->setVisible(false);
+    form->addRow(advWidget);
+
+    connect(advToggle, &QPushButton::toggled, this, [advToggle, advWidget](bool on){
+        advWidget->setVisible(on);
+        advToggle->setText(on ? "▾ Advanced settings" : "▸ Advanced settings");
+    });
     // ---
 
-    auto* loadBtn = new QPushButton("Load model + index");
+    auto* loadBtn = new QPushButton("Load models");
     form->addRow("", loadBtn);
     connect(loadBtn, &QPushButton::clicked, this, &MainWindow::loadModel);
 
@@ -173,8 +191,8 @@ void MainWindow::loadModel(bool silent) {
     try {
         retriever_ = std::make_unique<TCGRetriever>(
             onnxEdit_->text().toStdString(),
-            indexEdit_->text().toStdString(),
-            mastersEdit_->text().toStdString(),
+            currentIndexDir_.toStdString(),
+            std::string(),
             nativeCheck_->isChecked(),
             imgSizeSpin_->value());
 

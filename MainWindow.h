@@ -79,11 +79,12 @@ private:
 
     // settings widgets
     QLineEdit* onnxEdit_;
-    QLineEdit* indexEdit_;
-    QLineEdit* mastersEdit_;
     QSpinBox*  imgSizeSpin_;
     QCheckBox* nativeCheck_;
     QLabel*    modelStatus_;
+
+    // Faiss index dir
+    QString currentIndexDir_;
 
     // detection
     QStackedWidget* pages_;
