@@ -189,6 +189,11 @@ QWidget* MainWindow::buildSettingsPage() {
 
 void MainWindow::loadModel(bool silent) {
     try {
+        if (!silent && currentIndexDir_.isEmpty()){
+            QMessageBox::warning(this, "Detector", QString("Index not set.\nDownload and click 'use'."));
+            return;
+        }
+
         retriever_ = std::make_unique<TCGRetriever>(
             onnxEdit_->text().toStdString(),
             currentIndexDir_.toStdString(),
