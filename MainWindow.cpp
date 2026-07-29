@@ -17,6 +17,7 @@
 #include <QtConcurrent>
 #include <QFutureWatcher>
 #include <QShortcut>
+#include <QSqlDatabase>
 
 static QImage matToQImage(const cv::Mat& bgr) {
     cv::Mat rgb;
@@ -269,18 +270,35 @@ QWidget* MainWindow::buildDetectPage() {
     selModel_     = new SelectionModel(this);
     bridge_       = new UiBridge(this);
     cropProvider_ = new CropImageProvider;      // engine takes ownership below
-    db_ = new CardDatabase(this); // For global cards json
 
-    candModel_->setCardDatabase(db_);
+    // get global cards database
+    QUrl datasetUrl("https://huggingface.co/datasets/SamTheCoder777/ws-index/resolve/main/cards_global.json");
+    dbManager_ = new DatasetManager(datasetUrl, this);
 
-    //load cards_globa.json
-    db_->load(QUrl("https://huggingface.co/datasets/SamTheCoder777/ws-index/resolve/main/cards_global.json"));
+    connect(dbManager_, &DatasetManager::readyToUse, this, [this](){
+        if (!QSqlDatabase::contains("main_ui_connection")) {
+            db_ = QSqlDatabase::addDatabase("QSQLITE", "main_ui_connection");
+            db_.setDatabaseName("dataset_cache.db");
+        }
+        if (!db_.isOpen()) {
+            db_.open();
+        }
+
+        candModel_->setCardDatabase(db_);
+    });
+
+    connect(dbManager_, &DatasetManager::statusChanged, this, [this](const QString &statusText) {
+        qDebug()<<statusText;
+    });
+
+    // auto update
+    dbManager_->checkAndLoad(false);
 
     qmlPanel_ = new QQuickWidget;
     qmlPanel_->engine()->addImageProvider("crop", cropProvider_);
     qmlPanel_->rootContext()->setContextProperty("bridge",   bridge_);
     qmlPanel_->rootContext()->setContextProperty("candModel", candModel_);
-    qmlPanel_->rootContext()->setContextProperty("cardDatabase", db_);
+    //qmlPanel_->rootContext()->setContextProperty("cardDatabase", db_);
     qmlPanel_->rootContext()->setContextProperty("selModel",  selModel_);
     qmlPanel_->rootContext()->setContextProperty("catalog",          catalog_);
     qmlPanel_->rootContext()->setContextProperty("installedIndexes", installedProxy_);

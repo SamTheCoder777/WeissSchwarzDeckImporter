@@ -9,6 +9,7 @@
 #include <QImage>
 #include <vector>
 #include <QtNetwork>
+#include <QSqlDatabase>
 #include "tcg_infer.h"      // Candidate
 #include "CardDatabase.h"
 
@@ -20,7 +21,7 @@ class CompareDialog : public QDialog {
 public:
     CompareDialog(const QImage& crop,
                   const std::vector<Candidate>& candidates,
-                  int startIndex, CardDatabase* db,
+                  int startIndex, QSqlDatabase& db,
                   QWidget* parent = nullptr);
 
     int confirmedIndex() const { return confirmed_; }
@@ -46,6 +47,7 @@ private:
     QPushButton* confirmBtn_;
     QImage curCandImage_;      // cached full-res master for rescaling
 
-    CardDatabase* db_ = nullptr;
+    QSqlDatabase db_;
     QNetworkAccessManager net_;
+    QString imageUrlFor(QString cardId);
 };

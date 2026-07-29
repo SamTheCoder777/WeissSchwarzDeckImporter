@@ -6,8 +6,8 @@
 #include <QVector>
 #include <QString>
 #include <QImage>
+#include <QSqlDatabase>
 #include "tcg_infer.h"
-#include "CardDatabase.h"
 
 // ── top-15 candidates for the currently selected card ───────────────────────
 class CandidateModel : public QAbstractListModel {
@@ -25,12 +25,14 @@ public:
     void setConfirmedId(const std::string& id);
     void clear();
 
-    void setCardDatabase(CardDatabase* db) { db_ = db; }
+    void setCardDatabase(QSqlDatabase& db) { db_ = db; }
 
 private:
     struct Row { QString cardId, deckCode, masterUrl; double score = 0; bool confirmed = false; };
     QVector<Row> rows_;
-    CardDatabase* db_ = nullptr;
+    QSqlDatabase db_;
+
+    QString imageUrlFor(QString cardId);
 };
 
 // ── the list of card selections on the image ────────────────────────────────

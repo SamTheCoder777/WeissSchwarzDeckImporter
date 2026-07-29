@@ -24,6 +24,13 @@ void Config::load() {
     curIndexId_ = settings_->value("IndexId").toString();
 
     settings_->endGroup();
+
+
+    settings_->beginGroup("Dataset");
+
+    curDatasetEtag_ = settings_->value("DatasetEtag").toString();
+
+    settings_->endGroup();
 }
 
 void Config::save() {
@@ -34,6 +41,14 @@ void Config::save() {
     settings_->setValue("IndexId", curIndexId_);
 
     settings_->endGroup();
+
+
+    settings_->beginGroup("Dataset");
+
+    settings_->setValue("DatasetEtag", curDatasetEtag_);
+
+    settings_->endGroup();
+
 
     settings_->sync();
 
@@ -57,3 +72,10 @@ void Config::setCurIndexId(const QString &curIndexId){
     curIndexId_ = curIndexId;
     save();
 }
+
+void Config::setCurDatasetEtag(const QString &newCurDatasetEtag)
+{
+    curDatasetEtag_ = newCurDatasetEtag;
+    save();
+}
+

@@ -1,5 +1,9 @@
 #include "Models.h"
+#include "database/DatabaseUtil.h"
+
+#include <QSqlQuery>
 #include <QUrl>
+#include <QtSql/qsqlerror.h>
 
 // "bd_w125_021" -> "BD/W125-021" (series prefix fixed to BD for now)
 QString toDeckCode(const std::string& cardId) {
@@ -44,7 +48,7 @@ void CandidateModel::setCandidates(const std::vector<Candidate>& c, const std::s
         r.cardId    = QString::fromStdString(x.card_id);
         r.deckCode  = toDeckCode(x.card_id);
         r.score     = x.score;
-        r.masterUrl = db_ ? db_->imageUrlFor(r.cardId) : QString();
+        r.masterUrl = DatabaseUtil::imageUrlFor(db_, r.cardId);
         r.confirmed = (!confirmedId.empty() && confirmedId == x.card_id);
         rows_.push_back(r);
     }

@@ -4,9 +4,11 @@
 #include <QFutureWatcher>
 #include <QMainWindow>
 #include <QPushButton>
+#include <QSqlDatabase>
 #include <QVector>
 #include <memory>
 #include <opencv2/core.hpp>
+#include "database/DatasetManager.h"
 #include "tcg_infer.h"
 #include "Config.h"
 #include "IndexSearchProxy.h"
@@ -91,7 +93,6 @@ private:
     ImageCanvas*    canvas_;
     QQuickWidget*   qmlPanel_;
     CandidateModel* candModel_;
-    CardDatabase* db_ = nullptr;
     SelectionModel* selModel_;
     CropImageProvider* cropProvider_;
     UiBridge*       bridge_;
@@ -99,6 +100,10 @@ private:
     QSortFilterProxyModel* installedProxy_ = nullptr;
     IndexSearchProxy* searchProxy_ = nullptr;
     QFutureWatcher<void> detectWatcher_;
+
+    // database
+    QSqlDatabase db_;
+    DatasetManager *dbManager_ = nullptr;
 
     // notif setting
     bool indexNotifSilent_ = false;

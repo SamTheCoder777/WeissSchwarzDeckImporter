@@ -1,0 +1,46 @@
+#pragma once
+
+#include "DatabaseWorker.h"
+
+#include <QNetworkAccessManager>
+#include <QThread>
+#include <QUrl>
+
+
+class DatasetManager : public QObject {
+    Q_OBJECT
+
+private:
+    QUrl datasetUrl_;
+    QNetworkAccessManager netManager_;
+    QThread workerThread_;
+    DatabaseWorker *worker_ = nullptr;
+    QString remoteEtag_;
+    QByteArray streamBuffer_;
+    bool isDownloading_ = false;
+
+    void startDownloadAndImport();
+
+public:
+    explicit DatasetManager(const QUrl &datasetUrl, QObject *parent = nullptr);
+
+    ~DatasetManager() {
+        if (workerThread_.isRunning()) {
+            workerThread_.quit();
+            workerThread_.wait();
+        }
+    }
+
+    bool isDownloading() const { return isDownloading_; }
+
+    void checkAndLoad(bool forceRedownload = false);
+
+    int getLocalRowCount();
+
+    double getDatabaseSizeMB();
+
+signals:
+    void readyToUse();
+    void downloadProgress(qint64 bytesReceived, qint64 bytesTotal);
+    void statusChanged(const QString &statusText);
+};
