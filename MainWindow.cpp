@@ -272,13 +272,13 @@ QWidget* MainWindow::buildDetectPage() {
     cropProvider_ = new CropImageProvider;      // engine takes ownership below
 
     // get global cards database
-    QUrl datasetUrl("https://huggingface.co/datasets/SamTheCoder777/ws-index/resolve/main/cards_global.json");
+    QUrl datasetUrl(Config::instance().getDatasetSourceUrl());
     dbManager_ = new DatasetManager(datasetUrl, this);
 
     connect(dbManager_, &DatasetManager::readyToUse, this, [this](){
         if (!QSqlDatabase::contains("main_ui_connection")) {
             db_ = QSqlDatabase::addDatabase("QSQLITE", "main_ui_connection");
-            db_.setDatabaseName("dataset_cache.db");
+            db_.setDatabaseName(Config::instance().getDatasetPath());
         }
         if (!db_.isOpen()) {
             db_.open();

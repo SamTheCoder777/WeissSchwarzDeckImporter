@@ -16,12 +16,16 @@ QString imageUrlFor(const QSqlDatabase &db, const QString &cardId) {
     const QString baseImgUrl = Config::instance().getBaseImgUrl();
     QSqlQuery query(db);
 
-    query.prepare("SELECT picture FROM dataset WHERE card_number = :search");
-    query.bindValue(":search", cardId);
+    if (!query.prepare("SELECT \"picture\" FROM dataset WHERE \"card_number\" = ?")) {
+        qDebug() << "DatabaseUtil::imageUrlFor - Prepare failed:" << query.lastError().text();
+        return QString();
+    }
+
+    query.addBindValue(cardId);
 
     if (query.exec()) {
         if (query.next()) {
-            return baseImgUrl + query.value("picture").toString();
+            return baseImgUrl + query.value(0).toString();
         }
     } else {
         qDebug() << "DatabaseUtil::imageUrlFor - Query failed:" << query.lastError().text();

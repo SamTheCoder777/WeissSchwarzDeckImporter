@@ -2,6 +2,8 @@
 
 #include <QString>
 #include <QSettings>
+#include <QCoreApplication>
+#include <QDir>
 
 class Config : public QObject {
     Q_OBJECT
@@ -28,6 +30,9 @@ public:
 
     QString getBaseImgUrl() const {return baseImgUrl_;}
 
+    QString getDatasetPath() const {return datasetPath_;}
+    QString getDatasetSourceUrl() const {return datasetSourceUrl_;}
+
 private:
     Config();
     ~Config() = default;
@@ -42,6 +47,8 @@ private:
 
     // Dataset config
     QString curDatasetEtag_;
+    const QString datasetPath_ = QDir(QCoreApplication::applicationDirPath()).filePath("global_cards.db");
+    const QString datasetSourceUrl_ = "https://huggingface.co/datasets/SamTheCoder777/ws-index/resolve/main/cards_global.json";
 };
 
 

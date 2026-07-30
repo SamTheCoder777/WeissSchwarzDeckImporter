@@ -1,4 +1,5 @@
 #include "DatabaseWorker.h"
+#include "../Config.h"
 
 #include <QSqlQuery>
 #include <QSqlError>
@@ -39,7 +40,7 @@ void DatabaseWorker::flushBatch() {
 
 void DatabaseWorker::initDatabase(bool dropExisting) {
     db_ = QSqlDatabase::addDatabase("QSQLITE", "worker_connection");
-    db_.setDatabaseName("dataset_cache.db");
+    db_.setDatabaseName(Config::instance().getDatasetPath());
 
     if (db_.open()) {
         QSqlQuery q(db_);
@@ -49,16 +50,8 @@ void DatabaseWorker::initDatabase(bool dropExisting) {
         if (dropExisting) {
             q.exec("DROP TABLE IF EXISTS dataset;");
         }
-
-        q.exec("CREATE TABLE IF NOT EXISTS dataset ("
-               "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-               "card_number TEXT, "
-               "picture TEXT);");
-
-        q.exec("CREATE INDEX IF NOT EXISTS idx_name ON dataset(card_number);");
     }
 }
-
 void DatabaseWorker::processChunk(const QByteArray &data) {
     QJsonParseError parseError;
     QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
@@ -79,29 +72,113 @@ void DatabaseWorker::processChunk(const QByteArray &data) {
     QJsonArray jsonArray = doc.array();
     qDebug() << "Found JSON array with" << jsonArray.size() << "items. Importing...";
 
+    if (jsonArray.isEmpty()) {
+        finishProcessing();
+        return;
+    }
+
+    QSet<QString> keySet;
     for (const QJsonValue &val : jsonArray) {
         if (val.isObject()) {
             QJsonObject obj = val.toObject();
-
-            // ⚠️ Make sure key names match your JSON file exactly!
-            QString cardNumber = obj.value("card_number").toString();
-            QString picture = obj.value("picture").toString();
-
-            if (!cardNumber.isEmpty()) {
-                cardNumberBatch_.append(cardNumber);
-                pictureBatch_.append(picture);
-            }
-
-            if (cardNumberBatch_.size() >= BATCH_SIZE) {
-                flushBatch();
+            for (auto it = obj.begin(); it != obj.end(); ++it) {
+                keySet.insert(it.key());
             }
         }
     }
 
-    flushBatch();
+    QStringList rawKeys = QStringList(keySet.begin(), keySet.end());
+    if (rawKeys.isEmpty()) {
+        finishProcessing();
+        return;
+    }
+
+
+    QStringList rawKeysCleaned;
+    QStringList placeholders;
+    QStringList columnDefs;
+    QStringList quotedColumns;
+
+    columnDefs.append("_db_id INTEGER PRIMARY KEY AUTOINCREMENT");
+
+    for (const QString &key : rawKeys) {
+        QString clean = key;
+        clean.replace(" ", "_").replace(".", "_").replace("-", "_");
+
+        rawKeysCleaned.append(clean);
+        placeholders.append(":" + clean);
+        quotedColumns.append(QString("\"%1\"").arg(clean));
+        columnDefs.append(QString("\"%1\" TEXT").arg(clean));
+    }
+
+    QSqlQuery q(db_);
+
+    q.exec("DROP TABLE IF EXISTS dataset;");
+
+    QString createTableSql = QString("CREATE TABLE dataset (%1);").arg(columnDefs.join(", "));
+    if (!q.exec(createTableSql)) {
+        qDebug() << "Failed to create table:" << q.lastError().text();
+        qDebug() << "Executed SQL was:" << createTableSql;
+        finishProcessing();
+        return;
+    }
+
+    if (rawKeysCleaned.contains("card_number")) {
+        q.exec("CREATE INDEX IF NOT EXISTS idx_name ON dataset(\"card_number\");");
+    }
+
+    QString insertSql = QString("INSERT INTO dataset (%1) VALUES (%2)")
+                            .arg(quotedColumns.join(", "))
+                            .arg(placeholders.join(", "));
+
+    if (!q.prepare(insertSql)) {
+        qDebug() << "Failed to prepare insert query:" << q.lastError().text();
+        qDebug() << "Executed SQL was:" << insertSql;
+        finishProcessing();
+        return;
+    }
+
+    db_.transaction();
+
+    int count = 0;
+    const int BATCH_SIZE = 10000;
+
+    for (const QJsonValue &val : jsonArray) {
+        if (!val.isObject()) continue;
+        QJsonObject obj = val.toObject();
+
+        for (int i = 0; i < rawKeys.size(); ++i) {
+            const QString &rawKey = rawKeys[i];
+            const QString &placeholder = placeholders[i];
+            QJsonValue jVal = obj.value(rawKey);
+
+            if (jVal.isObject() || jVal.isArray()) {
+                QJsonDocument subDoc = jVal.isArray() ? QJsonDocument(jVal.toArray()) : QJsonDocument(jVal.toObject());
+                q.bindValue(placeholder, QString(subDoc.toJson(QJsonDocument::Compact)));
+            } else if (jVal.isNull() || jVal.isUndefined()) {
+                q.bindValue(placeholder, QVariant(QVariant::String));
+            } else {
+                q.bindValue(placeholder, jVal.toVariant().toString());
+            }
+        }
+
+        if (!q.exec()) {
+            qDebug() << "Insert error:" << q.lastError().text();
+        }
+
+        count++;
+
+        if (count % BATCH_SIZE == 0) {
+            db_.commit();
+            db_.transaction();
+        }
+    }
+
+    db_.commit();
+    qDebug() << "Successfully imported" << count << "records into dataset table!";
+
     finishProcessing();
 }
-
 void DatabaseWorker::finishProcessing() {
     flushBatch();
     QString connName = db_.connectionName();
