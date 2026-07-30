@@ -45,6 +45,35 @@ int main(int argc, char** argv) {
         QMessageBox QLabel   { color: #e8eaed; }
         QDialog QLabel       { color: #e8eaed; }
         QMessageBox QPushButton, QDialog QPushButton { min-width: 78px; }
+
+        QProgressBar {
+            background-color: #24272c;
+            border: 1px solid #33373d;
+            border-radius: 6px;
+            text-align: center;
+            color: #e8eaed;
+            font-weight: bold;
+            height: 20px;
+        }
+        QProgressBar::chunk {
+            background-color: #4aa3ff;
+            border-radius: 5px;
+        }
+        QGroupBox {
+            border: 1px solid palette(mid);
+            border-radius: 6px;
+            margin-top: 10px;
+            padding-top: 10px;
+            font-weight: 600;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            subcontrol-position: top left;
+            left: 10px;
+            padding: 0 4px;
+            color: #e8eaed;
+            font-weight: bold;
+        }
     )");
 
     MainWindow w;

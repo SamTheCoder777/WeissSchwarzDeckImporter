@@ -3,6 +3,7 @@
 
 #include <QFutureWatcher>
 #include <QMainWindow>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QSqlDatabase>
 #include <QVector>
@@ -85,6 +86,11 @@ private:
     QCheckBox* nativeCheck_;
     QLabel*    modelStatus_;
 
+    // settings dataset
+    QLabel *lblDatasetStatus_;
+    QPushButton *btnDatasetAction_;
+    QProgressBar *pbDataset_;
+
     // Faiss index dir
     QString currentIndexDir_;
 
@@ -104,6 +110,7 @@ private:
     // database
     QSqlDatabase db_;
     DatasetManager *dbManager_ = nullptr;
+    bool dbUpdateNeeded_ = false;
 
     // notif setting
     bool indexNotifSilent_ = false;

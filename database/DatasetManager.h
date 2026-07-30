@@ -19,8 +19,6 @@ private:
     QByteArray streamBuffer_;
     bool isDownloading_ = false;
 
-    void startDownloadAndImport();
-
 public:
     explicit DatasetManager(const QUrl &datasetUrl, QObject *parent = nullptr);
 
@@ -31,9 +29,13 @@ public:
         }
     }
 
+    QSqlDatabase getUiDatabase();
+
     bool isDownloading() const { return isDownloading_; }
 
     void checkAndLoad(bool forceRedownload = false);
+    void checkForUpdates();
+    void startDownloadAndImport();
 
     int getLocalRowCount();
 
@@ -41,6 +43,7 @@ public:
 
 signals:
     void readyToUse();
+    void updateAvailable(bool available, const QString &newVersion);
     void downloadProgress(qint64 bytesReceived, qint64 bytesTotal);
     void statusChanged(const QString &statusText);
 };

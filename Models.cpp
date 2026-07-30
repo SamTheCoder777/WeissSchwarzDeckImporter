@@ -48,7 +48,7 @@ void CandidateModel::setCandidates(const std::vector<Candidate>& c, const std::s
         r.cardId    = QString::fromStdString(x.card_id);
         r.deckCode  = toDeckCode(x.card_id);
         r.score     = x.score;
-        r.masterUrl = DatabaseUtil::imageUrlFor(db_, r.cardId);
+        r.masterUrl = DatabaseUtil::imageUrlFor(r.cardId);
         r.confirmed = (!confirmedId.empty() && confirmedId == x.card_id);
         rows_.push_back(r);
     }

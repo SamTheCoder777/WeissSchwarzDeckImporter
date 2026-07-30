@@ -7,9 +7,11 @@
 
 namespace DatabaseUtil {
 
-QString imageUrlFor(const QSqlDatabase &db, const QString &cardId) {
+QString imageUrlFor(const QString &cardId) {
+    QSqlDatabase db = QSqlDatabase::database("main_ui_connection");
+
     if (!db.isOpen()) {
-        qDebug() << "DatabaseUtil::imageUrlFor - Database is not open!";
+        qDebug() << "DatabaseUtil::imageUrlFor - Main UI Database is not open!";
         return QString();
     }
 

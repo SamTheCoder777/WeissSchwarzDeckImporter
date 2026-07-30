@@ -5,9 +5,34 @@
 #include <QFileInfo>
 #include <QNetworkReply>
 #include <QSqlQuery>
+#include <QSqlError>
 
 DatasetManager::DatasetManager(const QUrl &datasetUrl, QObject *parent):
     datasetUrl_(datasetUrl), QObject(parent){}
+
+QSqlDatabase DatasetManager::getUiDatabase() {
+    const QString connName = "main_ui_connection";
+
+    if (QSqlDatabase::contains(connName)) {
+        QSqlDatabase db = QSqlDatabase::database(connName);
+        if (!db.isOpen()) {
+            if (!db.open()) {
+                qCritical() << "Failed to reopen UI database:" << db.lastError().text();
+            }
+        }
+        return db;
+    }
+
+    // First time setup
+    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", connName);
+    db.setDatabaseName(Config::instance().getDatasetPath());
+
+    if (!db.open()) {
+        qCritical() << "Failed to open UI database:" << db.lastError().text();
+    }
+
+    return db;
+}
 
 
 void DatasetManager::startDownloadAndImport() {
@@ -33,10 +58,18 @@ void DatasetManager::startDownloadAndImport() {
 
     workerThread_.start();
 
-    QNetworkReply *reply = netManager_.get(QNetworkRequest(datasetUrl_));
+    QNetworkRequest request(datasetUrl_);
+
+    request.setAttribute(QNetworkRequest::CacheLoadControlAttribute,
+                         QNetworkRequest::AlwaysNetwork);
+
+    QNetworkReply *reply = netManager_.get(request);
 
     // Connect network progress signal directly
-    connect(reply, &QNetworkReply::downloadProgress, this, &DatasetManager::downloadProgress);
+    connect(reply, &QNetworkReply::downloadProgress, this, [this](qint64 bytesReceived, qint64 bytesTotal){
+        qDebug() << "[DatasetManager] download progress" << bytesReceived << "/" << bytesTotal;
+        emit downloadProgress(bytesReceived, bytesTotal);
+    });
 
     connect(reply, &QNetworkReply::readyRead, this, [this, reply]() {
         streamBuffer_.append(reply->readAll());
@@ -81,6 +114,43 @@ void DatasetManager::startDownloadAndImport() {
     });
 }
 
+void DatasetManager::checkForUpdates(){
+    emit statusChanged("Checking for dataset updates...");
+
+    QNetworkRequest request(datasetUrl_);
+
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                         QNetworkRequest::NoLessSafeRedirectPolicy);
+
+    QNetworkReply *reply = netManager_.head(request);
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        if (reply->error() == QNetworkReply::NoError) {
+            remoteEtag_ = reply->rawHeader("ETag");
+
+            QString cachedEtag = Config::instance().getCurDatasetEtag();
+            bool dbExists = QFile::exists(Config::instance().getDatasetPath());
+
+            if (dbExists && !remoteEtag_.isEmpty() && remoteEtag_ == cachedEtag) {
+                emit statusChanged("Database is up to date.");
+                emit updateAvailable(false, "New Version");
+                emit readyToUse();
+            } else {
+                emit statusChanged("New Update available!");
+                emit updateAvailable(true, "New Version"); //TODO Later replace new version with actual version num if possible
+            }
+        } else {
+            if (QFile::exists(Config::instance().getDatasetPath())) {
+                emit statusChanged("Server unreachable. Operating in offline mode.");
+                emit readyToUse();
+            } else {
+                emit statusChanged("Failed to check updates and no local database found.");
+            }
+        }
+        reply->deleteLater();
+    });
+}
+
 void DatasetManager::checkAndLoad(bool forceRedownload) {
     if (isDownloading_) {
         emit statusChanged("Download is already running in background...");
@@ -101,7 +171,7 @@ void DatasetManager::checkAndLoad(bool forceRedownload) {
             remoteEtag_ = reply->rawHeader("ETag");
 
             QString cachedEtag = Config::instance().getCurDatasetEtag();
-            bool dbExists = QFile::exists("dataset_cache.db");
+            bool dbExists = QFile::exists(Config::instance().getDatasetPath());
 
             if (!forceRedownload && dbExists && !remoteEtag_.isEmpty() && remoteEtag_ == cachedEtag) {
                 emit statusChanged("Database is up to date.");
@@ -111,7 +181,7 @@ void DatasetManager::checkAndLoad(bool forceRedownload) {
                 startDownloadAndImport();
             }
         } else {
-            if (QFile::exists("dataset_cache.db")) {
+            if (QFile::exists(Config::instance().getDatasetPath())) {
                 emit statusChanged("Server unreachable. Operating in offline mode.");
                 emit readyToUse();
             } else {
@@ -123,10 +193,10 @@ void DatasetManager::checkAndLoad(bool forceRedownload) {
 }
 
 int DatasetManager::getLocalRowCount() {
-    if (!QFile::exists("dataset_cache.db")) return 0;
+    if (!QFile::exists(Config::instance().getDatasetPath())) return 0;
 
     QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "info_connection");
-    db.setDatabaseName("dataset_cache.db");
+    db.setDatabaseName(Config::instance().getDatasetPath());
     int count = 0;
     if (db.open()) {
         QSqlQuery q("SELECT COUNT(*) FROM dataset", db);
@@ -138,7 +208,7 @@ int DatasetManager::getLocalRowCount() {
 }
 
 double DatasetManager::getDatabaseSizeMB() {
-    QFileInfo info("dataset_cache.db");
+    QFileInfo info(Config::instance().getDatasetPath());
     if (!info.exists()) return 0.0;
     return info.size() / (1024.0 * 1024.0);
 }

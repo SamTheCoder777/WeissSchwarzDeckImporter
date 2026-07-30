@@ -4,6 +4,6 @@
 
 namespace DatabaseUtil
 {
-    QString imageUrlFor(const QSqlDatabase &db, const QString &cardId);
+    QString imageUrlFor(const QString &cardId);
 };
 

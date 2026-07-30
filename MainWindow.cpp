@@ -38,6 +38,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     installedProxy_->setFilterRole(IndexCatalog::StatusRole);
     installedProxy_->setFilterRegularExpression(QRegularExpression("^[12]$"));
 
+    // get global cards database
+    QUrl datasetUrl(Config::instance().getDatasetSourceUrl());
+    dbManager_ = new DatasetManager(datasetUrl, this);
+
     pages_ = new QStackedWidget(this);
     pages_->addWidget(buildDetectPage());     // 0
     pages_->addWidget(buildSettingsPage());   // 1
@@ -45,7 +49,21 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setCentralWidget(pages_);
     statusBar();                              // used for catalog error messages
 
+    auto refreshModel = [this]() {
+        QSqlDatabase db = dbManager_->getUiDatabase();
+        if (db.isOpen()) {
+            candModel_->setCardDatabase(db);
+        } else {
+            qWarning() << "Database unavailable; model not updated.";
+        }
+    };
 
+    refreshModel();
+
+    connect(dbManager_, &DatasetManager::readyToUse, this, refreshModel);
+
+    // check for update
+    dbManager_->checkForUpdates();
 
     // ── vertical nav rail ──────────────────────────────────────────────────
     QToolBar* sideBar = new QToolBar("SideBar", this);
@@ -118,33 +136,107 @@ QWidget* MainWindow::buildSettingsPage() {
     auto* w = new QWidget;
     auto* form = new QFormLayout(w);
 
-    auto browseRow = [&](QLineEdit*& edit, const QString& label, bool dir) {
-        edit = new QLineEdit;
-        auto* btn = new QPushButton("Browse…");
-        auto* row = new QHBoxLayout; row->addWidget(edit); row->addWidget(btn);
-        form->addRow(label, row);
+    QGroupBox *modelGroup = new QGroupBox("Model Paths", this);
+    QFormLayout *modelForm = new QFormLayout(modelGroup);
+
+    auto browseRow = [this, modelForm, modelGroup](QLineEdit*& edit, const QString& label, bool dir) {
+        edit = new QLineEdit(modelGroup);
+        auto* btn = new QPushButton("Browse…", modelGroup);
+        auto* row = new QHBoxLayout;
+        row->addWidget(edit);
+        row->addWidget(btn);
+        modelForm->addRow(label, row);
         connect(btn, &QPushButton::clicked, this, [this, edit, dir] {
             QString p = dir ? QFileDialog::getExistingDirectory(this, "Select folder")
                             : QFileDialog::getOpenFileName(this, "Select file");
             if (!p.isEmpty()) edit->setText(p);
         });
     };
-
-    browseRow(onnxEdit_,    "ONNX model (.onnx):", false);
+    browseRow(onnxEdit_, "ONNX model (.onnx):", false);
     browseRow(yoloEdit_, "YOLO detector (.onnx):", false);
 
     // Try to load models
     bool modelPathLoaded = !Config::instance().getCurModelPath().isNull() && !Config::instance().getCurModelPath().isEmpty();
     onnxEdit_->setText(modelPathLoaded ? Config::instance().getCurModelPath() : "");
-
     bool yoloModelPathLoaded = !Config::instance().getCurYoloModelPath().isNull() && !Config::instance().getCurYoloModelPath().isEmpty();
     yoloEdit_->setText(yoloModelPathLoaded ? Config::instance().getCurYoloModelPath() : "");
-
-    if (modelPathLoaded && yoloModelPathLoaded){
+    if (modelPathLoaded && yoloModelPathLoaded) {
         QTimer::singleShot(0, this, [this]() {
             MainWindow::loadModel(true);
         });
     }
+
+    auto* loadBtn = new QPushButton("Load models", modelGroup);
+    modelForm->addRow("", loadBtn);
+    connect(loadBtn, &QPushButton::clicked, this, &MainWindow::loadModel);
+
+    modelStatus_ = new QLabel("No model loaded.", modelGroup);
+    modelStatus_->setWordWrap(true);
+    modelForm->addRow("Status:", modelStatus_);
+
+    form->addRow(modelGroup);
+
+    // Dataset settings
+
+    QGroupBox *datasetGroup = new QGroupBox("Dataset Maintenance", this);
+    QVBoxLayout *groupLayout = new QVBoxLayout(datasetGroup);
+
+    lblDatasetStatus_ = new QLabel("", datasetGroup);
+
+    pbDataset_ = new QProgressBar(datasetGroup);
+    pbDataset_->setRange(0, 100);
+    pbDataset_->setValue(0);
+    pbDataset_->setTextVisible(true);
+
+    btnDatasetAction_ = new QPushButton("Check for Dataset Updates", datasetGroup);
+
+    groupLayout->addWidget(lblDatasetStatus_);
+    groupLayout->addWidget(pbDataset_);
+    groupLayout->addWidget(btnDatasetAction_);
+
+    form->addRow(datasetGroup);
+
+    connect(btnDatasetAction_, &QPushButton::clicked, this, [this]{
+        if(!dbManager_) return;
+
+        if(dbUpdateNeeded_){
+            dbManager_->startDownloadAndImport();
+        }else{
+            dbManager_->checkAndLoad(true);
+        }
+    });
+
+    connect(dbManager_, &DatasetManager::statusChanged, this, [this](const QString &statusText) {
+        qDebug()<<statusText;
+        lblDatasetStatus_->setText(statusText);
+    });
+
+    connect(dbManager_, &DatasetManager::updateAvailable, this, [this](bool available, const QString &newVer) {
+        if (available) {
+            btnDatasetAction_->setText("Update Dataset Now");
+        }else{
+            btnDatasetAction_->setText("Redownload Dataset");
+        }});
+
+    connect(dbManager_, &DatasetManager::downloadProgress, this, [this](qint64 bytesReceived, qint64 bytesTotal) {
+        double recMB = bytesReceived / (1024.0 * 1024.0);
+
+        if (bytesTotal > 0) {
+            pbDataset_->setRange(0, 100);
+            int percent = static_cast<int>((bytesReceived * 100) / bytesTotal);
+            pbDataset_->setValue(percent);
+
+            double totalMB = bytesTotal / (1024.0 * 1024.0);
+            lblDatasetStatus_->setText(QString("Downloading: %1 MB / %2 MB (%3%)")
+                                           .arg(recMB, 0, 'f', 1)
+                                           .arg(totalMB, 0, 'f', 1)
+                                           .arg(percent));
+        } else if (bytesReceived > 0) {
+            pbDataset_->setRange(0, 0);
+            lblDatasetStatus_->setText(QString("Downloading: %1 MB...").arg(recMB, 0, 'f', 1));
+        }
+    });
+
 
     // Advanced settings
     auto* advToggle = new QPushButton("▸ Advanced settings");
@@ -178,13 +270,6 @@ QWidget* MainWindow::buildSettingsPage() {
     });
     // ---
 
-    auto* loadBtn = new QPushButton("Load models");
-    form->addRow("", loadBtn);
-    connect(loadBtn, &QPushButton::clicked, this, &MainWindow::loadModel);
-
-    modelStatus_ = new QLabel("No model loaded.");
-    modelStatus_->setWordWrap(true);
-    form->addRow("Status:", modelStatus_);
     return w;
 }
 
@@ -270,29 +355,6 @@ QWidget* MainWindow::buildDetectPage() {
     selModel_     = new SelectionModel(this);
     bridge_       = new UiBridge(this);
     cropProvider_ = new CropImageProvider;      // engine takes ownership below
-
-    // get global cards database
-    QUrl datasetUrl(Config::instance().getDatasetSourceUrl());
-    dbManager_ = new DatasetManager(datasetUrl, this);
-
-    connect(dbManager_, &DatasetManager::readyToUse, this, [this](){
-        if (!QSqlDatabase::contains("main_ui_connection")) {
-            db_ = QSqlDatabase::addDatabase("QSQLITE", "main_ui_connection");
-            db_.setDatabaseName(Config::instance().getDatasetPath());
-        }
-        if (!db_.isOpen()) {
-            db_.open();
-        }
-
-        candModel_->setCardDatabase(db_);
-    });
-
-    connect(dbManager_, &DatasetManager::statusChanged, this, [this](const QString &statusText) {
-        qDebug()<<statusText;
-    });
-
-    // auto update
-    dbManager_->checkAndLoad(false);
 
     qmlPanel_ = new QQuickWidget;
     qmlPanel_->engine()->addImageProvider("crop", cropProvider_);
@@ -646,13 +708,7 @@ void MainWindow::runDetection() {
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
     auto results = std::make_shared<std::vector<std::vector<Candidate>>>(sel_.size());
-    QFuture<void> fut = QtConcurrent::run([this, crops, results] {
-        for (size_t i = 0; i < crops->size(); ++i)
-            if (!(*crops)[i].empty())
-                (*results)[i] = retriever_->search((*crops)[i], 15);   // runs OFF the UI thread
-    });
 
-    detectWatcher_.setFuture(fut);
     connect(&detectWatcher_, &QFutureWatcher<void>::finished, this, [this, results] {
         for (int i = 0; i < sel_.size() && i < (int)results->size(); ++i)
             if (!(*results)[i].empty()) sel_[i].cands = (*results)[i];
@@ -660,6 +716,14 @@ void MainWindow::runDetection() {
         if (!sel_.isEmpty()) { showSelectionResults(0); }
         pushStateToQml();
     }, Qt::SingleShotConnection);
+
+    QFuture<void> fut = QtConcurrent::run([this, crops, results] {
+        for (size_t i = 0; i < crops->size(); ++i)
+            if (!(*crops)[i].empty())
+                (*results)[i] = retriever_->search((*crops)[i], 15);   // runs OFF the UI thread
+    });
+
+    detectWatcher_.setFuture(fut);
 }
 
 void MainWindow::showSelectionResults(int index) {
