@@ -2,5 +2,8 @@
     <qresource prefix="/">
         <file>qml/ResultsPanel.qml</file>
         <file>qml/DownloadPage.qml</file>
+        <file>qml/GalleryPage.qml</file>
+        <file>qml/CardDelegate.qml</file>
+        <file>qml/CardDetailPanel.qml</file>
     </qresource>
 </RCC>

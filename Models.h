@@ -7,6 +7,7 @@
 #include <QString>
 #include <QImage>
 #include <QSqlDatabase>
+#include "database/DatabaseUtil.h"
 #include "tcg_infer.h"
 
 // ── top-15 candidates for the currently selected card ───────────────────────
@@ -26,11 +27,14 @@ public:
     void clear();
 
     void setCardDatabase(QSqlDatabase& db) { db_ = db; }
+    void setDatabaseUtil(DatabaseUtil* dbUtil) {dbUtil_ = dbUtil;}
 
 private:
     struct Row { QString cardId, deckCode, masterUrl; double score = 0; bool confirmed = false; };
     QVector<Row> rows_;
     QSqlDatabase db_;
+
+    DatabaseUtil* dbUtil_ = nullptr;
 
     QString imageUrlFor(QString cardId);
 };
@@ -39,10 +43,10 @@ private:
 class SelectionModel : public QAbstractListModel {
     Q_OBJECT
 public:
-    enum Roles { LabelRole = Qt::UserRole + 1, ConfirmedRole, QtyRole, NumberRole };
+    enum Roles { LabelRole = Qt::UserRole + 1, ConfirmedRole, QtyRole, NumberRole, CardIdRole };
     using QAbstractListModel::QAbstractListModel;
 
-    struct Row { QString label; bool confirmed = false; int qty = 1; };
+    struct Row { QString label; bool confirmed = false; int qty = 1; QString cardId;};
 
     int rowCount(const QModelIndex& = {}) const override { return rows_.size(); }
     QVariant data(const QModelIndex& idx, int role) const override;

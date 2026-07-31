@@ -9,6 +9,7 @@
 #include <QVector>
 #include <memory>
 #include <opencv2/core.hpp>
+#include "database/DatabaseUtil.h"
 #include "database/DatasetManager.h"
 #include "tcg_infer.h"
 #include "Config.h"
@@ -52,6 +53,7 @@ private:
     QWidget* buildSettingsPage();
     QWidget* buildFaissPage();
     QWidget* buildDetectPage();
+    QWidget* buildGalleryPage();
     cv::Mat  cropForSelection(int index) const;
     void     syncSelections();
     void     pushStateToQml();
@@ -111,6 +113,7 @@ private:
     QSqlDatabase db_;
     DatasetManager *dbManager_ = nullptr;
     bool dbUpdateNeeded_ = false;
+    DatabaseUtil* dbUtil_ = nullptr;
 
     // notif setting
     bool indexNotifSilent_ = false;

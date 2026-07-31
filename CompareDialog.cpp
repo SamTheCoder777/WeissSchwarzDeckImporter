@@ -10,8 +10,8 @@ QString toDeckCode(const std::string& cardId);
 
 CompareDialog::CompareDialog(const QImage& crop,
                              const std::vector<Candidate>& candidates,
-                             int startIndex, QSqlDatabase& db, QWidget* parent)
-    : QDialog(parent), crop_(crop), cands_(candidates), db_(db) {
+                             int startIndex, QSqlDatabase& db, DatabaseUtil* dbUtil, QWidget* parent)
+    : QDialog(parent), crop_(crop), cands_(candidates), db_(db), dbUtil_(dbUtil) {
 
     setWindowTitle("Compare & Confirm");
     setModal(true);
@@ -110,7 +110,7 @@ void CompareDialog::showCandidate(int i) {
     counterLabel_->setText(QString("Candidate %1 of %2").arg(cur_ + 1).arg(cands_.size()));
 
     // resolve the SAME url the results panel uses
-    QString url = DatabaseUtil::imageUrlFor(QString::fromStdString(c.card_id));
+    QString url = dbUtil_->imageUrlFor(QString::fromStdString(c.card_id));
 
     curCandImage_ = QImage();          // clear old image
     if (url.isEmpty()) { candLabel_->setText("(no image for this card)"); return; }

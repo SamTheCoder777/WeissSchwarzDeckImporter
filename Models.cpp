@@ -48,7 +48,7 @@ void CandidateModel::setCandidates(const std::vector<Candidate>& c, const std::s
         r.cardId    = QString::fromStdString(x.card_id);
         r.deckCode  = toDeckCode(x.card_id);
         r.score     = x.score;
-        r.masterUrl = DatabaseUtil::imageUrlFor(r.cardId);
+        r.masterUrl = dbUtil_->imageUrlFor(r.cardId);
         r.confirmed = (!confirmedId.empty() && confirmedId == x.card_id);
         rows_.push_back(r);
     }
@@ -72,13 +72,14 @@ QVariant SelectionModel::data(const QModelIndex& idx, int role) const {
     case ConfirmedRole: return r.confirmed;
     case QtyRole:       return r.qty;
     case NumberRole:    return idx.row() + 1;
+    case CardIdRole: return r.cardId;
     }
     return {};
 }
 
 QHash<int, QByteArray> SelectionModel::roleNames() const {
     return {{LabelRole, "label"}, {ConfirmedRole, "confirmed"},
-            {QtyRole, "qty"}, {NumberRole, "number"}};
+            {QtyRole, "qty"}, {NumberRole, "number"}, {CardIdRole, "cardId"}};
 }
 
 void SelectionModel::setRows(const QVector<Row>& rows) {

@@ -41,13 +41,17 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // get global cards database
     QUrl datasetUrl(Config::instance().getDatasetSourceUrl());
     dbManager_ = new DatasetManager(datasetUrl, this);
+    dbUtil_ = new DatabaseUtil(this);
 
     pages_ = new QStackedWidget(this);
-    pages_->addWidget(buildDetectPage());     // 0
+    pages_->addWidget(buildDetectPage());     // 0 (Call first since it inits various models)
     pages_->addWidget(buildSettingsPage());   // 1
     pages_->addWidget(buildFaissPage());      // 2  <- index download page
+    pages_->addWidget(buildGalleryPage());    // 3
     setCentralWidget(pages_);
     statusBar();                              // used for catalog error messages
+
+    candModel_->setDatabaseUtil(dbUtil_);
 
     auto refreshModel = [this]() {
         QSqlDatabase db = dbManager_->getUiDatabase();
@@ -91,6 +95,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     QAction* aDetect = addPage(st->standardIcon(QStyle::SP_ComputerIcon),           "Detection",   0);
                        addPage(st->standardIcon(QStyle::SP_DriveNetIcon),           "Indexes",     2);
                        addPage(st->standardIcon(QStyle::SP_FileDialogDetailedView), "Settings",    1);
+                       addPage(st->standardIcon(QStyle::SP_DriveCDIcon), "Gallery",    3);
     aDetect->setChecked(true);
 
     setWindowTitle("TCG Deck Builder");
@@ -271,6 +276,16 @@ QWidget* MainWindow::buildSettingsPage() {
     // ---
 
     return w;
+}
+
+// gallery page
+QWidget* MainWindow::buildGalleryPage() {
+    auto* qw = new QQuickWidget;
+    qw->rootContext()->setContextProperty("cardDatabase", dbUtil_);
+    qw->rootContext()->setContextProperty("selModel", selModel_);
+    qw->setResizeMode(QQuickWidget::SizeRootObjectToView);
+    qw->setSource(QUrl("qrc:/qml/GalleryPage.qml"));
+    return qw;
 }
 
 void MainWindow::loadModel(bool silent) {
@@ -542,7 +557,7 @@ void MainWindow::openCompareDialog() {
         for (int i = 0; i < (int)cands.size(); ++i)
             if (cands[i].card_id == sel_[currentSel_].cardId) { start = i; break; }
 
-    CompareDialog dlg(cropImg, cands, start, db_, this);
+    CompareDialog dlg(cropImg, cands, start, db_, dbUtil_, this);
     if (dlg.exec() == QDialog::Accepted) {
         int idx = dlg.confirmedIndex();
         if (idx >= 0) confirmCandidate(idx);   // reuse your existing confirm path
@@ -603,6 +618,7 @@ void MainWindow::pushStateToQml() {
         r.label     = s.confirmed
                         ? QString("%1  x%2").arg(toDeckCode(s.cardId)).arg(s.qty)
                         : QStringLiteral("(not confirmed)");
+        r.cardId    = QString::fromStdString(s.cardId);
         rows.push_back(r);
         if (s.confirmed) { ++confirmed; total += s.qty; }
     }
