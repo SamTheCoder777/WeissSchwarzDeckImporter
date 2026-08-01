@@ -565,10 +565,26 @@ void MainWindow::openCompareDialog() {
 }
 
 void MainWindow::syncSelections() {
-    int n = canvas_->selectionCount();
-    while (sel_.size() > n) sel_.removeLast();
-    while (sel_.size() < n) sel_.push_back(SelState{});
-    if (currentSel_ >= n) currentSel_ = -1;
+    // remember which selection is "current" by its stable id
+    int curId = (currentSel_ >= 0 && currentSel_ < sel_.size())
+                    ? sel_[currentSel_].id : -1;
+
+    QVector<SelState> next;
+    next.reserve(canvas_->selectionCount());
+    for (int i = 0; i < canvas_->selectionCount(); ++i) {
+        int id = canvas_->selectionId(i);
+        int found = -1;
+        for (int j = 0; j < sel_.size(); ++j) if (sel_[j].id == id) { found = j; break; }
+        if (found >= 0) next.push_back(sel_[found]);
+        else { SelState s; s.id = id; next.push_back(s); }
+    }
+    sel_ = next;
+
+    // re-resolve current by id (it may have moved, or be gone)
+    currentSel_ = -1;
+    if (curId >= 0)
+        for (int i = 0; i < sel_.size(); ++i)
+            if (sel_[i].id == curId) { currentSel_ = i; break; }
 }
 
 void MainWindow::sortSelectionsByPosition() {

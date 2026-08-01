@@ -46,6 +46,7 @@ public:
     int  selectionAtWidgetPoint(const QPointF& widgetPt) const;
 
     void reorder(const QVector<int>& newOrder);   // permute selections in place
+    int selectionId(int i) const { return sel_.value(i).id; }
 
 signals:
     void selectionsChanged();              // count changed (added/removed/cleared)
@@ -67,7 +68,10 @@ private:
         QPolygonF poly;
         bool      confirmed = false;
         QString   label;
+        int       id = -1;
     };
+
+    int nextSelId_ = 0;
 
     void    recomputeTransform();
     QPointF toImage(const QPointF& widgetPt) const;

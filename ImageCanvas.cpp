@@ -70,7 +70,10 @@ void ImageCanvas::setHighlight(int index) { highlight_ = index; update(); }
 
 void ImageCanvas::addQuadSelection(const QPolygonF& quad) {
     if (quad.size() < 3) return;
-    sel_.push_back({quad, false, QString()});
+    Sel s;
+    s.poly = quad;
+    s.id = nextSelId_++;
+    sel_.push_back(s);
     update();
     emit selectionsChanged();
 }
@@ -122,7 +125,10 @@ bool ImageCanvas::hitTestVertex(const QPointF& widgetPt, int& selIdx, int& vertI
 
 void ImageCanvas::finishPolygon() {
     if (polyInProgress_.size() >= 3) {
-        sel_.push_back({polyInProgress_, false, QString()});
+        Sel s;
+        s.poly = polyInProgress_;
+        s.id = nextSelId_++;
+        sel_.push_back(s);
         polyInProgress_.clear();
         update();
         emit selectionsChanged();
@@ -281,7 +287,10 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* e) {
         if (r.width() > 4 && r.height() > 4) {
             QPolygonF poly;
             poly << r.topLeft() << r.topRight() << r.bottomRight() << r.bottomLeft();
-            sel_.push_back({poly, false, QString()});
+            Sel s;
+            s.poly = poly;
+            s.id = nextSelId_++;
+            sel_.push_back(s);
             emit selectionsChanged();
         }
         update();

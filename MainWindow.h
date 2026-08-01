@@ -65,6 +65,7 @@ private:
         bool        confirmed = false;
         std::string cardId;
         int         qty = 1;
+        int id = -1;
     };
 
     std::unique_ptr<TCGRetriever> retriever_;
