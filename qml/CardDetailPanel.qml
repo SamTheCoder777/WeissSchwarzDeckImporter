@@ -2,13 +2,22 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
-// Renders whatever QVariantMap it's given (same shape as DatabaseUtil::cardDataFor).
-// Knows nothing about the gallery or the model — pure display component.
 ScrollView {
     id: root
     property var card: ({})
     clip: true
     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+    component SelText: TextEdit {
+        readOnly: true
+        selectByMouse: true
+        persistentSelection: false
+        selectionColor: "#4d9dff"
+        selectedTextColor: "white"
+        wrapMode: TextEdit.Wrap
+        textFormat: TextEdit.PlainText
+        enabled: text.length > 0
+    }
 
     ColumnLayout {
         width: root.width
@@ -21,7 +30,6 @@ ScrollView {
             radius: 8
             color: "#1c1d1f"
             clip: true
-
             Image {
                 anchors.fill: parent
                 source: root.card.picture ? root.card.picture : ""
@@ -30,18 +38,17 @@ ScrollView {
             }
         }
 
-        Label {
+        SelText {
             Layout.fillWidth: true
             text: root.card.cardName || ""
             font.pixelSize: 20
             font.bold: true
             color: "#f0f0f0"
-            wrapMode: Text.WordWrap
         }
 
-        Label {
+        SelText {
             Layout.fillWidth: true
-            text: [root.card.setName, root.card.rarity].filter(s => !!s).join(" \u00b7 ")
+            text: [root.card.setName, root.card.rarity, root.card.cardId].filter(s => !!s).join(" \u00b7 ")
             color: "#9aa0a6"
             font.pixelSize: 13
         }
@@ -54,23 +61,23 @@ ScrollView {
             rowSpacing: 6
             columnSpacing: 12
 
-            Label { text: "Color"; color: "#888"; font.pixelSize: 12 }
-            Label { Layout.fillWidth: true; text: root.card.color || "-"; color: "#e6e6e6"; font.pixelSize: 12; wrapMode: Text.WordWrap }
+            Label   { text: "Color"; color: "#888"; font.pixelSize: 12 }
+            SelText { Layout.fillWidth: true; text: root.card.color || "-"; color: "#e6e6e6"; font.pixelSize: 12 }
 
-            Label { text: "Power"; color: "#888"; font.pixelSize: 12 }
-            Label { Layout.fillWidth: true; text: root.card.power || "-"; color: "#e6e6e6"; font.pixelSize: 12; wrapMode: Text.WordWrap }
+            Label   { text: "Power"; color: "#888"; font.pixelSize: 12 }
+            SelText { Layout.fillWidth: true; text: root.card.power || "-"; color: "#e6e6e6"; font.pixelSize: 12 }
 
-            Label { text: "Soul"; color: "#888"; font.pixelSize: 12 }
-            Label { Layout.fillWidth: true; text: root.card.soul || "-"; color: "#e6e6e6"; font.pixelSize: 12; wrapMode: Text.WordWrap }
+            Label   { text: "Soul"; color: "#888"; font.pixelSize: 12 }
+            SelText { Layout.fillWidth: true; text: root.card.soul || "-"; color: "#e6e6e6"; font.pixelSize: 12 }
 
-            Label { text: "Trigger"; color: "#888"; font.pixelSize: 12 }
-            Label { Layout.fillWidth: true; text: root.card.cardTrigger || "-"; color: "#e6e6e6"; font.pixelSize: 12; wrapMode: Text.WordWrap }
+            Label   { text: "Trigger"; color: "#888"; font.pixelSize: 12 }
+            SelText { Layout.fillWidth: true; text: root.card.cardTrigger || "-"; color: "#e6e6e6"; font.pixelSize: 12 }
 
-            Label { text: "Feature 1"; color: "#888"; font.pixelSize: 12 }
-            Label { Layout.fillWidth: true; text: root.card.feature1 || "-"; color: "#e6e6e6"; font.pixelSize: 12; wrapMode: Text.WordWrap }
+            Label   { text: "Feature 1"; color: "#888"; font.pixelSize: 12 }
+            SelText { Layout.fillWidth: true; text: root.card.feature1 || "-"; color: "#e6e6e6"; font.pixelSize: 12 }
 
-            Label { text: "Feature 2"; color: "#888"; font.pixelSize: 12 }
-            Label { Layout.fillWidth: true; text: root.card.feature2 || "-"; color: "#e6e6e6"; font.pixelSize: 12; wrapMode: Text.WordWrap }
+            Label   { text: "Feature 2"; color: "#888"; font.pixelSize: 12 }
+            SelText { Layout.fillWidth: true; text: root.card.feature2 || "-"; color: "#e6e6e6"; font.pixelSize: 12 }
         }
 
         Rectangle {
@@ -86,13 +93,12 @@ ScrollView {
             font.pixelSize: 12
             visible: (root.card.flavor || "") !== ""
         }
-        Label {
+        SelText {
             Layout.fillWidth: true
             text: root.card.flavor || ""
             color: "#c9c9c9"
             font.italic: true
             font.pixelSize: 13
-            wrapMode: Text.WordWrap
             visible: (root.card.flavor || "") !== ""
         }
 
@@ -102,15 +108,14 @@ ScrollView {
             font.pixelSize: 12
             visible: (root.card.text || "") !== ""
         }
-        Label {
+        SelText {
             Layout.fillWidth: true
             text: root.card.text || ""
             color: "#e6e6e6"
             font.pixelSize: 13
-            wrapMode: Text.WordWrap
             visible: (root.card.text || "") !== ""
         }
 
-        Item { Layout.preferredHeight: 12 } // bottom breathing room
+        Item { Layout.preferredHeight: 12 }
     }
 }

@@ -46,7 +46,7 @@ QVariantMap DatabaseUtil::cardDataFor(const QString &cardId) const{
     const QString baseImgUrl = Config::instance().getBaseImgUrl();
     QSqlQuery query(db);
 
-    if (!query.prepare("SELECT \"picture\", \"set_name\", \"rare\", \"feature1\", \"power\", \"soul\","
+    if (!query.prepare("SELECT \"card_number\", \"picture\", \"set_name\", \"rare\", \"feature1\", \"power\", \"soul\","
                        " \"flavor\", \"color\", \"text\", \"feature2\", \"card_name\", \"card_trigger\", \"card_kind\", "
                        "\"level\" FROM dataset WHERE \"card_number\" = ?")) {
         qDebug() << "DatabaseUtil::imageUrlFor - Prepare failed:" << query.lastError().text();
@@ -57,6 +57,7 @@ QVariantMap DatabaseUtil::cardDataFor(const QString &cardId) const{
 
     if (query.exec()) {
         if (query.next()) {
+            card["cardId"]       = query.value("card_number").toString();
             card["picture"]      = baseImgUrl+query.value("picture").toString();
             card["setName"]      = query.value("set_name").toString();
             card["rarity"]       = query.value("rare").toString();

@@ -27,6 +27,38 @@ static QImage matToQImage(const cv::Mat& bgr) {
 }
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
+    // Model load watcher
+    connect(&modelWatcher_, &QFutureWatcher<TCGRetriever*>::finished, this, [this] {
+        modelLoading_ = false;
+        QApplication::restoreOverrideCursor();
+
+        TCGRetriever* r = modelWatcher_.result();
+        if (!r) {
+            retriever_.reset();
+            if (modelStatus_) modelStatus_->setText("Model load FAILED.");
+            if (!loadSilent_)
+                QMessageBox::critical(this, "Load failed", "Could not load model or index.");
+            pushStateToQml();
+            return;
+        }
+        retriever_.reset(r);
+
+        if (!pendingYolo_.empty()) {
+            try { detector_ = std::make_unique<CardDetector>(pendingYolo_); }
+            catch (const std::exception& e) {
+                detector_.reset();
+                if (!loadSilent_)
+                    QMessageBox::warning(this, "Detector",
+                                         QString("YOLO load failed: %1").arg(e.what()));
+            }
+        }
+
+        Config::instance().setCurModelPath(onnxEdit_->text());
+        Config::instance().setCurYoloModelPath(yoloEdit_->text());
+        if (modelStatus_) modelStatus_->setText("Model + index loaded OK. Go to Detection.");
+        pushStateToQml();
+    });
+
      // Faiss catalog
     catalog_ = new IndexCatalog(this);
 
@@ -166,37 +198,6 @@ QWidget* MainWindow::buildSettingsPage() {
     browseRow(yoloEdit_, "YOLO detector (.onnx):", false);
 
     // Try to load models
-    connect(&modelWatcher_, &QFutureWatcher<TCGRetriever*>::finished, this, [this] {
-        modelLoading_ = false;
-        QApplication::restoreOverrideCursor();
-
-        TCGRetriever* r = modelWatcher_.result();
-        if (!r) {
-            retriever_.reset();
-            if (modelStatus_) modelStatus_->setText("Model load FAILED.");
-            if (!loadSilent_)
-                QMessageBox::critical(this, "Load failed", "Could not load model or index.");
-            pushStateToQml();
-            return;
-        }
-        retriever_.reset(r);
-
-        if (!pendingYolo_.empty()) {
-            try { detector_ = std::make_unique<CardDetector>(pendingYolo_); }
-            catch (const std::exception& e) {
-                detector_.reset();
-                if (!loadSilent_)
-                    QMessageBox::warning(this, "Detector",
-                                         QString("YOLO load failed: %1").arg(e.what()));
-            }
-        }
-
-        Config::instance().setCurModelPath(onnxEdit_->text());
-        Config::instance().setCurYoloModelPath(yoloEdit_->text());
-        if (modelStatus_) modelStatus_->setText("Model + index loaded OK. Go to Detection.");
-        pushStateToQml();
-    });
-
     bool modelPathLoaded = !Config::instance().getCurModelPath().isNull() && !Config::instance().getCurModelPath().isEmpty();
     onnxEdit_->setText(modelPathLoaded ? Config::instance().getCurModelPath() : "");
     bool yoloModelPathLoaded = !Config::instance().getCurYoloModelPath().isNull() && !Config::instance().getCurYoloModelPath().isEmpty();
