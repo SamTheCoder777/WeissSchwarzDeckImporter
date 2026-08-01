@@ -55,7 +55,7 @@ Rectangle {
             Image {
                 anchors.fill: parent
                 source: root.loaded && root.fullData.picture ? root.fullData.picture : ""
-                fillMode: Image.PreserveAspectCrop
+                fillMode: Image.PreserveAspectFit
                 asynchronous: true
                 cache: true
             }
