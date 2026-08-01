@@ -166,6 +166,37 @@ QWidget* MainWindow::buildSettingsPage() {
     browseRow(yoloEdit_, "YOLO detector (.onnx):", false);
 
     // Try to load models
+    connect(&modelWatcher_, &QFutureWatcher<TCGRetriever*>::finished, this, [this] {
+        modelLoading_ = false;
+        QApplication::restoreOverrideCursor();
+
+        TCGRetriever* r = modelWatcher_.result();
+        if (!r) {
+            retriever_.reset();
+            if (modelStatus_) modelStatus_->setText("Model load FAILED.");
+            if (!loadSilent_)
+                QMessageBox::critical(this, "Load failed", "Could not load model or index.");
+            pushStateToQml();
+            return;
+        }
+        retriever_.reset(r);
+
+        if (!pendingYolo_.empty()) {
+            try { detector_ = std::make_unique<CardDetector>(pendingYolo_); }
+            catch (const std::exception& e) {
+                detector_.reset();
+                if (!loadSilent_)
+                    QMessageBox::warning(this, "Detector",
+                                         QString("YOLO load failed: %1").arg(e.what()));
+            }
+        }
+
+        Config::instance().setCurModelPath(onnxEdit_->text());
+        Config::instance().setCurYoloModelPath(yoloEdit_->text());
+        if (modelStatus_) modelStatus_->setText("Model + index loaded OK. Go to Detection.");
+        pushStateToQml();
+    });
+
     bool modelPathLoaded = !Config::instance().getCurModelPath().isNull() && !Config::instance().getCurModelPath().isEmpty();
     onnxEdit_->setText(modelPathLoaded ? Config::instance().getCurModelPath() : "");
     bool yoloModelPathLoaded = !Config::instance().getCurYoloModelPath().isNull() && !Config::instance().getCurYoloModelPath().isEmpty();
@@ -297,43 +328,34 @@ QWidget* MainWindow::buildGalleryPage() {
 }
 
 void MainWindow::loadModel(bool silent) {
-    try {
-        if (!silent && currentIndexDir_.isEmpty()){
-            QMessageBox::warning(this, "Detector", QString("Index not set.\nDownload and click 'use'."));
-            return;
-        }
+    if (modelLoading_) return;
 
-        retriever_ = std::make_unique<TCGRetriever>(
-            onnxEdit_->text().toStdString(),
-            currentIndexDir_.toStdString(),
-            std::string(),
-            nativeCheck_->isChecked(),
-            imgSizeSpin_->value());
-
-        if (!yoloEdit_->text().isEmpty()) {
-            try { detector_ = std::make_unique<CardDetector>(yoloEdit_->text().toStdString()); }
-            catch (const std::exception& e) {
-                detector_.reset();
-                if (!silent)
-                    QMessageBox::warning(this, "Detector", QString("YOLO load failed: %1").arg(e.what()));
-                return;
-            }
-        }
-
-        // Remember paths
-        Config::instance().setCurModelPath(onnxEdit_->text());
-        Config::instance().setCurYoloModelPath(yoloEdit_->text());
-
-        if (!silent)
-            modelStatus_->setText("Model + index loaded OK. Go to Detection.");
-    } catch (const std::exception& e) {
-        retriever_.reset();
-        if(!silent){
-            modelStatus_->setText(QString("FAILED: %1").arg(e.what()));
-            QMessageBox::critical(this, "Load failed", e.what());
-        }
+    if (!silent && currentIndexDir_.isEmpty()) {
+        QMessageBox::warning(this, "Detector", "Index not set.\nDownload and click 'use'.");
+        return;
     }
-    pushStateToQml();
+    if (currentIndexDir_.isEmpty() || onnxEdit_->text().isEmpty()) return;
+
+    const std::string onnx  = onnxEdit_->text().toStdString();
+    const std::string index = currentIndexDir_.toStdString();
+    const bool native       = nativeCheck_->isChecked();
+    const int  imgSize      = imgSizeSpin_->value();
+    pendingYolo_            = yoloEdit_->text().toStdString();
+    loadSilent_            = silent;
+
+    modelLoading_ = true;
+    if (modelStatus_) modelStatus_->setText("Loading model, please wait…");
+    QApplication::setOverrideCursor(Qt::BusyCursor);
+
+    QFuture<TCGRetriever*> fut = QtConcurrent::run(
+        [onnx, index, native, imgSize]() -> TCGRetriever* {
+            try {
+                return new TCGRetriever(onnx, index, std::string(), native, imgSize);
+            } catch (...) {
+                return nullptr;
+            }
+        });
+    modelWatcher_.setFuture(fut);
 }
 
 
@@ -771,6 +793,10 @@ cv::Mat MainWindow::cropForSelection(int index) const {
 }
 
 void MainWindow::runDetection() {
+    if (modelLoading_) {
+        QMessageBox::information(this, "Please wait", "The model is still loading.");
+        return;
+    }
     if (!retriever_) { QMessageBox::information(this, "No model", "Load a model in Settings first."); return; }
     syncSelections();
     if (sel_.isEmpty()) { QMessageBox::information(this, "No selection", "Select at least one card."); return; }

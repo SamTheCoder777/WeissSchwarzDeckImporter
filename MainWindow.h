@@ -109,6 +109,10 @@ private:
     QSortFilterProxyModel* installedProxy_ = nullptr;
     IndexSearchProxy* searchProxy_ = nullptr;
     QFutureWatcher<void> detectWatcher_;
+    QFutureWatcher<TCGRetriever*> modelWatcher_;
+    bool modelLoading_ = false;
+    bool loadSilent_ = false;
+    std::string pendingYolo_;
 
     // database
     QSqlDatabase db_;
