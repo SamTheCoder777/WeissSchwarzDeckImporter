@@ -47,7 +47,8 @@ QVariantMap DatabaseUtil::cardDataFor(const QString &cardId) const{
     QSqlQuery query(db);
 
     if (!query.prepare("SELECT \"picture\", \"set_name\", \"rare\", \"feature1\", \"power\", \"soul\","
-                       " \"flavor\", \"color\", \"text\", \"feature2\", \"card_name\", \"card_trigger\" FROM dataset WHERE \"card_number\" = ?")) {
+                       " \"flavor\", \"color\", \"text\", \"feature2\", \"card_name\", \"card_trigger\", \"card_kind\", "
+                       "\"level\" FROM dataset WHERE \"card_number\" = ?")) {
         qDebug() << "DatabaseUtil::imageUrlFor - Prepare failed:" << query.lastError().text();
         return card;
     }
@@ -56,7 +57,7 @@ QVariantMap DatabaseUtil::cardDataFor(const QString &cardId) const{
 
     if (query.exec()) {
         if (query.next()) {
-            card["picture"]     = baseImgUrl+query.value("picture").toString();
+            card["picture"]      = baseImgUrl+query.value("picture").toString();
             card["setName"]      = query.value("set_name").toString();
             card["rarity"]       = query.value("rare").toString();
             card["feature1"]     = query.value("feature1").toString();
@@ -68,7 +69,9 @@ QVariantMap DatabaseUtil::cardDataFor(const QString &cardId) const{
             card["feature2"]     = query.value("feature2").toString();
             card["cardName"]     = query.value("card_name").toString();
             card["cardTrigger"]  = query.value("card_trigger").toString();
-            qDebug() << "DatabaseUtil::cardDataFor - Query:" << card["picture"];
+            card["cardKind"]     = query.value("card_kind").toString();
+            card["level"]        = query.value("level").toString();
+            //qDebug() << "DatabaseUtil::cardDataFor - Query:" << card["picture"];
         } else{
             qDebug() << "DatabaseUtil::cardDataFor - Query failed: query next not possible for cardId: "<<cardId;
         }

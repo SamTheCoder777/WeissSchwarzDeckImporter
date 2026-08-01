@@ -43,6 +43,9 @@ private:
 class SelectionModel : public QAbstractListModel {
     Q_OBJECT
 public:
+    Q_INVOKABLE QVariant dataAt(int row, const QString& roleName) const;
+    Q_INVOKABLE int      rowCountQml() const { return rows_.size(); }
+
     enum Roles { LabelRole = Qt::UserRole + 1, ConfirmedRole, QtyRole, NumberRole, CardIdRole };
     using QAbstractListModel::QAbstractListModel;
 

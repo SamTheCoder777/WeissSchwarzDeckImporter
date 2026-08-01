@@ -62,12 +62,17 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         }
     };
 
+    QElapsedTimer t; t.start();
     refreshModel();
+    qDebug() << "refreshModel took" << t.elapsed() << "ms";
+
 
     connect(dbManager_, &DatasetManager::readyToUse, this, refreshModel);
 
     // check for update
+    QElapsedTimer t2; t2.start();
     dbManager_->checkForUpdates();
+    qDebug() << "checkForUpdates took" << t2.elapsed() << "ms";
 
     // ── vertical nav rail ──────────────────────────────────────────────────
     QToolBar* sideBar = new QToolBar("SideBar", this);
@@ -167,7 +172,9 @@ QWidget* MainWindow::buildSettingsPage() {
     yoloEdit_->setText(yoloModelPathLoaded ? Config::instance().getCurYoloModelPath() : "");
     if (modelPathLoaded && yoloModelPathLoaded) {
         QTimer::singleShot(0, this, [this]() {
+            QElapsedTimer t; t.start();
             MainWindow::loadModel(true);
+            qDebug() << "loadModel took" << t.elapsed() << "ms";
         });
     }
 
@@ -283,6 +290,7 @@ QWidget* MainWindow::buildGalleryPage() {
     auto* qw = new QQuickWidget;
     qw->rootContext()->setContextProperty("cardDatabase", dbUtil_);
     qw->rootContext()->setContextProperty("selModel", selModel_);
+    qw->rootContext()->setContextProperty("bridge", bridge_);
     qw->setResizeMode(QQuickWidget::SizeRootObjectToView);
     qw->setSource(QUrl("qrc:/qml/GalleryPage.qml"));
     return qw;
@@ -598,23 +606,61 @@ void MainWindow::sortSelectionsByPosition() {
         return c / p.size();
     };
 
-    QVector<int> order(n);
-    std::iota(order.begin(), order.end(), 0);
+    // 1. gather indices with their centroids
+    struct Item { int idx; double x, y; };
+    std::vector<Item> items;
+    items.reserve(n);
+    for (int i = 0; i < n; ++i) {
+        QPointF c = centroid(i);
+        items.push_back({i, c.x(), c.y()});
+    }
 
-    double rowTol = std::max(1.0, sourceBgr_.rows * 0.08);   // same 8% as your Python
-    std::sort(order.begin(), order.end(), [&](int a, int b) {
-        QPointF ca = centroid(a), cb = centroid(b);
-        long ra = std::lround(ca.y() / rowTol), rb = std::lround(cb.y() / rowTol);
-        if (ra != rb) return ra < rb;          // different row band -> top first
-        return ca.x() < cb.x();                // same band -> left first
-    });
+    // 2. sort purely by y first (top to bottom) — a valid total order
+    std::sort(items.begin(), items.end(),
+              [](const Item& a, const Item& b){ return a.y < b.y; });
 
-    // already sorted? (avoid needless work / recursion)
+    // 3. row tolerance from actual card size (half a card height),
+    //    NOT image height — adapts to any resolution / zoom
+    double avgCardH = 0;
+    for (int i = 0; i < n; ++i)
+        avgCardH += canvas_->selection(i).boundingRect().height();
+    avgCardH /= n;
+    double rowTol = std::max(1.0, avgCardH * 0.5);
+
+    // 4. cluster into rows against each row's running mean y
+    std::vector<std::vector<Item>> rows;
+    std::vector<double> rowMeanY;
+    for (const Item& it : items) {
+        if (rows.empty() || (it.y - rowMeanY.back()) > rowTol) {
+            rows.push_back({it});
+            rowMeanY.push_back(it.y);
+        } else {
+            rows.back().push_back(it);
+            double s = 0;
+            for (const Item& c : rows.back()) s += c.y;
+            rowMeanY.back() = s / rows.back().size();
+        }
+    }
+
+    // 5. sort each row left-to-right by x
+    for (auto& row : rows)
+        std::sort(row.begin(), row.end(),
+                  [](const Item& a, const Item& b){ return a.x < b.x; });
+
+    // 6. flatten into the final order
+    QVector<int> order;
+    order.reserve(n);
+    for (const auto& row : rows)
+        for (const Item& it : row)
+            order.push_back(it.idx);
+
+    // 7. identity check — avoid needless reshuffle (and recursion)
     bool identity = true;
-    for (int i = 0; i < n; ++i) if (order[i] != i) { identity = false; break; }
+    for (int i = 0; i < n; ++i)
+        if (order[i] != i) { identity = false; break; }
     if (identity) return;
 
-    // apply the SAME permutation to canvas selections and sel_
+    // 8. apply the SAME permutation to canvas selections and sel_
     canvas_->reorder(order);
     QVector<SelState> reordered;
     reordered.reserve(n);

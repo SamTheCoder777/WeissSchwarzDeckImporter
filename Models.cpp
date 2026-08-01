@@ -95,3 +95,13 @@ void SelectionModel::setRows(const QVector<Row>& rows) {
             emit dataChanged(index(0), index(rows_.size() - 1));
     }
 }
+
+QVariant SelectionModel::dataAt(int row, const QString& roleName) const {
+    if (row < 0 || row >= rows_.size()) return {};
+    const QByteArray rn = roleName.toUtf8();
+    const auto names = roleNames();
+    for (auto it = names.constBegin(); it != names.constEnd(); ++it)
+        if (it.value() == rn)
+            return data(index(row), it.key());   // reuse your existing data()
+    return {};
+}
