@@ -12,7 +12,6 @@
 #include <QSqlDatabase>
 #include "../database/DatabaseUtil.h"
 #include "../retrieval/tcg_infer.h"      // Candidate
-#include "../../CardDatabase.h"
 
 class QLabel;
 class QPushButton;

@@ -55,7 +55,7 @@ add_executable(tcg_app WIN32
     src/detection/CompareDialog.cpp  src/detection/CompareDialog.h
     src/core/Config.h src/core/Config.cpp
     src/index/IndexSearchProxy.h
-    CardDatabase.h
+
     src/database/DatabaseWorker.h src/database/DatabaseWorker.cpp
     src/database/DatasetManager.h src/database/DatasetManager.cpp
     src/database/DatabaseUtil.h src/database/DatabaseUtil.cpp

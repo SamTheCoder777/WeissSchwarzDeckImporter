@@ -14,7 +14,6 @@
 #include "../retrieval/tcg_infer.h"
 #include "../core/Config.h"
 #include "../index/IndexSearchProxy.h"
-#include "../../CardDatabase.h"
 #include "../retrieval/CardDetector.h"
 
 class ImageCanvas;
