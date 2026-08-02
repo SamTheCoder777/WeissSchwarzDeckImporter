@@ -1,10 +1,10 @@
 // MainWindow.cpp — Widgets shell + QML results panel.
 #include "MainWindow.h"
-#include "ImageCanvas.h"
-#include "Models.h"
-#include "UiBridge.h"
-#include "IndexCatalog.h"
-#include "CompareDialog.h"
+#include "../detection/ImageCanvas.h"
+#include "../viewmodels/Models.h"
+#include "../viewmodels/UiBridge.h"
+#include "../index/IndexCatalog.h"
+#include "../detection/CompareDialog.h"
 
 #include <QtWidgets>
 #include <QQuickWidget>

@@ -1,5 +1,5 @@
 #include "Models.h"
-#include "database/DatabaseUtil.h"
+#include "../database/DatabaseUtil.h"
 
 #include <QSqlQuery>
 #include <QUrl>

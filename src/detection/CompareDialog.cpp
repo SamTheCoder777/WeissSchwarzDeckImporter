@@ -1,5 +1,5 @@
 #include "CompareDialog.h"
-#include "database/DatabaseUtil.h"
+#include "../database/DatabaseUtil.h"
 
 #include <QNetworkReply>
 #include <QSqlQuery>

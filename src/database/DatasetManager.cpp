@@ -1,5 +1,5 @@
 #include "DatasetManager.h"
-#include "../Config.h"
+#include "../core/Config.h"
 
 #include <QFile>
 #include <QFileInfo>

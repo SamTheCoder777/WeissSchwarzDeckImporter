@@ -7,8 +7,8 @@
 #include <QString>
 #include <QImage>
 #include <QSqlDatabase>
-#include "database/DatabaseUtil.h"
-#include "tcg_infer.h"
+#include "../database/DatabaseUtil.h"
+#include "../retrieval/tcg_infer.h"
 
 // ── top-15 candidates for the currently selected card ───────────────────────
 class CandidateModel : public QAbstractListModel {

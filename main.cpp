@@ -1,6 +1,6 @@
 // main.cpp — entry point for the TCG Deck Builder.
 #include <QApplication>
-#include "MainWindow.h"
+#include "src/app/MainWindow.h"
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);

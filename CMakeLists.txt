@@ -44,21 +44,21 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickWidgets Network Concurre
 # ── the GUI app (Widgets shell + QML panel) ────────────────────────────────
 add_executable(tcg_app WIN32
     main.cpp
-    MainWindow.cpp   MainWindow.h
-    ImageCanvas.cpp  ImageCanvas.h
-    Models.cpp       Models.h
-    IndexCatalog.cpp IndexCatalog.h
-    UiBridge.h
-    tcg_infer.cpp    tcg_infer.h
+    src/app/MainWindow.cpp   src/app/MainWindow.h
+    src/detection/ImageCanvas.cpp  src/detection/ImageCanvas.h
+    src/viewmodels/Models.cpp       src/viewmodels/Models.h
+    src/index/IndexCatalog.cpp src/index/IndexCatalog.h
+    src/viewmodels/UiBridge.h
+    src/retrieval/tcg_infer.cpp    src/retrieval/tcg_infer.h
     qml.qrc
-    CardDetector.cpp  CardDetector.h
-    CompareDialog.cpp  CompareDialog.h
-    Config.h Config.cpp
-    IndexSearchProxy.h
+    src/retrieval/CardDetector.cpp  src/retrieval/CardDetector.h
+    src/detection/CompareDialog.cpp  src/detection/CompareDialog.h
+    src/core/Config.h src/core/Config.cpp
+    src/index/IndexSearchProxy.h
     CardDatabase.h
-    database/DatabaseWorker.h database/DatabaseWorker.cpp
-    database/DatasetManager.h database/DatasetManager.cpp
-    database/DatabaseUtil.h database/DatabaseUtil.cpp
+    src/database/DatabaseWorker.h src/database/DatabaseWorker.cpp
+    src/database/DatasetManager.h src/database/DatasetManager.cpp
+    src/database/DatabaseUtil.h src/database/DatabaseUtil.cpp
 )
 target_include_directories(tcg_app PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(tcg_app PRIVATE

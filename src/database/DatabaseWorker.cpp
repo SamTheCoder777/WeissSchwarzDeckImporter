@@ -1,5 +1,5 @@
 #include "DatabaseWorker.h"
-#include "../Config.h"
+#include "../core/Config.h"
 
 #include <QSqlQuery>
 #include <QSqlError>
