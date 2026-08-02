@@ -59,6 +59,11 @@ add_executable(tcg_app WIN32
     src/database/DatabaseWorker.h src/database/DatabaseWorker.cpp
     src/database/DatasetManager.h src/database/DatasetManager.cpp
     src/database/DatabaseUtil.h src/database/DatabaseUtil.cpp
+    src/gallery/GalleryPage.h src/gallery/GalleryPage.cpp
+    src/index/FaissPage.h src/index/FaissPage.cpp
+    src/settings/SettingsPage.h src/settings/SettingsPage.cpp
+    src/detection/DetectionPage.h src/detection/DetectionPage.cpp
+    src/services/ModelService.h src/services/ModelService.cpp
 )
 target_include_directories(tcg_app PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(tcg_app PRIVATE
