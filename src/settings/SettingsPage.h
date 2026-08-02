@@ -1,10 +1,38 @@
-#ifndef SETTINGSPAGE_H
-#define SETTINGSPAGE_H
+#pragma once
 
-class SettingsPage
-{
+#include "../database/DatasetManager.h"
+#include "../services/ModelService.h"
+
+#include <QCheckBox>
+#include <QLineEdit>
+#include <QProgressBar>
+#include <QPushButton>
+#include <QSpinBox>
+#include <QWidget>
+
+class SettingsPage: public QWidget {
+    Q_OBJECT
+
 public:
-    SettingsPage();
-};
+    explicit SettingsPage(ModelService* models, DatasetManager* dbManager, QWidget* parent = nullptr);
 
-#endif // SETTINGSPAGE_H
+private:
+    void buildUi();
+
+    DatasetManager* dbManager_;
+    ModelService* models_;
+
+    // settings widgets
+    QLineEdit* onnxEdit_;
+    QLineEdit* yoloEdit_;
+    QSpinBox*  imgSizeSpin_;
+    QCheckBox* nativeCheck_;
+    QLabel*    modelStatus_;
+
+    // settings dataset
+    QLabel *lblDatasetStatus_;
+    QPushButton *btnDatasetAction_;
+    QProgressBar *pbDataset_;
+
+    bool dbUpdateNeeded_ = false;
+};

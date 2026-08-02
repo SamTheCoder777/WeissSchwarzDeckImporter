@@ -1,10 +1,23 @@
-#ifndef GALLERYPAGE_H
-#define GALLERYPAGE_H
+#pragma once
 
-class GalleryPage
-{
+#include "../database/DatabaseUtil.h"
+#include "../viewmodels/Models.h"
+#include "../viewmodels/UiBridge.h"
+
+#include <QWidget>
+
+class GalleryPage: public QWidget {
+    Q_OBJECT
+
 public:
-    GalleryPage();
+    explicit GalleryPage(DatabaseUtil* dbUtil,SelectionModel* selModel, UiBridge* bridge,
+                           QWidget* parent = nullptr);
+
+private:
+    void buildUi();
+
+    DatabaseUtil* dbUtil_;
+    SelectionModel* selModel_;
+    UiBridge* bridge_;
 };
 
-#endif // GALLERYPAGE_H

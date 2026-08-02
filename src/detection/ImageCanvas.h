@@ -21,7 +21,7 @@
 class ImageCanvas : public QWidget {
     Q_OBJECT
 public:
-    enum Mode { Rectangle, Polygon };
+    enum Mode { Rectangle, Polygon, ClickOnly };
     explicit ImageCanvas(QWidget* parent = nullptr);
 
     void setImage(const QImage& img);

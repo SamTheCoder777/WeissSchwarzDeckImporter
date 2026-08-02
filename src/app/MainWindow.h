@@ -15,19 +15,22 @@
 #include "../core/Config.h"
 #include "../index/IndexSearchProxy.h"
 #include "../retrieval/CardDetector.h"
+#include "../services/ModelService.h"
+#include "../detection/DetectionPage.h"
+#include "../index/FaissPage.h"
+#include "../gallery/GalleryPage.h"
+#include "../settings/SettingsPage.h"
+#include "../index/FaissPage.h"
 
-class ImageCanvas;
-class CandidateModel;
-class SelectionModel;
-class CropImageProvider;
-class UiBridge;
 class IndexCatalog;
-class QLineEdit;
-class QSpinBox;
-class QCheckBox;
-class QLabel;
+class SelectionModel;
+class UiBridge;
+class ModelService;
+class DetectionPage;
+class SettingsPage;
+class FaissPage;
+class GalleryPage;
 class QStackedWidget;
-class QQuickWidget;
 class QSortFilterProxyModel;
 
 QString toDeckCode(const std::string& cardId);   // defined in Models.cpp
@@ -37,88 +40,25 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
 
-private slots:
-    void loadModel(bool silent = false);
-    void openImage();
-    void runDetection();
-    void showSelectionResults(int index);
-    void confirmCandidate(int candIndex);
-    void exportDeck();
-    void detectCards();                     // run YOLO, add all card quads
-    void onCanvasClickedImagePoint(const QPointF& imgPt);   // claim the card under a click
-    void openCompareDialog();
-
 private:
-    QWidget* buildSettingsPage();
-    QWidget* buildFaissPage();
-    QWidget* buildDetectPage();
-    QWidget* buildGalleryPage();
-    cv::Mat  cropForSelection(int index) const;
-    void     syncSelections();
-    void     pushStateToQml();
-    void sortSelectionsByPosition();
-    void forceRectangleTool();
+    void buildSidebar();
 
-    struct SelState {
-        std::vector<Candidate> cands;
-        bool        confirmed = false;
-        std::string cardId;
-        int         qty = 1;
-        int id = -1;
-    };
-
-    std::unique_ptr<TCGRetriever> retriever_;
-    cv::Mat  sourceBgr_;
-    QString  sourcePath_;
-    QVector<SelState> sel_;
-    int      currentSel_ = -1;
-    std::unique_ptr<CardDetector> detector_;
-    QLineEdit* yoloEdit_ = nullptr;         // Settings: path to best.onnx
-    std::vector<CardDetection> autoDets_;           // cached detections for current image
-    bool autoDetectMode_ = false;                   // is the tool active?
-
-    // buttons
-    QPushButton* rectBtn_ = nullptr;
-    QPushButton* polyBtn_ = nullptr;
-    QPushButton* autoBtn_ = nullptr;
-
-    // settings widgets
-    QLineEdit* onnxEdit_;
-    QSpinBox*  imgSizeSpin_;
-    QCheckBox* nativeCheck_;
-    QLabel*    modelStatus_;
-
-    // settings dataset
-    QLabel *lblDatasetStatus_;
-    QPushButton *btnDatasetAction_;
-    QProgressBar *pbDataset_;
-
-    // Faiss index dir
-    QString currentIndexDir_;
-
-    // detection
-    QStackedWidget* pages_;
-    ImageCanvas*    canvas_;
-    QQuickWidget*   qmlPanel_;
-    CandidateModel* candModel_;
-    SelectionModel* selModel_;
-    CropImageProvider* cropProvider_;
-    UiBridge*       bridge_;
-    IndexCatalog*   catalog_ = nullptr;
+    // shared services (owned here)
+    IndexCatalog*          catalog_        = nullptr;
+    IndexSearchProxy*      searchProxy_    = nullptr;
     QSortFilterProxyModel* installedProxy_ = nullptr;
-    IndexSearchProxy* searchProxy_ = nullptr;
-    QFutureWatcher<void> detectWatcher_;
-    QFutureWatcher<TCGRetriever*> modelWatcher_;
-    bool modelLoading_ = false;
-    bool loadSilent_ = false;
-    std::string pendingYolo_;
+    DatasetManager*        dbManager_      = nullptr;
+    DatabaseUtil*          dbUtil_         = nullptr;
+    ModelService*          models_         = nullptr;
+    SelectionModel*        selModel_       = nullptr;   // shared: detection writes, gallery reads
+    UiBridge*              bridge_         = nullptr;   // shared
 
-    // database
-    QSqlDatabase db_;
-    DatasetManager *dbManager_ = nullptr;
-    bool dbUpdateNeeded_ = false;
-    DatabaseUtil* dbUtil_ = nullptr;
+    // pages
+    QStackedWidget* pages_    = nullptr;
+    DetectionPage*  detection_= nullptr;
+    SettingsPage*   settings_ = nullptr;
+    FaissPage*      faiss_    = nullptr;
+    GalleryPage*    gallery_  = nullptr;
 
-    // notif setting
     bool indexNotifSilent_ = false;
 };

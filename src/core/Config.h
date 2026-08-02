@@ -32,6 +32,8 @@ public:
 
     QString getDatasetPath() const {return datasetPath_;}
     QString getDatasetSourceUrl() const {return datasetSourceUrl_;}
+    bool getModelNative() const {return native_;}
+    int getModelImgSize() const {return imgSize_;}
 
 private:
     Config();
@@ -49,6 +51,8 @@ private:
     QString curDatasetEtag_;
     const QString datasetPath_ = QDir(QCoreApplication::applicationDirPath()).filePath("global_cards.db");
     const QString datasetSourceUrl_ = "https://huggingface.co/datasets/SamTheCoder777/ws-index/resolve/main/cards_global.json";
+    bool native_ = true;
+    int imgSize_ = 336;
 };
 
 

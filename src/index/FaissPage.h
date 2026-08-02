@@ -1,10 +1,21 @@
-#ifndef FAISSPAGE_H
-#define FAISSPAGE_H
+#pragma once
 
-class FaissPage
-{
+#include "IndexCatalog.h"
+#include "IndexSearchProxy.h"
+#include "../services/ModelService.h"
+
+#include <QQuickWidget>
+
+class FaissPage: public QWidget {
+    Q_OBJECT
+
 public:
-    FaissPage();
-};
+    explicit FaissPage(ModelService* models, IndexCatalog* catalog, QWidget* parent = nullptr);
 
-#endif // FAISSPAGE_H
+private:
+    void buildUi();
+
+    ModelService* models_;
+    IndexCatalog* catalog_;
+    IndexSearchProxy *searchProxy_;
+};

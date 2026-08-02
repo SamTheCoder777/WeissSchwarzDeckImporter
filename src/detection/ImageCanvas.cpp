@@ -226,7 +226,13 @@ void ImageCanvas::mousePressEvent(QMouseEvent* e) {
     const QPointF ip = toImage(e->position());
 
     if (e->button() == Qt::LeftButton) {
-        emit canvasClickedImagePoint(toImage(e->position()));
+        // Auto-detect "click to pick a card": report the point and do nothing else.
+        if (mode_ == ClickOnly) {
+            emit canvasClickedImagePoint(ip);
+            return;                       // no vertex-drag, no selection, no rectangle
+        }
+
+        emit canvasClickedImagePoint(ip);
         // 1) grab a vertex to move it (works in both modes)
         int si, vi;
         if (polyInProgress_.isEmpty() && hitTestVertex(e->position(), si, vi)) {

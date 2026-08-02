@@ -11,10 +11,27 @@
 #include <faiss/index_io.h>
 #include <faiss/Index.h>
 #include <thread>
+#include <faiss/impl/io.h>
 
-// tiny JSON array-of-strings reader for id_map.json (avoids a JSON dep)
+#ifdef _WIN32
+#define NOMINMAX
+#include <windows.h>
+// Convert a UTF-8
+static std::wstring utf8_to_wide(const std::string& s) {
+    if (s.empty()) return std::wstring();
+    int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0);
+    std::wstring w(n, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), w.data(), n);
+    return w;
+}
+#endif
+
 static std::vector<std::string> read_json_string_array(const std::string& path) {
+#ifdef _WIN32
+    std::ifstream f(utf8_to_wide(path));
+#else
     std::ifstream f(path);
+#endif
     if (!f) throw std::runtime_error("cannot open " + path);
     std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     std::vector<std::string> out;
@@ -33,9 +50,12 @@ static std::vector<std::string> read_json_string_array(const std::string& path) 
     return out;
 }
 
-// read row2card.npy (int64 or int32, 1-D). Minimal .npy parser.
 static std::vector<int> read_npy_int(const std::string& path) {
+#ifdef _WIN32
+    std::ifstream f(utf8_to_wide(path), std::ios::binary);
+#else
     std::ifstream f(path, std::ios::binary);
+#endif
     if (!f) throw std::runtime_error("cannot open " + path);
     char magic[6]; f.read(magic, 6);                        // \x93NUMPY
     unsigned char ver[2]; f.read((char*)ver, 2);
@@ -68,12 +88,11 @@ TCGRetriever::TCGRetriever(const std::string& onnx_path, const std::string& inde
       env_(ORT_LOGGING_LEVEL_WARNING, "tcg") {
     so_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
     so_.SetIntraOpNumThreads(std::max(1u, std::thread::hardware_concurrency() / 2));
-    // NOTE: DirectML wiring intentionally omitted for the first build (CPU only).
-    // To add later: #include <dml_provider_factory.h> and append the DML EP here.
+    // TODO directml later
     (void)use_directml;
 
 #ifdef _WIN32
-    std::wstring wpath(onnx_path.begin(), onnx_path.end());
+    std::wstring wpath = utf8_to_wide(onnx_path);   // proper UTF-8 -> UTF-16
     session_ = std::make_unique<Ort::Session>(env_, wpath.c_str(), so_);
 #else
     session_ = std::make_unique<Ort::Session>(env_, onnx_path.c_str(), so_);
@@ -91,7 +110,17 @@ TCGRetriever::TCGRetriever(const std::string& onnx_path, const std::string& inde
     output_name_ptrs_.push_back(out_name_.c_str());
 
     // index files
-    index_.reset(faiss::read_index((index_dir + "/index.faiss").c_str()));
+    #ifdef _WIN32
+    std::ifstream faissFile(utf8_to_wide(index_dir + "/index.faiss"), std::ios::binary);
+#else
+    std::ifstream faissFile(index_dir + "/index.faiss", std::ios::binary);
+#endif
+    if (!faissFile) throw std::runtime_error("cannot open " + index_dir + "/index.faiss");
+    std::vector<uint8_t> faissBuf((std::istreambuf_iterator<char>(faissFile)),
+                                  std::istreambuf_iterator<char>());
+    faiss::VectorIOReader faissReader;
+    faissReader.data = std::move(faissBuf);
+    index_.reset(faiss::read_index(&faissReader));
     row2card_ = read_npy_int(index_dir + "/row2card.npy");
     card_ids_ = read_json_string_array(index_dir + "/id_map.json");
     out_dim_  = index_->d;
@@ -99,8 +128,6 @@ TCGRetriever::TCGRetriever(const std::string& onnx_path, const std::string& inde
 
 TCGRetriever::~TCGRetriever() = default;
 
-// preprocess: letterbox (native) or square pad, then normalize to CHW float.
-// MUST match Python preprocess_native / preprocess_square exactly.
 std::vector<float> TCGRetriever::preprocess(const cv::Mat& crop_bgr, int64_t& gy, int64_t& gx) {
     const int S = S_, mult = patch_;
     const float MEAN[3] = {0.485f, 0.456f, 0.406f};   // RGB
