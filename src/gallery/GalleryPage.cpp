@@ -18,7 +18,7 @@ void GalleryPage::buildUi()
     qw->rootContext()->setContextProperty("selModel", selModel_);
     qw->rootContext()->setContextProperty("bridge", bridge_);
     qw->setResizeMode(QQuickWidget::SizeRootObjectToView);
-    qw->setSource(QUrl("qrc:/qml/GalleryPage.qml"));
+    qw->setSource(QUrl("qrc:/qml/gallery/GalleryPage.qml"));
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
