@@ -23,6 +23,17 @@ static QImage matToQImage(const cv::Mat& bgr) {
                   QImage::Format_RGB888).copy();
 }
 
+cv::Mat qImageToBgrMat(const QImage &imgIn)
+{
+    QImage img = imgIn.convertToFormat(QImage::Format_RGB888);
+    cv::Mat rgb(img.height(), img.width(), CV_8UC3,
+                const_cast<uchar*>(img.bits()), img.bytesPerLine());
+    cv::Mat bgr;
+    cv::cvtColor(rgb, bgr, cv::COLOR_RGB2BGR);
+    return bgr.clone();
+}
+
+
 DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, DatasetManager* dbManager,
                              SelectionModel* selModel, UiBridge* bridge,
                              IndexCatalog* catalog, QSortFilterProxyModel* installedProxy,
@@ -52,10 +63,69 @@ DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, Dataset
 
 
     connect(dbManager_, &DatasetManager::readyToUse, this, refreshModel);
+
+    // allow pasting images/files
+    QShortcut *pasteShortcut = new QShortcut(QKeySequence::Paste, this);
+    connect(pasteShortcut, &QShortcut::activated, this, [this]{
+        QLabel imgLabel;
+        QImage pasted = handlePasteImage(&imgLabel);
+        if (pasted.isNull()) return;
+        if (models_->isLoading()) {
+            QMessageBox::information(this, "Please wait", "The model is still loading.\nCheck status in settings.");
+            return;
+        }
+        if (detecting_){
+            QMessageBox::information(this, "Please wait", "Detection is running.");
+            return;
+        }
+        if (!models_->retriever()) {
+            QMessageBox::information(this, "No model", "Load a model in Settings first.");
+            return;
+        }
+        QImage rgb = pasted.convertToFormat(QImage::Format_RGB888);
+        cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
+                    const_cast<uchar*>(rgb.bits()), rgb.bytesPerLine());
+        cv::cvtColor(mat, sourceBgr_, cv::COLOR_RGB2BGR);
+        if (sourceBgr_.empty()) { QMessageBox::warning(this, "Error", "Could not read image."); return; }
+        canvas_->setImage(matToQImage(sourceBgr_));
+        autoDets_.clear();
+        if (models_->detector()) {
+            QApplication::setOverrideCursor(Qt::WaitCursor);
+            try { autoDets_ = models_->detector()->detect(sourceBgr_); } catch (...) {}
+            QApplication::restoreOverrideCursor();
+        }
+        sel_.clear();
+        currentSel_ = -1;
+        candModel_->clear();
+        pushStateToQml();
+    });
 }
 
 void DetectionPage::onModelLoaded(bool) {
     pushStateToQml();     // refresh "model ready" state in the panel
+}
+
+
+QImage DetectionPage::handlePasteImage(QLabel *imageLabel)
+{
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    const QMimeData *mimeData = clipboard->mimeData();
+
+    QImage image;
+
+    if (mimeData->hasImage()) {
+        image = qvariant_cast<QImage>(mimeData->imageData());
+    }
+    else if (mimeData->hasUrls()) {
+        QList<QUrl> urls = mimeData->urls();
+        if (!urls.isEmpty() && urls.first().isLocalFile())
+            image = QImage(urls.first().toLocalFile());
+    }
+
+    if (!image.isNull() && imageLabel)
+        imageLabel->setPixmap(QPixmap::fromImage(image));
+
+    return image;
 }
 
 void DetectionPage::buildUi() {

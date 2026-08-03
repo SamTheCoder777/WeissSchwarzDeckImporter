@@ -77,6 +77,7 @@ private:
     void showSelectionResults(int index);
     void confirmCandidate(int candIndex);
     void exportDeck();
+    QImage handlePasteImage(QLabel *imageLabel);
 };
 
 
