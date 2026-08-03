@@ -64,7 +64,8 @@ DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, Dataset
 
     connect(dbManager_, &DatasetManager::readyToUse, this, refreshModel);
 
-    // allow pasting images/files
+    // allow pasting images/files only on windows. Mac crashes for some reason
+    #ifdef _WIN32
     QShortcut *pasteShortcut = new QShortcut(QKeySequence::Paste, this);
     connect(pasteShortcut, &QShortcut::activated, this, [this]{
         QLabel imgLabel;
@@ -83,6 +84,7 @@ DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, Dataset
             return;
         }
         QImage rgb = pasted.convertToFormat(QImage::Format_RGB888);
+        if (rgb.isNull()) { QMessageBox::warning(this, "Error", "Unsupported clipboard image format."); return; }
         cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
                     const_cast<uchar*>(rgb.bits()), rgb.bytesPerLine());
         cv::cvtColor(mat, sourceBgr_, cv::COLOR_RGB2BGR);
@@ -99,6 +101,7 @@ DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, Dataset
         candModel_->clear();
         pushStateToQml();
     });
+    #endif
 }
 
 void DetectionPage::onModelLoaded(bool) {
