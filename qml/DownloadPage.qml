@@ -181,7 +181,10 @@ Rectangle {
                                      : isInstalled ? "Re-download" : "Download"
                                 enabled: !catalog.busy || downloading
                                 implicitWidth: 118; implicitHeight: 32
-                                onClicked: downloading ? catalog.cancel() : catalog.download(index)
+                                onClicked: {
+                                    console.log("clicked, catalog.busy =", catalog.busy, "downloading =", downloading, "id =", model.idStr)
+                                    downloading ? catalog.cancel() : catalog.downloadById(model.idStr)
+                                }
                                 background: Rectangle {
                                     radius: 7
                                     color: downloading ? root.warnColor

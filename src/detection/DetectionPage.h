@@ -14,6 +14,7 @@
 #include <QStackedWidget>
 #include <QWidget>
 #include <QFutureWatcher>
+#include <QLabel>
 
 class DetectionPage: public QWidget {
     Q_OBJECT

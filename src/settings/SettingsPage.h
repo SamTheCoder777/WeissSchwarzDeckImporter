@@ -4,6 +4,7 @@
 #include "../services/ModelService.h"
 
 #include <QCheckBox>
+#include <QLabel>
 #include <QLineEdit>
 #include <QProgressBar>
 #include <QPushButton>
