@@ -5,5 +5,9 @@
         <file>qml/gallery/GalleryPage.qml</file>
         <file>qml/gallery/CardDelegate.qml</file>
         <file>qml/gallery/CardDetailPanel.qml</file>
+        <file>icon/refresh.svg</file>
+        <file>icon/download.svg</file>
+        <file>icon/update.svg</file>
+        <file>icon/stop.svg</file>
     </qresource>
 </RCC>
