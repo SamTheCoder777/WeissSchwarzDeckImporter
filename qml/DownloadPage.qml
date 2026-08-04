@@ -5,11 +5,10 @@ import QtQuick.Layouts
 // Index download page. Data from C++: catalog (IndexCatalog), config (Config).
 Rectangle {
     id: root
-    color: "#161819"
+    color: "#1e1e1e"
     implicitWidth: 800
     implicitHeight: 600
 
-    // --- Design tokens -------------------------------------------------
     readonly property color accent:     "#4f6bff"   // Update only
     readonly property color accentSoft: "#3a4bb8"
     readonly property color warnColor:  "#e0a030"   // active download / cancel only
