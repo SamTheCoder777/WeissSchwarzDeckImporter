@@ -1,9 +1,12 @@
 // main.cpp — entry point for the TCG Deck Builder.
 #include <QApplication>
+#include <QQuickStyle>
 #include "src/app/MainWindow.h"
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
+
+    QQuickStyle::setStyle("Fusion");
 
     // Dark theme for the Widgets side so it matches the QML panels.
     app.setStyleSheet(R"(

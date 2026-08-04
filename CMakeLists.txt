@@ -34,7 +34,7 @@ endif()
 #   -DCMAKE_TOOLCHAIN_FILE=D:/Coding/vcpkg/scripts/buildsystems/vcpkg.cmake
 find_package(faiss CONFIG REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickWidgets Network Concurrent Sql)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickWidgets Network Concurrent Sql Svg QuickControls2)
 
 # ── headless retrieval test (Piece 1 acceptance test) ──────────────────────
 # add_executable(tcg_infer_test main_infer_test.cpp tcg_infer.cpp)
@@ -73,6 +73,8 @@ target_link_libraries(tcg_app PRIVATE
     Qt6::Network
     Qt6::Concurrent
     Qt6::Sql
+    Qt6::Svg
+    Qt6::QuickControls2
     onnxruntime
     faiss
     ${OpenCV_LIBS}

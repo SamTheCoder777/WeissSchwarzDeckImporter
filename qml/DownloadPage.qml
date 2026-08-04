@@ -5,25 +5,24 @@ import QtQuick.Layouts
 // Index download page. Data from C++: catalog (IndexCatalog), config (Config).
 Rectangle {
     id: root
-    color: "#1b1d21"
+    color: "#161819"
     implicitWidth: 800
     implicitHeight: 600
 
     // --- Design tokens -------------------------------------------------
-    // One accent, reserved only for "needs your attention" (Update).
-    // Everything else is neutral: dark/filled for primary actions,
-    // ghost/quiet for optional ones (Use, Re-download).
     readonly property color accent:     "#4f6bff"   // Update only
+    readonly property color accentSoft: "#3a4bb8"
     readonly property color warnColor:  "#e0a030"   // active download / cancel only
-    readonly property color okBadge:    "#2f7a4d"
-    readonly property color warnBadge:  "#7a5a1f"
-    readonly property color panel:      "#232629"
-    readonly property color card:       "#2a2d31"
-    readonly property color cardBorder: "#34383d"
+    readonly property color okBadge:    "#1f5c3a"
+    readonly property color warnBadge:  "#5e4416"
+    readonly property color panel:      "#1e2123"
+    readonly property color card:       "#24272a"
+    readonly property color cardHover:  "#2a2e31"
+    readonly property color cardBorder: "#31353a"
     readonly property color ghostBorder:"#3d4147"
-    readonly property color text1:      "#eceef0"
+    readonly property color text1:      "#f0f2f4"
     readonly property color text2:      "#9aa0a6"
-    readonly property color text3:      "#6b7076"
+    readonly property color text3:      "#676c72"
 
     Component.onCompleted: catalog.refresh();
 
@@ -36,20 +35,38 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 24
-        spacing: 16
+        anchors.margins: 28
+        spacing: 20
 
-        // --- Header: title + status, refresh/cancel toggle -------------
         RowLayout {
             Layout.fillWidth: true
             spacing: 12
 
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 2
-                Label {
-                    text: "Card indexes"
-                    color: root.text1; font.pixelSize: 19; font.weight: Font.DemiBold
+                spacing: 3
+                RowLayout {
+                    spacing: 10
+                    Label {
+                        text: "Card indexes"
+                        color: root.text1; font.pixelSize: 21; font.weight: Font.DemiBold
+                    }
+                    Rectangle {
+                        Layout.alignment: Qt.AlignVCenter
+                        visible: list.count > 0
+                        radius: 10
+                        height: 20
+                        width: countLabel.implicitWidth + 16
+                        color: root.panel
+                        border.width: 1
+                        border.color: root.cardBorder
+                        Label {
+                            id: countLabel
+                            anchors.centerIn: parent
+                            text: list.count
+                            color: root.text2; font.pixelSize: 11; font.weight: Font.DemiBold
+                        }
+                    }
                 }
                 Label {
                     text: catalog.status
@@ -62,20 +79,21 @@ Rectangle {
             Button {
                 id: refreshBtn
                 text: catalog.busy ? "Cancel" : "Check for updates"
-                icon.source: catalog.busy ? "qrc:/icon/stop.svg" : "qrc:/icon/refresh.svg"
-                implicitHeight: 34
-                implicitWidth: contentItem.implicitWidth + 28
+                implicitHeight: 36
+                implicitWidth: contentItem.implicitWidth + 32
                 onClicked: catalog.busy ? catalog.cancel() : catalog.refresh()
                 background: Rectangle {
                     radius: 8
                     color: catalog.busy
-                        ? (parent.down ? Qt.darker(root.warnColor, 1.2) : root.warnColor)
-                        : (parent.down ? "#000" : parent.hovered ? "#2c2f33" : "#1f2226")
+                        ? (refreshBtn.down ? Qt.darker(root.warnColor, 1.2) : root.warnColor)
+                        : (refreshBtn.down ? "#111315" : refreshBtn.hovered ? "#2c3033" : "#212427")
                     border.width: catalog.busy ? 0 : 1
-                    border.color: "#3a3e44"
+                    border.color: refreshBtn.hovered ? "#454a51" : "#3a3e44"
+                    Behavior on color { ColorAnimation { duration: 130 } }
+                    Behavior on border.color { ColorAnimation { duration: 130 } }
                 }
                 contentItem: Text {
-                    text: parent.text; color: catalog.busy ? "#1a1300" : root.text1
+                    text: refreshBtn.text; color: catalog.busy ? "#1a1300" : root.text1
                     font.pixelSize: 12; font.weight: Font.DemiBold
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -83,23 +101,30 @@ Rectangle {
             }
         }
 
-        // --- Search ------------------------------------------------------
         TextField {
+            id: searchField
             Layout.fillWidth: true
+            implicitHeight: 40
             placeholderText: "Search indexes… (set title or set code)"
             color: root.text1
             placeholderTextColor: root.text3
-            leftPadding: 34
+            leftPadding: 38
+            verticalAlignment: TextInput.AlignVCenter
             background: Rectangle {
                 radius: 8
                 color: root.card
                 border.width: 1
-                border.color: activeFocus ? root.accent : root.cardBorder
+                border.color: searchField.activeFocus ? root.accent : root.cardBorder
+                Behavior on border.color { ColorAnimation { duration: 130 } }
+            }
+
+            Text {
+                x: 14; anchors.verticalCenter: parent.verticalCenter
+                text: "\u2315"; color: root.text3; font.pixelSize: 17
             }
             onTextChanged: indexList.setSearch(text)
         }
 
-        // --- List card -----------------------------------------------------
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -113,7 +138,7 @@ Rectangle {
             ColumnLayout {
                 anchors.centerIn: parent
                 visible: list.count === 0
-                spacing: 4
+                spacing: 6
                 Label {
                     text: "No indexes found"
                     color: root.text2; font.pixelSize: 14; font.weight: Font.DemiBold
@@ -133,37 +158,72 @@ Rectangle {
                 model: indexList
                 spacing: 10
                 clip: true
-                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                boundsBehavior: Flickable.StopAtBounds
 
+                ScrollBar.vertical: ScrollBar {
+                                    id: vbar
+                                    policy: ScrollBar.AlwaysOn
+                                    width: 12
+                                    implicitWidth: 12
+                                    anchors.right: parent.right      // sit at the very edge
+                                    contentItem: Rectangle {
+                                        implicitWidth: 8
+                                        radius: 4
+                                        color: vbar.pressed ? "#8a9099"
+                                             : vbar.hovered ? "#6e747b" : "#4a4e54"
+                                        opacity: vbar.active ? 0.9 : 0.4
+                                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                                    }
+                                    background: Rectangle { color: "transparent" }
+                                }
                 WheelHandler {
-                    onWheel: (event) => {
-                        list.contentY = Math.max(0,
-                            Math.min(list.contentHeight - list.height,
-                                     list.contentY - event.angleDelta.y));
-                        event.accepted = true;
-                    }
+                        onWheel: (event) => {
+                            list.contentY = Math.max(0,
+                                Math.min(list.contentHeight - list.height,
+                                         list.contentY - event.angleDelta.y));
+                            event.accepted = true;
+                        }
                 }
 
                 delegate: Rectangle {
+                    id: delegateCard
                     width: ListView.view.width
-                    height: 92
+                    height: 94
                     radius: 10
-                    color: root.card
+                    color: hovered ? root.cardHover : root.card
                     border.width: 1
-                    border.color: root.cardBorder
+                    border.color: isActive ? root.accent
+                                : hovered ? "#42474d" : root.cardBorder
 
                     readonly property bool isInstalled: statusCode === 1
                     readonly property bool hasUpdate:   statusCode === 2
+                    readonly property bool isActive:    model.idStr === catalog.activeIndexId
+                    property bool hovered: false
+
+                    Behavior on color { ColorAnimation { duration: 130 } }
+                    Behavior on border.color { ColorAnimation { duration: 130 } }
+
+                    HoverHandler { onHoveredChanged: delegateCard.hovered = hovered }
+
+                    Rectangle {
+                        visible: delegateCard.isActive
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        anchors.margins: 1
+                        width: 3
+                        radius: 2
+                        color: root.accent
+                    }
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 14
+                        anchors.margins: 16
                         spacing: 12
 
-                        // --- name / tag / description -----------------
                         ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 4
+                            spacing: 5
 
                             RowLayout {
                                 spacing: 8
@@ -172,16 +232,31 @@ Rectangle {
                                     font.pixelSize: 14; font.weight: Font.DemiBold
                                 }
                                 Rectangle {
-                                    visible: isInstalled || hasUpdate
-                                    radius: 4
-                                    height: 18
+                                    visible: delegateCard.isActive
+                                    radius: 4; height: 18
+                                    width: activeTag.implicitWidth + 14
+                                    color: "transparent"
+                                    border.width: 1
+                                    border.color: root.accent
+                                    Label {
+                                        id: activeTag
+                                        anchors.centerIn: parent
+                                        text: "IN USE"
+                                        color: root.accent
+                                        font.pixelSize: 10; font.weight: Font.Bold
+                                        font.letterSpacing: 0.3
+                                    }
+                                }
+                                Rectangle {
+                                    visible: delegateCard.isInstalled || delegateCard.hasUpdate
+                                    radius: 4; height: 18
                                     width: tag.implicitWidth + 14
-                                    color: hasUpdate ? root.warnBadge : root.okBadge
+                                    color: delegateCard.hasUpdate ? root.warnBadge : root.okBadge
                                     Label {
                                         id: tag
                                         anchors.centerIn: parent
-                                        text: hasUpdate ? "UPDATE AVAILABLE" : "INSTALLED"
-                                        color: hasUpdate ? "#fcd9a0" : "#bdf0cf"
+                                        text: delegateCard.hasUpdate ? "UPDATE AVAILABLE" : "INSTALLED"
+                                        color: delegateCard.hasUpdate ? "#fcd9a0" : "#bdf0cf"
                                         font.pixelSize: 10; font.weight: Font.Bold
                                         font.letterSpacing: 0.3
                                     }
@@ -190,14 +265,13 @@ Rectangle {
 
                             Label {
                                 text: desc + "   ·   v" + version + "   ·   " + sizeText
-                                    + (installedVersion.length > 0 && hasUpdate
+                                    + (installedVersion.length > 0 && delegateCard.hasUpdate
                                        ? "   (you have v" + installedVersion + ")" : "")
                                 color: root.text2; font.pixelSize: 11
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
 
-                            // progress bar sits under the description while downloading
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.topMargin: 2
@@ -208,70 +282,90 @@ Rectangle {
                                 Rectangle {
                                     width: parent.width * Math.max(0, Math.min(1, progress))
                                     height: parent.height; radius: 3
-                                    color: root.text1
+                                    color: root.accent
                                     Behavior on width { NumberAnimation { duration: 120 } }
                                 }
                             }
                         }
 
-                        // --- Use button: quiet, only when relevant -----
                         Button {
-                            visible: (isInstalled || hasUpdate) && !downloading
+                            id: useBtn
+                            visible: (delegateCard.isInstalled || delegateCard.hasUpdate)
+                                     && !downloading && !delegateCard.isActive
                             enabled: !catalog.busy
                             text: "Use"
-                            implicitWidth: 64; implicitHeight: 32
+                            implicitWidth: 66; implicitHeight: 32
                             onClicked: catalog.useById(model.idStr)
                             background: Rectangle {
                                 radius: 7
-                                color: "transparent"
+                                color: useBtn.hovered ? "#2c3033" : "transparent"
                                 border.width: 1
-                                border.color: root.ghostBorder
-                                opacity: parent.enabled ? 1 : 0.4
+                                border.color: useBtn.hovered ? "#4a4f55" : root.ghostBorder
+                                opacity: useBtn.enabled ? 1 : 0.4
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                Behavior on border.color { ColorAnimation { duration: 120 } }
                             }
                             contentItem: Text {
-                                text: parent.text; color: root.text2
+                                text: useBtn.text; color: root.text1
                                 font.pixelSize: 12; font.weight: Font.DemiBold
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
 
-                        // --- main action: three-tier hierarchy ---------
-                        // Download / Downloading = neutral+warn; Update = the one
-                        // accent color; Re-download = quiet ghost, same tier as Use.
                         Button {
                             id: actionBtn
+                            display: AbstractButton.TextBesideIcon
                             enabled: !catalog.busy || downloading
                             implicitWidth: 128; implicitHeight: 32
                             text: downloading ? "Downloading…"
-                                 : hasUpdate   ? "Update"
-                                 : isInstalled ? "Re-download" : "Download"
+                                 : delegateCard.hasUpdate   ? "Update"
+                                 : delegateCard.isInstalled ? "Re-download" : "Download"
                             icon.source: downloading ? "qrc:/icon/stop.svg"
-                                                     : hasUpdate ? "qrc:/icon/update.svg"
-                                                     : isInstalled ? "qrc:/icon/refresh.svg" : "qrc:/icon/download.svg"
-
+                                                     : delegateCard.hasUpdate ? "qrc:/icon/update.svg"
+                                                     : delegateCard.isInstalled ? "qrc:/icon/refresh.svg" : "qrc:/icon/download.svg"
+                            icon.width: 16
+                            icon.height: 16
+                            icon.color: "transparent"
                             onClicked: downloading ? catalog.cancel() : catalog.downloadById(model.idStr)
 
                             background: Rectangle {
                                 radius: 7
-                                opacity: parent.enabled ? 1 : 0.4
+                                opacity: actionBtn.enabled ? 1 : 0.4
                                 color: downloading
-                                    ? (parent.down ? Qt.darker(root.warnColor, 1.2) : root.warnColor)
-                                    : hasUpdate
-                                        ? (parent.down ? Qt.darker(root.accent, 1.2) : parent.hovered ? Qt.lighter(root.accent, 1.1) : root.accent)
-                                        : isInstalled
-                                            ? "transparent"
-                                            : (parent.down ? "#000" : parent.hovered ? "#2c2f33" : "#1f2226")
-                                border.width: (!downloading && isInstalled) ? 1 : 0
-                                border.color: root.ghostBorder
+                                    ? (actionBtn.down ? Qt.darker(root.warnColor, 1.2) : root.warnColor)
+                                    : delegateCard.hasUpdate
+                                        ? (actionBtn.down ? Qt.darker(root.accent, 1.2) : actionBtn.hovered ? Qt.lighter(root.accent, 1.1) : root.accent)
+                                        : delegateCard.isInstalled
+                                            ? (actionBtn.hovered ? "#2c3033" : "transparent")
+                                            : (actionBtn.down ? "#111315" : actionBtn.hovered ? "#2c3033" : "#212427")
+                                border.width: (!downloading && delegateCard.isInstalled) ? 1 : 0
+                                border.color: actionBtn.hovered ? "#4a4f55" : root.ghostBorder
+                                Behavior on color { ColorAnimation { duration: 120 } }
                             }
-                            contentItem: Text {
-                                text: parent.text
-                                color: (!downloading && isInstalled) ? root.text2
-                                     : downloading ? "#1a1300" : root.text1
-                                font.pixelSize: 12; font.weight: Font.DemiBold
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
+                            contentItem: Item {
+                                anchors.fill: parent
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    Image {
+                                        source: actionBtn.icon.source
+                                        width: actionBtn.icon.width
+                                        height: actionBtn.icon.height
+                                        sourceSize.width: actionBtn.icon.width
+                                        sourceSize.height: actionBtn.icon.height
+                                        fillMode: Image.PreserveAspectFit
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        visible: actionBtn.icon.source.toString().length > 0
+                                    }
+                                    Text {
+                                        text: actionBtn.text
+                                        color: (!downloading && delegateCard.isInstalled) ? root.text2
+                                             : downloading ? "#1a1300" : root.text1
+                                        font.pixelSize: 12; font.weight: Font.DemiBold
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
                             }
                         }
                     }
@@ -279,7 +373,6 @@ Rectangle {
             }
         }
 
-        // --- Footer --------------------------------------------------------
         Label {
             text: "Installed to: " + catalog.installRoot
             color: root.text3; font.pixelSize: 10
