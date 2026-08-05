@@ -42,6 +42,9 @@ void DatasetManager::startDownloadAndImport() {
     worker_ = new DatabaseWorker();
     worker_->moveToThread(&workerThread_);
 
+    // connect worker's status
+    connect(worker_, &DatabaseWorker::statusChanged, this, &DatasetManager::statusChanged);
+
     connect(&workerThread_, &QThread::started, worker_, [this]() {
         QMetaObject::invokeMethod(worker_, "initDatabase", Q_ARG(bool, true));
     });
@@ -69,6 +72,11 @@ void DatasetManager::startDownloadAndImport() {
     connect(reply, &QNetworkReply::downloadProgress, this, [this](qint64 bytesReceived, qint64 bytesTotal){
         qDebug() << "[DatasetManager] download progress" << bytesReceived << "/" << bytesTotal;
         emit downloadProgress(bytesReceived, bytesTotal);
+
+        if (bytesReceived/bytesTotal == 1){
+            qDebug() << "Finished downloading! Now processing dataset...";
+            emit statusChanged("Finished downloading! Now processing dataset...");
+        }
     });
 
     connect(reply, &QNetworkReply::readyRead, this, [this, reply]() {

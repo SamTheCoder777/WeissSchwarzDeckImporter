@@ -59,18 +59,22 @@ void DatabaseWorker::processChunk(const QByteArray &data) {
     if (parseError.error != QJsonParseError::NoError) {
         qDebug() << "JSON Parse Error:" << parseError.errorString()
         << "at offset:" << parseError.offset;
+        emit statusChanged(QString("JSON Parse Error: %1 at offset: %2")
+                               .arg(parseError.errorString()).arg(parseError.offset));
         finishProcessing();
         return;
     }
 
     if (!doc.isArray()) {
         qDebug() << "JSON Error: Expected root element to be an array [...]";
+        emit statusChanged("JSON Error: Expected root element to be an array [...]");
         finishProcessing();
         return;
     }
 
     QJsonArray jsonArray = doc.array();
     qDebug() << "Found JSON array with" << jsonArray.size() << "items. Importing...";
+    emit statusChanged(QString("Found JSON array with %1 items. Importing...").arg(jsonArray.size()));
 
     if (jsonArray.isEmpty()) {
         finishProcessing();
@@ -119,6 +123,8 @@ void DatabaseWorker::processChunk(const QByteArray &data) {
     if (!q.exec(createTableSql)) {
         qDebug() << "Failed to create table:" << q.lastError().text();
         qDebug() << "Executed SQL was:" << createTableSql;
+        emit statusChanged(QString("Failed to create table: %1\nExecuted SQL was: %2")
+                               .arg(q.lastError().text()).arg(createTableSql));
         finishProcessing();
         return;
     }
@@ -134,6 +140,8 @@ void DatabaseWorker::processChunk(const QByteArray &data) {
     if (!q.prepare(insertSql)) {
         qDebug() << "Failed to prepare insert query:" << q.lastError().text();
         qDebug() << "Executed SQL was:" << insertSql;
+        emit statusChanged(QString("Failed to prepare insert query: %1\nExecuted SQL was: %2")
+                               .arg(q.lastError().text()).arg(insertSql));
         finishProcessing();
         return;
     }
@@ -164,6 +172,7 @@ void DatabaseWorker::processChunk(const QByteArray &data) {
 
         if (!q.exec()) {
             qDebug() << "Insert error:" << q.lastError().text();
+            emit statusChanged(QString("Insert error: %1").arg(q.lastError().text()));
         }
 
         count++;
@@ -173,9 +182,9 @@ void DatabaseWorker::processChunk(const QByteArray &data) {
             db_.transaction();
         }
     }
-
     db_.commit();
     qDebug() << "Successfully imported" << count << "records into dataset table!";
+    emit statusChanged(QString("Successfully imported %1 records into dataset table!").arg(count));
 
     finishProcessing();
 }

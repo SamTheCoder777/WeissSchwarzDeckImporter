@@ -25,6 +25,7 @@ public slots:
 
 signals:
     void finished();
+    void statusChanged(const QString &status);
 
 };
 
