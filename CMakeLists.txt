@@ -10,7 +10,7 @@ set(CMAKE_AUTOUIC ON)
 # ── ONNXRuntime: PREBUILT zip from Microsoft (NOT a vcpkg source build) ─────
 # https://github.com/microsoft/onnxruntime/releases -> onnxruntime-win-x64-<ver>.zip
 if(WIN32)
-    set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/onnxruntime-win-x64-1.23.2" CACHE PATH "ONNXRuntime prebuilt dir")
+    set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/onnxruntime-win-x64-1.27.1" CACHE PATH "ONNXRuntime prebuilt dir")
 elseif(APPLE)
     set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/onnxruntime-osx-arm64-1.23.2" CACHE PATH "ONNXRuntime prebuilt dir")
 endif()
