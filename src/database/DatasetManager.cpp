@@ -129,15 +129,21 @@ void DatasetManager::checkForUpdates(){
             remoteEtag_ = reply->rawHeader("ETag");
 
             QString cachedEtag = Config::instance().getCurDatasetEtag();
-            bool dbExists = QFile::exists(Config::instance().getDatasetPath());
+            bool dbExists = QFile::exists(Config::instance().getDatasetPath())
+                && QFileInfo(Config::instance().getDatasetPath()).size() != 0;
 
             if (dbExists && !remoteEtag_.isEmpty() && remoteEtag_ == cachedEtag) {
                 emit statusChanged("Database is up to date.");
-                emit updateAvailable(false, "New Version");
+                emit updateAvailable(DatasetManager::UpdateStatus::UpToDate, "New Version");
                 emit readyToUse();
-            } else {
-                emit statusChanged("New Update available!");
-                emit updateAvailable(true, "New Version"); //TODO Later replace new version with actual version num if possible
+            }
+            else if(!dbExists){
+                emit statusChanged("Database broken or missing! Please redownload.");
+                emit updateAvailable(DatasetManager::UpdateStatus::Error, "New Version");
+            }
+            else {
+                emit statusChanged("Update available!");
+                emit updateAvailable(DatasetManager::UpdateStatus::UpdateAvailable, "New Version"); //TODO Later replace new version with actual version num if possible
             }
         } else {
             if (QFile::exists(Config::instance().getDatasetPath())) {
@@ -175,17 +181,21 @@ void DatasetManager::checkAndLoad(bool forceRedownload) {
 
             if (!forceRedownload && dbExists && !remoteEtag_.isEmpty() && remoteEtag_ == cachedEtag) {
                 emit statusChanged("Database is up to date.");
+                emit updateAvailable(DatasetManager::UpdateStatus::UpToDate, "New Version");
                 emit readyToUse();
             } else {
                 emit statusChanged("Downloading and processing dataset...");
+                emit updateAvailable(DatasetManager::UpdateStatus::UpToDate, "New Version");
                 startDownloadAndImport();
             }
         } else {
             if (QFile::exists(Config::instance().getDatasetPath())) {
                 emit statusChanged("Server unreachable. Operating in offline mode.");
+                emit updateAvailable(DatasetManager::UpdateStatus::Error, "New Version");
                 emit readyToUse();
             } else {
                 emit statusChanged("Failed to check updates and no local database found.");
+                emit updateAvailable(DatasetManager::UpdateStatus::Error, "New Version");
             }
         }
         reply->deleteLater();

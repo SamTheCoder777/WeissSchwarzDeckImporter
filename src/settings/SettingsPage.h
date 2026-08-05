@@ -35,5 +35,5 @@ private:
     QPushButton *btnDatasetAction_;
     QProgressBar *pbDataset_;
 
-    bool dbUpdateNeeded_ = false;
+    DatasetManager::UpdateStatus dbUpdateStatus_;
 };

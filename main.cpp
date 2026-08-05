@@ -140,6 +140,21 @@ int main(int argc, char** argv) {
         }
         QPushButton#actionAccent:hover { background: #4338ca; }
 
+        QPushButton#actionError {
+            background: #ef4444;
+            color: white;
+            border: none;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 8px;
+        }
+        QPushButton#actionError:hover {
+            background: #dc2626;
+        }
+        QPushButton#actionError:pressed {
+            background: #b91c1c;
+        }
+
         QPushButton#actionWarn {
             background: #f59e0b;
             color: white;

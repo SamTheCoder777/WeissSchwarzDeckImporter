@@ -9,5 +9,6 @@
         <file>icon/download.svg</file>
         <file>icon/update.svg</file>
         <file>icon/stop.svg</file>
+        <file>icon/error.svg</file>
     </qresource>
 </RCC>

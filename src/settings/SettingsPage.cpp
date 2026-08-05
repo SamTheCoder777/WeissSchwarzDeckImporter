@@ -182,9 +182,9 @@ void SettingsPage::buildUi()
     outer->addWidget(datasetGroup);
 
     connect(btnDatasetAction_, &QPushButton::clicked, this, [this]{
-        if (!dbManager_) return;
+        if (!dbManager_ || dbManager_->isDownloading()) return;
         pbDataset_->setVisible(true);
-        if (dbUpdateNeeded_) dbManager_->startDownloadAndImport();
+        if (dbUpdateStatus_ == DatasetManager::UpdateStatus::UpdateAvailable) dbManager_->startDownloadAndImport();
         else                 dbManager_->checkAndLoad(true);
     });
 
@@ -193,10 +193,27 @@ void SettingsPage::buildUi()
         lblDatasetStatus_->setText(s);
     });
 
-    connect(dbManager_, &DatasetManager::updateAvailable, this, [this](bool available, const QString&){
-        dbUpdateNeeded_ = available;
-        btnDatasetAction_->setText(available ? "Update Dataset Now" : "Redownload Dataset");
-        btnDatasetAction_->setObjectName(available ? "actionAccent" : "actionPrimary");
+    connect(dbManager_, &DatasetManager::updateAvailable, this, [this](DatasetManager::UpdateStatus status , const QString&){
+        dbUpdateStatus_ = status;
+
+        switch (status) {
+            case DatasetManager::UpdateStatus::UpdateAvailable:
+                btnDatasetAction_->setText("Update Dataset Now");
+                btnDatasetAction_->setIcon(QIcon());
+                btnDatasetAction_->setObjectName("actionAccent");
+                break;
+            case DatasetManager::UpdateStatus::UpToDate:
+                btnDatasetAction_->setText("Redownload Dataset");
+                btnDatasetAction_->setIcon(QIcon());
+                btnDatasetAction_->setObjectName("actionPrimary");
+                break;
+            case DatasetManager::UpdateStatus::Error:
+                btnDatasetAction_->setText("Redownload Dataset");
+                btnDatasetAction_->setIcon(QIcon(":/icon/error.svg"));
+                btnDatasetAction_->setObjectName("actionError");
+                break;
+        }
+
         btnDatasetAction_->style()->unpolish(btnDatasetAction_);
         btnDatasetAction_->style()->polish(btnDatasetAction_);
     });

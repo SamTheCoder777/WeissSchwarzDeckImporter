@@ -29,6 +29,12 @@ public:
         }
     }
 
+    enum class UpdateStatus {
+        UpdateAvailable,
+        UpToDate,
+        Error
+    };
+
     QSqlDatabase getUiDatabase();
 
     bool isDownloading() const { return isDownloading_; }
@@ -43,7 +49,7 @@ public:
 
 signals:
     void readyToUse();
-    void updateAvailable(bool available, const QString &newVersion);
+    void updateAvailable(DatasetManager::UpdateStatus status, const QString &newVersion);
     void downloadProgress(qint64 bytesReceived, qint64 bytesTotal);
     void statusChanged(const QString &statusText);
 };
