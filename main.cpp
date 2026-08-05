@@ -1,9 +1,12 @@
 // main.cpp — entry point for the TCG Deck Builder.
 #include <QApplication>
+#include <QQuickStyle>
 #include "src/app/MainWindow.h"
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
+
+    QQuickStyle::setStyle("Fusion");
 
     // Dark theme for the Widgets side so it matches the QML panels.
     app.setStyleSheet(R"(
@@ -73,6 +76,98 @@ int main(int argc, char** argv) {
             padding: 0 4px;
             color: #e8eaed;
             font-weight: bold;
+        }
+
+        /* --- Index card list (ported from QML) --- */
+        QFrame#listCard {
+            background: white;
+            border: 1px solid #e4e4e7;
+            border-radius: 12px;
+        }
+
+        QWidget#indexCard {
+            background: #f4f4f5;
+            border-radius: 12px;
+        }
+
+        QLabel#cardTitle {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        QLabel#cardDesc {
+            font-size: 12px;
+            color: #71717a;
+        }
+
+        QLabel#tagBadgeOk, QLabel#tagBadgeWarn {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            letter-spacing: 0.02em;
+        }
+        QLabel#tagBadgeOk   { background: #dcfce7; color: #15803d; }
+        QLabel#tagBadgeWarn { background: #fef3c7; color: #92400e; }
+
+        QLabel#emptyState {
+            color: #a1a1aa;
+            font-size: 13px;
+            padding: 40px;
+        }
+        QLabel#footerLabel {
+            color: #a1a1aa;
+            font-size: 11px;
+        }
+
+        /* --- Button tiers --- */
+        QPushButton#actionPrimary {
+            background: #18181b;
+            color: white;
+            border: none;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 8px;
+        }
+        QPushButton#actionPrimary:hover { background: #27272a; }
+        QPushButton#actionPrimary:disabled { background: #d4d4d8; color: #71717a; }
+
+        QPushButton#actionAccent {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 8px;
+        }
+        QPushButton#actionAccent:hover { background: #4338ca; }
+
+        QPushButton#actionWarn {
+            background: #f59e0b;
+            color: white;
+            border: none;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 8px;
+        }
+        QPushButton#actionWarn:hover { background: #d97706; }
+
+        QPushButton#actionGhost {
+            background: transparent;
+            border: 1px solid #d4d4d8;
+            color: #52525b;
+            padding: 6px 12px;
+            border-radius: 8px;
+        }
+        QPushButton#actionGhost:hover { background: #f4f4f5; }
+
+        QProgressBar {
+            border: none;
+            border-radius: 3px;
+            background: #e4e4e7;
+        }
+        QProgressBar::chunk {
+            background: #18181b;
+            border-radius: 3px;
         }
     )");
 
