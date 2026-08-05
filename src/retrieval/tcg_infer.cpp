@@ -1,4 +1,3 @@
-// tcg_infer.cpp — see tcg_infer.h. Mirrors Python tcg_infer.py preprocessing exactly.
 #include "tcg_infer.h"
 
 #include <algorithm>

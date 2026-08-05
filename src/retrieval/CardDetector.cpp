@@ -1,12 +1,3 @@
-// card_detector.cpp — YOLOv8-seg decoding in C++.
-//
-// YOLOv8-seg ONNX has two outputs:
-//   output0: (1, 4+1+32, 8400)  -> box(cx,cy,w,h) + score + 32 mask coeffs, per anchor
-//   output1: (1, 32, 160, 160)  -> mask prototypes
-// A detection's mask = sigmoid( sum_k coeff_k * proto_k ), cropped to its box.
-// We only need the mask to get a clean rotated quad, so after building each
-// mask we run findContours -> minAreaRect -> boxPoints (exactly like the
-// Python crop_card_rotated), then map the 4 corners back to image coords.
 #include "CardDetector.h"
 
 #include <algorithm>

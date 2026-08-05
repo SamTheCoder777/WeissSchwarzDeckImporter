@@ -1,4 +1,3 @@
-// ImageCanvas.cpp
 #include "ImageCanvas.h"
 #include <QPainter>
 #include <QMouseEvent>

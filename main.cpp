@@ -1,4 +1,3 @@
-// main.cpp — entry point for the TCG Deck Builder.
 #include <QApplication>
 #include <QQuickStyle>
 #include "src/app/MainWindow.h"
@@ -160,14 +159,92 @@ int main(int argc, char** argv) {
         }
         QPushButton#actionGhost:hover { background: #f4f4f5; }
 
+        /* --------------- Settings ------------- */
+        QLabel#pageTitle {
+            font-size: 21px;
+            font-weight: 500;
+            letter-spacing: 0.6px;
+            color: #f0f2f4;
+        }
+
+
+        /* Setting boxes */
+
+        QFrame#sectionCard {
+            background: #1e2123;
+            border: 1px solid #31353a;
+            border-radius: 12px;
+        }
+
+        /* Progress bar */
         QProgressBar {
+            background-color: #3a3e44;
             border: none;
             border-radius: 3px;
-            background: #e4e4e7;
+            text-align: center;
+            color: #f0f2f4;
+            min-height: 6px;
+            max-height: 6px;
         }
         QProgressBar::chunk {
-            background: #18181b;
+            background-color: #4f6bff;
             border-radius: 3px;
+        }
+
+        /*  Button tiers */
+        QPushButton#actionPrimary {
+            background: #212427;
+            color: #f0f2f4;
+            border: 1px solid #3a3e44;
+            border-radius: 8px;
+            padding: 7px 14px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        QPushButton#actionPrimary:hover {
+            background: #2c3033;
+            border-color: #454a51;
+        }
+        QPushButton#actionPrimary:pressed {
+            background: #111315;
+        }
+        QPushButton#actionPrimary:disabled {
+            background: #212427;
+            color: #676c72;
+            border-color: #31353a;
+        }
+
+        QPushButton#actionAccent {
+            background: #4f6bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 7px 14px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        QPushButton#actionAccent:hover {
+            background: #3a4bb8;
+        }
+        QPushButton#actionAccent:pressed {
+            background: #2b3996;
+        }
+
+        QPushButton#actionGhost {
+            background: transparent;
+            border: 1px solid #3d4147;
+            color: #f0f2f4;
+            border-radius: 8px;
+            padding: 7px 14px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        QPushButton#actionGhost:hover {
+            background: #2c3033;
+            border-color: #4a4f55;
+        }
+        QPushButton#actionGhost:pressed {
+            background: #111315;
         }
     )");
 
