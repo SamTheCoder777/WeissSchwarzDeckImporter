@@ -1,4 +1,3 @@
-// MainWindow.cpp — Widgets shell + QML results panel.
 #include "MainWindow.h"
 
 #include "../viewmodels/Models.h"
