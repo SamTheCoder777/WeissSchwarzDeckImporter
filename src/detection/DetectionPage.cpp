@@ -64,6 +64,11 @@ DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, Dataset
 
     connect(dbManager_, &DatasetManager::readyToUse, this, refreshModel);
 
+    // check for dataset update
+    QElapsedTimer t2; t2.start();
+    dbManager_->checkForUpdates();
+    qDebug() << "checkForUpdates took" << t2.elapsed() << "ms";
+
     // allow pasting images/files only on windows. Mac crashes for some reason
     #ifdef _WIN32
     QShortcut *pasteShortcut = new QShortcut(QKeySequence::Paste, this);
