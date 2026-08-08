@@ -7,26 +7,29 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDebug>
+#include <QThread>
 
 
 static const char* kCardConn = "cardlist_catalog_connection";
 
-void DatabaseUtil::setLocale(const QString& loc) {
-    QString v = (loc.compare("JP", Qt::CaseInsensitive) == 0) ? "JP" : "EN";
-    if (v == locale_) return;
-    locale_ = v;
-    Config::instance().setPreferredLocale(v);
-    emit localeChanged();
-}
-
-
 static QJsonObject fetchCardObject(const QString& cardCode, bool& ok) {
     ok = false;
-    QSqlDatabase db = QSqlDatabase::database(kCardConn);
-    if (!db.isOpen()) {
-        qDebug() << "DatabaseUtil - cardList.db not open";
+
+    const QString conn = QStringLiteral("cardlist_conn_%1")
+                             .arg((quintptr)QThread::currentThreadId());
+
+    QSqlDatabase db;
+    if (QSqlDatabase::contains(conn)) {
+        db = QSqlDatabase::database(conn);
+    } else {
+        db = QSqlDatabase::addDatabase("QSQLITE", conn);
+        db.setDatabaseName(Config::instance().getCardListDatabasePath());
+    }
+    if (!db.isOpen() && !db.open()) {
+        qDebug() << "DatabaseUtil - cardList.db open failed";
         return {};
     }
+
     QSqlQuery q(db);
     q.prepare("SELECT data FROM cards WHERE cardcode = ?");
     q.addBindValue(cardCode);
@@ -35,6 +38,14 @@ static QJsonObject fetchCardObject(const QString& cardCode, bool& ok) {
     QJsonObject o = QJsonDocument::fromJson(q.value(0).toByteArray()).object();
     ok = true;
     return o;
+}
+
+void DatabaseUtil::setLocale(const QString& loc) {
+    QString v = (loc.compare("JP", Qt::CaseInsensitive) == 0) ? "JP" : "EN";
+    if (v == locale_) return;
+    locale_ = v;
+    Config::instance().setPreferredLocale(v);
+    emit localeChanged();
 }
 
 QString DatabaseUtil::imageUrlFor(const QString &cardCode) const {

@@ -67,6 +67,7 @@ add_executable(tcg_app WIN32
     src/cardsIndex/CardsPage.h src/cardsIndex/CardsPage.cpp
     src/cardsIndex/SeriesCatalog.h src/cardsIndex/SeriesCatalog.cpp
     src/cardsIndex/SeriesSearchProxy.h
+    src/images/CardImageProvider.h src/images/CardImageProvider.cpp
 )
 target_include_directories(tcg_app PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(tcg_app PRIVATE

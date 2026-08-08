@@ -1,5 +1,6 @@
 #include "CompareDialog.h"
 #include "../database/DatabaseUtil.h"
+#include "../images/CardImageProvider.h"
 
 #include <QNetworkReply>
 #include <QSqlQuery>
@@ -86,7 +87,6 @@ CompareDialog::CompareDialog(const QImage& crop,
         accept();
     });
 
-    // show the crop (fixed) and the starting candidate
     showCandidate(startIndex >= 0 && startIndex < (int)cands_.size() ? startIndex : 0);
 
     setFocusPolicy(Qt::StrongFocus);
@@ -106,20 +106,34 @@ void CompareDialog::showCandidate(int i) {
                               .arg(cur_ + 1).arg(cands_.size()));
     counterLabel_->setText(QString("Candidate %1 of %2").arg(cur_ + 1).arg(cands_.size()));
 
-    // resolve the SAME url the results panel uses
     QString url = dbUtil_->imageUrlFor(QString::fromStdString(c.card_id));
 
-    curCandImage_ = QImage();          // clear old image
+    curCandImage_ = QImage();
     if (url.isEmpty()) { candLabel_->setText("(no image for this card)"); return; }
 
+    const QString cachePath = CardImageProvider::cacheFilePath(url);
+    if (QFile::exists(cachePath)) {
+        QImage cached(cachePath);
+        if (!cached.isNull()) {
+            curCandImage_ = cached;
+            rescale();
+            return;
+        }
+    }
+
     candLabel_->setText("loading…");
-    const int requested = cur_;        // capture which card we asked for
+    const int requested = cur_;
     QNetworkReply* r = net_.get(QNetworkRequest(QUrl(url)));
-    connect(r, &QNetworkReply::finished, this, [this, r, requested]{
+    connect(r, &QNetworkReply::finished, this, [this, r, requested, cachePath]{
         r->deleteLater();
-        if (requested != cur_) return;                 // user already moved on
+        if (requested != cur_) return;
         if (r->error() != QNetworkReply::NoError) { candLabel_->setText("(image failed)"); return; }
-        curCandImage_.loadFromData(r->readAll());       // decode downloaded bytes
+        const QByteArray bytes = r->readAll();
+        curCandImage_.loadFromData(bytes);
+
+        QFile f(cachePath);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+            f.write(bytes);
         rescale();
     });
 }
@@ -137,7 +151,7 @@ void CompareDialog::rescale() {
 
 void CompareDialog::resizeEvent(QResizeEvent* e) {
     QDialog::resizeEvent(e);
-    rescale();      // keep both images filling their panels
+    rescale();
 }
 
 void CompareDialog::keyPressEvent(QKeyEvent* e) {

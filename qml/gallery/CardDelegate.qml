@@ -54,8 +54,11 @@ Rectangle {
             clip: true
 
             Image {
+                id: img
                 anchors.fill: parent
-                source: root.loaded && root.fullData.picture ? root.fullData.picture : ""
+                source: root.loaded && root.fullData.cardCode
+                            ? "image://cardcache/" + encodeURIComponent(root.fullData.cardCode)
+                            : ""
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
                 cache: true
@@ -63,7 +66,7 @@ Rectangle {
             BusyIndicator {
                 anchors.centerIn: parent
                 width: 24; height: 24
-                running: !root.loaded
+                running: img.status === Image.Loading
                 visible: running
             }
         }

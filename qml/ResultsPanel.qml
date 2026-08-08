@@ -161,7 +161,7 @@ Rectangle {
                                 anchors.fill: parent
                                 anchors.margins: 4
                                 fillMode: Image.PreserveAspectFit
-                                cache: false
+                                cache: true
                                 source: bridge.currentIndex >= 0
                                         ? "image://crop/current?rev=" + bridge.cropRev : ""
                             }
@@ -293,7 +293,8 @@ Rectangle {
                                 anchors.margins: 2
                                 fillMode: Image.PreserveAspectFit
                                 asynchronous: true
-                                source: masterUrl
+                                source: deckCode ? "image://cardcache/" + encodeURIComponent(deckCode) : ""
+                                cache: true
                             }
                         }
 

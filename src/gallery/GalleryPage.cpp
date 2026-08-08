@@ -1,5 +1,7 @@
 #include "GalleryPage.h"
 
+#include "../images/CardImageProvider.h"
+
 #include <QQuickWidget>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -17,6 +19,7 @@ void GalleryPage::buildUi()
     qw->rootContext()->setContextProperty("cardDatabase", dbUtil_);
     qw->rootContext()->setContextProperty("selModel", selModel_);
     qw->rootContext()->setContextProperty("bridge", bridge_);
+    qw->engine()->addImageProvider("cardcache", new CardImageProvider(dbUtil_));
     qw->setResizeMode(QQuickWidget::SizeRootObjectToView);
     qw->setSource(QUrl("qrc:/qml/gallery/GalleryPage.qml"));
 

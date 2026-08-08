@@ -6,6 +6,7 @@
 #include "../services/ModelService.h"
 #include "../index/IndexCatalog.h"
 #include "../database/DatabaseUtil.h"
+#include "../images/CardImageProvider.h"
 
 #include <QtWidgets>
 #include <QQuickWidget>
@@ -182,6 +183,7 @@ void DetectionPage::buildUi() {
 
     auto* qmlPanel = new QQuickWidget;
     qmlPanel->engine()->addImageProvider("crop", cropProvider_);
+    qmlPanel->engine()->addImageProvider("cardcache", new CardImageProvider(dbUtil_));
     qmlPanel->rootContext()->setContextProperty("bridge",   bridge_);
     qmlPanel->rootContext()->setContextProperty("candModel", candModel_);
     qmlPanel->rootContext()->setContextProperty("selModel",  selModel_);

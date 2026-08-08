@@ -32,7 +32,7 @@ ScrollView {
             clip: true
             Image {
                 anchors.fill: parent
-                source: root.card.picture ? root.card.picture : ""
+                source: root.card.cardCode ? "image://cardcache/" + encodeURIComponent(root.card.cardCode) : ""
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
             }
