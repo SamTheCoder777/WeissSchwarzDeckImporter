@@ -1,36 +1,31 @@
 #include "CardsPage.h"
-
-
 #include "../core/Config.h"
 
-#include <QMessageBox>
+#include <QQuickWidget>
 #include <QQmlContext>
-#include <QQmlEngine>
 #include <QVBoxLayout>
+#include <QMessageBox>
 
-CardsPage::CardsPage(CardsCatalog* cardsCatalog, QWidget *parent): cardsCatalog_(cardsCatalog), QWidget(parent) {
-    searchProxy_ = new CardsSearchProxy(this);
-    searchProxy_->setSourceModel(cardsCatalog);
-
+CardsPage::CardsPage(SeriesCatalog* catalog, QWidget* parent)
+    : QWidget(parent), catalog_(catalog) {
+    searchProxy_ = new SeriesSearchProxy(this);
+    searchProxy_->setSourceModel(catalog_);
     buildUi();
-
 }
 
-void CardsPage::buildUi()
-{
+void CardsPage::buildUi() {
     auto* qw = new QQuickWidget(this);
-    qw->rootContext()->setContextProperty("catalog", cardsCatalog_);
-    qw->rootContext()->setContextProperty("indexList", searchProxy_);
+    qw->rootContext()->setContextProperty("catalog", catalog_);
+    qw->rootContext()->setContextProperty("seriesList", searchProxy_);
     qw->rootContext()->setContextProperty("config", &Config::instance());
     qw->setResizeMode(QQuickWidget::SizeRootObjectToView);
-    qw->setSource(QUrl("qrc:/qml/CardsDownloadPage.qml"));
+    qw->setSource(QUrl("qrc:/qml/download/CardsDownloadPage.qml"));
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(qw);
 
-    connect(cardsCatalog_, &CardsCatalog::errorOccurred, this, [this](const QString& msg) {
-        QMessageBox::critical(this, "Index Catalog Error", msg);
+    connect(catalog_, &SeriesCatalog::errorOccurred, this, [this](const QString& msg) {
+        QMessageBox::critical(this, "Series / Cards Error", msg);
     });
 }
-

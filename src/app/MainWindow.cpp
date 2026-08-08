@@ -29,9 +29,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     seriesListDbManager_ = new DatasetManager(DatabaseWorker::DatabaseMode::seriesList, this);
     seriesListDbManager_->setDatasetUrl_(Config::instance().getJpSeriesListUrl());
     dbUtil_    = new DatabaseUtil(this);
+    dbUtil_->setLocale(Config::instance().getPreferredLocale());
     models_    = new ModelService(this);
 
     catalog_ = new IndexCatalog(cardListDbManager_, seriesListDbManager_, this);
+    seriesCatalog_ = new SeriesCatalog(this);
 
     searchProxy_ = new IndexSearchProxy(this);
     searchProxy_->setSourceModel(catalog_);
@@ -50,13 +52,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                                    catalog_, installedProxy_, this);
     settings_  = new SettingsPage(models_, cardListDbManager_, seriesListDbManager_, this);
     faiss_     = new FaissPage(models_, catalog_, this);
+    cards_     = new CardsPage(seriesCatalog_, this);
     gallery_   = new GalleryPage(dbUtil_, selModel_, bridge_, this);
 
     pages_ = new QStackedWidget(this);
-    pages_->addWidget(detection_);   // 0
-    pages_->addWidget(settings_);    // 1
-    pages_->addWidget(faiss_);       // 2
-    pages_->addWidget(gallery_);     // 3
+    pages_->addWidget(detection_);
+    pages_->addWidget(settings_);
+    pages_->addWidget(faiss_);
+    pages_->addWidget(gallery_);
+    pages_->addWidget(cards_);
     setCentralWidget(pages_);
     statusBar();
 
@@ -89,7 +93,8 @@ void MainWindow::buildSidebar() {
     };
 
     QAction* aDetect = addPage(st->standardIcon(QStyle::SP_ComputerIcon),           "Detection", 0);
-    addPage(st->standardIcon(QStyle::SP_DriveNetIcon),           "Indexes",   2);
+    addPage(st->standardIcon(QStyle::SP_DriveNetIcon),           "Faiss Indexes",   2);
+    addPage(st->standardIcon(QStyle::SP_DriveNetIcon),           "Cards Indexes",   4);
     addPage(st->standardIcon(QStyle::SP_FileDialogDetailedView), "Settings",  1);
     addPage(st->standardIcon(QStyle::SP_DriveCDIcon),            "Gallery",   3);
     aDetect->setChecked(true);

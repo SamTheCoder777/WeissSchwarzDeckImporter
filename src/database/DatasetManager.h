@@ -6,6 +6,8 @@
 #include <QNetworkAccessManager>
 #include <QThread>
 #include <QUrl>
+#include <QRegularExpression>
+#include <QRegularExpressionMatch>
 
 
 class DatasetManager : public QObject {
@@ -21,6 +23,8 @@ private:
     bool isDownloading_ = false;
 
     DatabaseWorker::DatabaseMode curMode_;
+
+    QRegularExpression seriesRegex_ = QRegularExpression("series\/(.+)\/");
 
 public:
     explicit DatasetManager(const DatabaseWorker::DatabaseMode mode, QObject *parent = nullptr);

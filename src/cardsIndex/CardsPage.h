@@ -1,20 +1,19 @@
 #pragma once
 
-#include <QObject>
-#include "CardsCatalog.h"
-#include "CardsSearchProxy.h"
+#include <QWidget>
+#include "SeriesCatalog.h"
+#include "SeriesSearchProxy.h"
 
-#include <QQuickWidget>
+class QQuickWidget;
 
-class CardsPage: public QWidget {
+class CardsPage : public QWidget {
     Q_OBJECT
 public:
-    explicit CardsPage(CardsCatalog* cardsCatalog, QWidget *parent = nullptr);
+    explicit CardsPage(SeriesCatalog* catalog, QWidget* parent = nullptr);
 
 private:
     void buildUi();
 
-    CardsCatalog* cardsCatalog_;
-    CardsSearchProxy *searchProxy_;
+    SeriesCatalog*      catalog_;
+    SeriesSearchProxy*  searchProxy_;
 };
-

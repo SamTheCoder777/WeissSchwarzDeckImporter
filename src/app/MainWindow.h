@@ -21,7 +21,10 @@
 #include "../gallery/GalleryPage.h"
 #include "../settings/SettingsPage.h"
 #include "../index/FaissPage.h"
+#include "../cardsIndex/SeriesCatalog.h"
+#include "../cardsIndex/CardsPage.h"
 
+class SeriesCatalog;
 class IndexCatalog;
 class SelectionModel;
 class UiBridge;
@@ -29,6 +32,7 @@ class ModelService;
 class DetectionPage;
 class SettingsPage;
 class FaissPage;
+class CardsPage;
 class GalleryPage;
 class QStackedWidget;
 class QSortFilterProxyModel;
@@ -45,10 +49,11 @@ private:
 
     // shared services (owned here)
     IndexCatalog*          catalog_        = nullptr;
+    SeriesCatalog*         seriesCatalog_  = nullptr;
     IndexSearchProxy*      searchProxy_    = nullptr;
     QSortFilterProxyModel* installedProxy_ = nullptr;
     DatasetManager*   cardListDbManager_   = nullptr;
-    DatasetManager*   seriesListDbManager_  = nullptr;
+    DatasetManager*   seriesListDbManager_ = nullptr;
     DatabaseUtil*          dbUtil_         = nullptr;
     ModelService*          models_         = nullptr;
     SelectionModel*        selModel_       = nullptr;   // shared: detection writes, gallery reads
@@ -60,6 +65,7 @@ private:
     SettingsPage*   settings_ = nullptr;
     FaissPage*      faiss_    = nullptr;
     GalleryPage*    gallery_  = nullptr;
+    CardsPage*      cards_    = nullptr;
 
     bool indexNotifSilent_ = false;
 };

@@ -65,8 +65,8 @@ add_executable(tcg_app WIN32
     src/detection/DetectionPage.h src/detection/DetectionPage.cpp
     src/services/ModelService.h src/services/ModelService.cpp
     src/cardsIndex/CardsPage.h src/cardsIndex/CardsPage.cpp
-    src/cardsIndex/CardsCatalog.h src/cardsIndex/CardsCatalog.cpp
-    src/cardsIndex/CardsSearchProxy.h
+    src/cardsIndex/SeriesCatalog.h src/cardsIndex/SeriesCatalog.cpp
+    src/cardsIndex/SeriesSearchProxy.h
 )
 target_include_directories(tcg_app PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(tcg_app PRIVATE

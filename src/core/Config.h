@@ -6,6 +6,9 @@
 #include <QDir>
 #include <QUrl>
 
+using StringStringMap = QMap<QString, QString>;
+Q_DECLARE_METATYPE(StringStringMap)
+
 class Config : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString curIndexId READ getCurIndexId CONSTANT)
@@ -26,11 +29,14 @@ public:
     QString getCurIndexId() const {return curIndexId_;}
     void setCurIndexId(const QString &curIndexId);
 
-    QString getBaseImgUrl(const QString &imgPath) const {
+    QString getImgUrl(const QString &imgPath) const {
         QUrl imagePath = QUrl(imgPath);
 
         return baseImgUrl_.resolved(imagePath).toString();
     }
+
+    QString getPreferredLocale() const { return preferredLocale_; }
+    void    setPreferredLocale(const QString& loc);
 
     // ----- Dataset config ------
 
@@ -45,17 +51,23 @@ public:
 
     // card list
     QString getCardListUrl(QString &seriesId) const {
-        QUrl seriesUrl = QUrl(seriesId);
+        QUrl url(cardListBaseUrlStart_);
+        QString path = url.path();
+        if (!path.endsWith('/')) path += '/';
+        path += seriesId;
 
-        QUrl fullUrl = cardListBaseUrlStart_;
-        fullUrl = fullUrl.resolved(seriesUrl);
-        fullUrl = fullUrl.resolved(cardListBaseUrlEnd_);
-        return fullUrl.toString();
+        if (!cardListBaseUrlEnd_.isEmpty()) {
+            if (!path.endsWith('/')) path += '/';
+            path += cardListBaseUrlEnd_.path();
+        }
+
+        url.setPath(path);
+        return url.toString();
     }
     QString getCardListDatabasePath() const { return cardListDatabasePath_;}
 
-    QString getCardListEtag() const { return cardListEtag_; }
-    void setCardListEtag(const QString &etag);
+    QString getCardListEtag(QString &id) const { return cardListEtag_[id]; }
+    void setCardListEtag(const QString &id, const QString &etag);
 
     // ---------------------------
 
@@ -74,6 +86,8 @@ private:
     QString curYoloModelPath_;
     QString curIndexId_;
 
+    QString preferredLocale_ = "EN";
+
     // ----- Dataset config ------
 
     // Series List
@@ -83,10 +97,10 @@ private:
     const QString serieslistDatabasePath_ = QDir(QCoreApplication::applicationDirPath()).filePath("seriesList.db");
 
     // Card List
-    const QUrl cardListBaseUrlStart_ = QUrl("https://www.encoredecks.com/api/series/");
-    const QUrl cardListBaseUrlEnd_ = QUrl("cardList");
+    const QUrl cardListBaseUrlStart_ = QUrl("https://www.encoredecks.com/api/series");
+    const QUrl cardListBaseUrlEnd_ = QUrl("cards");
     const QString cardListDatabasePath_ = QDir(QCoreApplication::applicationDirPath()).filePath("cardList.db");
-    QString cardListEtag_;
+    QMap<QString, QString> cardListEtag_;
     // ---------------------------
 
     bool native_ = true;

@@ -21,7 +21,7 @@ Item {
         return m ? m[1] : d.color;
     }
     function isClimax(d) {
-        return d && String(d.cardKind) === "4";
+        return d && String(d.cardKind).toUpperCase() === "CX";
     }
     function levelOf(d) {
         if (!d || isClimax(d)) return null;
@@ -114,6 +114,32 @@ Item {
                             color: "#e6e6e6"; font.pixelSize: 15; font.bold: true
                             Layout.fillWidth: true
                         }
+                        Row {
+                            spacing: 0
+                            Repeater {
+                                model: ["EN","JP"]
+                                delegate: Rectangle {
+                                    width: 44; height: 26
+                                    color: cardDatabase.locale === modelData ? "#3a3d40" : "transparent"
+                                    border.color: "#26282b"; border.width: 1
+                                    Text {
+                                        anchors.centerIn: parent; text: modelData
+                                        color: cardDatabase.locale === modelData ? "#f4f5f6" : "#8b9096"
+                                        font.pixelSize: 11; font.weight: Font.Bold
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                        onClicked: cardDatabase.toggleLocale()
+                                    }
+                                }
+                            }
+                        }
+
+                        Connections {
+                            target: cardDatabase
+                            function onLocaleChanged() { root.rebuild() }
+                        }
+
                         Button {
                             text: "Export .txt"
                             onClicked: bridge.exportDeck()

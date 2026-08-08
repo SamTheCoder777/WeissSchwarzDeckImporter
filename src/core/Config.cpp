@@ -10,6 +10,8 @@ Config& Config::instance() {
 }
 
 Config::Config() {
+    qRegisterMetaType<QMap<QString, QString>>("QMap<QString,QString>");
+
     QString configPath = QCoreApplication::applicationDirPath() + "/config.ini";
     settings_ = std::make_unique<QSettings>(configPath, QSettings::IniFormat);
 
@@ -28,7 +30,7 @@ void Config::load() {
 
     settings_->beginGroup("Dataset");
 
-    cardListEtag_ = settings_->value("CardListEtag").toString();
+    cardListEtag_ = settings_->value("CardListEtag").value<QMap<QString, QString>>();
     jpSeriesListEtag_ = settings_->value("jpSeriesListEtag").toString();
 
     settings_->endGroup();
@@ -46,7 +48,7 @@ void Config::save() {
 
     settings_->beginGroup("Dataset");
 
-    settings_->setValue("CardListEtag", cardListEtag_);
+    settings_->setValue("CardListEtag", QVariant::fromValue(cardListEtag_));
     settings_->setValue("jpSeriesListEtag", jpSeriesListEtag_);
 
     settings_->endGroup();
@@ -75,13 +77,19 @@ void Config::setCurIndexId(const QString &curIndexId){
     save();
 }
 
+void Config::setPreferredLocale(const QString &loc)
+{
+    preferredLocale_ = loc;
+    save();
+}
+
 void Config::setJpSeriestListEtag(const QString &etag) {
     jpSeriesListEtag_ = etag;
     save();
 }
 
-void Config::setCardListEtag(const QString &etag) {
-    cardListEtag_ = etag;
+void Config::setCardListEtag(const QString &id, const QString &etag) {
+    cardListEtag_[id] = etag;
     save();
 }
 

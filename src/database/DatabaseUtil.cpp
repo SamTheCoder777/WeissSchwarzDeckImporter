@@ -1,84 +1,114 @@
-#include "databaseutil.h"
+#include "DatabaseUtil.h"
 #include "../core/Config.h"
 
 #include <QSqlQuery>
 #include <QSqlError>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QDebug>
 
-QString DatabaseUtil::imageUrlFor(const QString &cardId) const{
-    QSqlDatabase db = QSqlDatabase::database("main_ui_connection");
 
-    if (!db.isOpen()) {
-        qDebug() << "DatabaseUtil::imageUrlFor - Main UI Database is not open!";
-        return QString();
-    }
+static const char* kCardConn = "cardlist_catalog_connection";
 
-    const QString baseImgUrl = Config::instance().getBaseImgUrl();
-    QSqlQuery query(db);
-
-    if (!query.prepare("SELECT \"picture\" FROM dataset WHERE \"card_number\" = ?")) {
-        qDebug() << "DatabaseUtil::imageUrlFor - Prepare failed:" << query.lastError().text();
-        return QString();
-    }
-
-    query.addBindValue(cardId);
-
-    if (query.exec()) {
-        if (query.next()) {
-            return baseImgUrl + query.value(0).toString();
-        }
-    } else {
-        qDebug() << "DatabaseUtil::imageUrlFor - Query failed:" << query.lastError().text();
-    }
-
-    return QString();
+void DatabaseUtil::setLocale(const QString& loc) {
+    QString v = (loc.compare("JP", Qt::CaseInsensitive) == 0) ? "JP" : "EN";
+    if (v == locale_) return;
+    locale_ = v;
+    Config::instance().setPreferredLocale(v);
+    emit localeChanged();
 }
 
-QVariantMap DatabaseUtil::cardDataFor(const QString &cardId) const{
-    QSqlDatabase db = QSqlDatabase::database("main_ui_connection");
-    QVariantMap card;
 
+static QJsonObject fetchCardObject(const QString& cardCode, bool& ok) {
+    ok = false;
+    QSqlDatabase db = QSqlDatabase::database(kCardConn);
     if (!db.isOpen()) {
-        qDebug() << "DatabaseUtil::cardDataFor - Main UI Database is not open!";
-        return card;
+        qDebug() << "DatabaseUtil - cardList.db not open";
+        return {};
     }
+    QSqlQuery q(db);
+    q.prepare("SELECT data FROM cards WHERE cardcode = ?");
+    q.addBindValue(cardCode);
+    if (!q.exec()) { qDebug() << "DatabaseUtil query failed:" << q.lastError().text(); return {}; }
+    if (!q.next()) return {};
+    QJsonObject o = QJsonDocument::fromJson(q.value(0).toByteArray()).object();
+    ok = true;
+    return o;
+}
 
-    const QString baseImgUrl = Config::instance().getBaseImgUrl();
-    QSqlQuery query(db);
+QString DatabaseUtil::imageUrlFor(const QString &cardCode) const {
+    bool ok = false;
+    QJsonObject o = fetchCardObject(cardCode, ok);
+    if (!ok) return {};
+    const QString path = o.value("imagepath").toString();
+    if (path.isEmpty()) return {};
+    return Config::instance().getImgUrl(path);
+}
 
-    if (!query.prepare("SELECT \"card_number\", \"picture\", \"set_name\", \"rare\", \"feature1\", \"power\", \"soul\","
-                       " \"flavor\", \"color\", \"text\", \"feature2\", \"card_name\", \"card_trigger\", \"card_kind\", "
-                       "\"level\" FROM dataset WHERE \"card_number\" = ?")) {
-        qDebug() << "DatabaseUtil::imageUrlFor - Prepare failed:" << query.lastError().text();
-        return card;
+QVariantMap DatabaseUtil::cardDataFor(const QString &cardCode) const {
+    QVariantMap card;
+    bool ok = false;
+    QJsonObject o = fetchCardObject(cardCode, ok);
+    if (!ok) return card;
+
+    card["cardId"]      = o.value("cardcode").toString();
+    card["cardCode"]    = o.value("cardcode").toString();
+    card["setName"]     = o.value("set").toString();
+    card["rarity"]      = o.value("rarity").toString();
+    card["color"]       = o.value("colour").toString();
+    card["cardKind"]    = o.value("cardtype").toString();
+    card["cardType"]    = o.value("cardtype").toString();
+
+    auto numOrEmpty = [&](const char* k)->QString{
+        QJsonValue v = o.value(k);
+        return v.isDouble() ? QString::number(v.toInt()) : v.toString();
+    };
+    card["power"]       = numOrEmpty("power");
+    card["soul"]        = numOrEmpty("soul");
+    card["level"]       = numOrEmpty("level");
+    card["cost"]        = numOrEmpty("cost");
+
+    QStringList trig;
+    for (const QJsonValue& t : o.value("trigger").toArray()) trig << t.toString();
+    card["cardTrigger"] = trig.join(", ");
+
+    card["picture"]     = Config::instance().getImgUrl(o.value("imagepath").toString());
+
+    auto blockKeyFor = [](const QString& userLoc)->QString{
+        return (userLoc == "JP") ? "NP" : "EN";
+    };
+    auto localeBlock = [&](const QString& userLoc)->QJsonObject{
+        return o.value(blockKeyFor(userLoc)).toObject();
+    };
+    auto blockHasContent = [](const QJsonObject& b){
+        return !b.value("name").toString().isEmpty()
+        || !b.value("ability").toArray().isEmpty();
+    };
+    QJsonObject blk = localeBlock(locale_);
+    QString usedLocale = locale_;
+    if (!blockHasContent(blk)) {
+        QString other = (locale_ == "EN") ? "JP" : "EN";
+        QJsonObject alt = localeBlock(other);
+        if (blockHasContent(alt)) { blk = alt; usedLocale = other; }
     }
+    card["locale"] = usedLocale;
 
-    query.addBindValue(cardId);
+    QString name = blk.value("name").toString();
+    if (name.isEmpty()) name = o.value("name").toString();
+    card["cardName"] = name;
 
-    if (query.exec()) {
-        if (query.next()) {
-            card["cardId"]       = query.value("card_number").toString();
-            card["picture"]      = baseImgUrl+query.value("picture").toString();
-            card["setName"]      = query.value("set_name").toString();
-            card["rarity"]       = query.value("rare").toString();
-            card["feature1"]     = query.value("feature1").toString();
-            card["power"]        = query.value("power").toString();
-            card["soul"]         = query.value("soul").toString();
-            card["flavor"]       = query.value("flavor").toString();
-            card["color"]        = query.value("color").toString();
-            card["text"]         = query.value("text").toString();
-            card["feature2"]     = query.value("feature2").toString();
-            card["cardName"]     = query.value("card_name").toString();
-            card["cardTrigger"]  = query.value("card_trigger").toString();
-            card["cardKind"]     = query.value("card_kind").toString();
-            card["level"]        = query.value("level").toString();
-            //qDebug() << "DatabaseUtil::cardDataFor - Query:" << card["picture"];
-        } else{
-            qDebug() << "DatabaseUtil::cardDataFor - Query failed: query next not possible for cardId: "<<cardId;
-        }
-    } else {
-        qDebug() << "DatabaseUtil::cardDataFor - Query failed:" << query.lastError().text();
-    }
+    QStringList lines;
+    for (const QJsonValue& a : blk.value("ability").toArray()) lines << a.toString();
+    card["text"] = lines.join("\n\n");
+
+    card["flavor"] = blk.value("flavor").toString();
+
+    QStringList attrs;
+    for (const QJsonValue& a : blk.value("attributes").toArray()) attrs << a.toString();
+    card["feature1"] = attrs.value(0);
+    card["feature2"] = attrs.value(1);
+    card["features"] = attrs.join(" / ");
 
     return card;
 }

@@ -71,9 +71,12 @@ void DatasetManager::startDownloadAndImport() {
     connect(worker_, &DatabaseWorker::finished, this, [this]() {
         isDownloading_ = false;
         switch (curMode_) {
-            case DatabaseWorker::DatabaseMode::cardList:
-                Config::instance().setCardListEtag(remoteEtag_);
-                break;
+            case DatabaseWorker::DatabaseMode::cardList:{
+                    QRegularExpressionMatch match = seriesRegex_.match(datasetUrl_.toString());
+                    if (match.hasMatch())
+                        Config::instance().setCardListEtag(match.captured(1), remoteEtag_);
+                    break;
+            }
             case DatabaseWorker::DatabaseMode::seriesList:
                 Config::instance().setJpSeriestListEtag(remoteEtag_);
                 break;
@@ -175,11 +178,16 @@ void DatasetManager::checkForUpdates(){
             bool dbExists;
 
             switch (curMode_) {
-                case DatabaseWorker::DatabaseMode::cardList:
-                    cachedEtag = Config::instance().getCardListEtag();
-                    dbExists = QFile::exists(Config::instance().getCardListDatabasePath())
-                                    && QFileInfo(Config::instance().getCardListDatabasePath()).size() != 0;
-                    break;
+                case DatabaseWorker::DatabaseMode::cardList:{
+                    QRegularExpressionMatch match = seriesRegex_.match(datasetUrl_.toString());
+                    if (match.hasMatch()){
+                        QString series = match.captured(1);
+                        cachedEtag = Config::instance().getCardListEtag(series);
+                    }
+                        dbExists = QFile::exists(Config::instance().getCardListDatabasePath())
+                                        && QFileInfo(Config::instance().getCardListDatabasePath()).size() != 0;
+                        break;
+                }
                 case DatabaseWorker::DatabaseMode::seriesList:
                     cachedEtag = Config::instance().getJpSeriesListEtag();
                     dbExists = QFile::exists(Config::instance().getSeriesListDatabasePath())
@@ -246,11 +254,16 @@ void DatasetManager::checkAndLoad(bool forceRedownload) {
             bool dbExists;
 
             switch (curMode_) {
-                case DatabaseWorker::DatabaseMode::cardList:
-                    cachedEtag = Config::instance().getCardListEtag();
-                    dbExists = QFile::exists(Config::instance().getCardListDatabasePath())
-                               && QFileInfo(Config::instance().getCardListDatabasePath()).size() != 0;
-                    break;
+                case DatabaseWorker::DatabaseMode::cardList: {
+                        QRegularExpressionMatch match = seriesRegex_.match(datasetUrl_.toString());
+                        if (match.hasMatch()){
+                            QString series = match.captured(1);
+                            cachedEtag = Config::instance().getCardListEtag(series);
+                        }
+                        dbExists = QFile::exists(Config::instance().getCardListDatabasePath())
+                                   && QFileInfo(Config::instance().getCardListDatabasePath()).size() != 0;
+                        break;
+            }
                 case DatabaseWorker::DatabaseMode::seriesList:
                     cachedEtag = Config::instance().getJpSeriesListEtag();
                     dbExists = QFile::exists(Config::instance().getSeriesListDatabasePath())
