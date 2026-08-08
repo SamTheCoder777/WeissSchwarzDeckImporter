@@ -24,7 +24,7 @@ private:
 
     DatabaseWorker::DatabaseMode curMode_;
 
-    QRegularExpression seriesRegex_ = QRegularExpression("series\/(.+)\/");
+    QRegularExpression seriesRegex_ = QRegularExpression("series/(.+)/");
 
 public:
     explicit DatasetManager(const DatabaseWorker::DatabaseMode mode, QObject *parent = nullptr);

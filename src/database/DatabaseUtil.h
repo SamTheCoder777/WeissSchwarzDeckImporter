@@ -11,9 +11,9 @@ public:
     using QObject::QObject;
 
     QString locale() const { return locale_; }
-    void    setLocale(const QString& loc);
+    Q_INVOKABLE void setLocale(const QString& loc);
 
-    Q_INVOKABLE QString     imageUrlFor(const QString &cardCode) const;
+    Q_INVOKABLE QString imageUrlFor(const QString &cardCode) const;
     Q_INVOKABLE QVariantMap cardDataFor(const QString &cardCode) const;
 
     Q_INVOKABLE void toggleLocale() { setLocale(locale_ == "EN" ? "JP" : "EN"); }
@@ -22,5 +22,5 @@ signals:
     void localeChanged();
 
 private:
-    QString locale_ = "EN";   // default; overwritten from Config on construction
+    QString locale_ = "EN";
 };

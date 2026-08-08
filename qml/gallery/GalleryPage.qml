@@ -76,6 +76,10 @@ Item {
             out.push({ title: "Climax", cards: byLevel["cx"] });
         }
         root.sections = out;
+
+        if (root.hasSelection && root.selectedCard.cardId) {
+            root.selectedCard = cardDatabase.cardDataFor(root.selectedCard.cardId);
+        }
     }
 
     Component.onCompleted: rebuild()
@@ -129,7 +133,7 @@ Item {
                                     }
                                     MouseArea {
                                         anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                        onClicked: cardDatabase.toggleLocale()
+                                        onClicked: cardDatabase.setLocale(modelData)
                                     }
                                 }
                             }
@@ -215,7 +219,7 @@ Item {
                                         delegate: CardDelegate {
                                             required property var modelData
                                             cardId:    modelData.cardId
-                                            label:     modelData.label
+                                            label:     modelData.data.cardName
                                             qty:       modelData.qty
                                             confirmed: modelData.confirmed
                                             preloaded: modelData.data

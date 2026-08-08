@@ -73,6 +73,8 @@ Rectangle {
             text: root.label
             color: "#e6e6e6"
             font.pixelSize: 13
+            wrapMode: Text.WordWrap
+            maximumLineCount: 2
             elide: Text.ElideRight
             horizontalAlignment: Text.AlignHCenter
         }

@@ -79,7 +79,8 @@ QVariantMap DatabaseUtil::cardDataFor(const QString &cardCode) const {
         return (userLoc == "JP") ? "NP" : "EN";
     };
     auto localeBlock = [&](const QString& userLoc)->QJsonObject{
-        return o.value(blockKeyFor(userLoc)).toObject();
+        QJsonObject localeRoot = o.value("locale").toObject();
+        return localeRoot.value(blockKeyFor(userLoc)).toObject();
     };
     auto blockHasContent = [](const QJsonObject& b){
         return !b.value("name").toString().isEmpty()

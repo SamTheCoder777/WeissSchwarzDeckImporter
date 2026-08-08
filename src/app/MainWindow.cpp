@@ -95,8 +95,8 @@ void MainWindow::buildSidebar() {
     QAction* aDetect = addPage(st->standardIcon(QStyle::SP_ComputerIcon),           "Detection", 0);
     addPage(st->standardIcon(QStyle::SP_DriveNetIcon),           "Faiss Indexes",   2);
     addPage(st->standardIcon(QStyle::SP_DriveNetIcon),           "Cards Indexes",   4);
-    addPage(st->standardIcon(QStyle::SP_FileDialogDetailedView), "Settings",  1);
     addPage(st->standardIcon(QStyle::SP_DriveCDIcon),            "Gallery",   3);
+    addPage(st->standardIcon(QStyle::SP_FileDialogDetailedView), "Settings",  1);
     aDetect->setChecked(true);
 }
 
