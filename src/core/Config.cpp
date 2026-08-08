@@ -28,7 +28,8 @@ void Config::load() {
 
     settings_->beginGroup("Dataset");
 
-    curDatasetEtag_ = settings_->value("DatasetEtag").toString();
+    cardListEtag_ = settings_->value("CardListEtag").toString();
+    jpSeriesListEtag_ = settings_->value("jpSeriesListEtag").toString();
 
     settings_->endGroup();
 }
@@ -45,7 +46,8 @@ void Config::save() {
 
     settings_->beginGroup("Dataset");
 
-    settings_->setValue("DatasetEtag", curDatasetEtag_);
+    settings_->setValue("CardListEtag", cardListEtag_);
+    settings_->setValue("jpSeriesListEtag", jpSeriesListEtag_);
 
     settings_->endGroup();
 
@@ -73,9 +75,13 @@ void Config::setCurIndexId(const QString &curIndexId){
     save();
 }
 
-void Config::setCurDatasetEtag(const QString &newCurDatasetEtag)
-{
-    curDatasetEtag_ = newCurDatasetEtag;
+void Config::setJpSeriestListEtag(const QString &etag) {
+    jpSeriesListEtag_ = etag;
+    save();
+}
+
+void Config::setCardListEtag(const QString &etag) {
+    cardListEtag_ = etag;
     save();
 }
 

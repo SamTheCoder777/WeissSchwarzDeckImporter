@@ -4,6 +4,7 @@
 #include <QSettings>
 #include <QCoreApplication>
 #include <QDir>
+#include <QUrl>
 
 class Config : public QObject {
     Q_OBJECT
@@ -25,13 +26,39 @@ public:
     QString getCurIndexId() const {return curIndexId_;}
     void setCurIndexId(const QString &curIndexId);
 
-    QString getCurDatasetEtag() const {return curDatasetEtag_;}
-    void setCurDatasetEtag(const QString &newCurDatasetEtag);
+    QString getBaseImgUrl(const QString &imgPath) const {
+        QUrl imagePath = QUrl(imgPath);
 
-    QString getBaseImgUrl() const {return baseImgUrl_;}
+        return baseImgUrl_.resolved(imagePath).toString();
+    }
 
-    QString getDatasetPath() const {return datasetPath_;}
-    QString getDatasetSourceUrl() const {return datasetSourceUrl_;}
+    // ----- Dataset config ------
+
+    // seriest list
+    QString getJpSeriesListUrl() const {
+        return jpSerieslistUrl_.toString();
+    }
+    QString getSeriesListDatabasePath() const { return serieslistDatabasePath_;}
+
+    QString getJpSeriesListEtag() const { return jpSeriesListEtag_; }
+    void setJpSeriestListEtag(const QString &etag);
+
+    // card list
+    QString getCardListUrl(QString &seriesId) const {
+        QUrl seriesUrl = QUrl(seriesId);
+
+        QUrl fullUrl = cardListBaseUrlStart_;
+        fullUrl = fullUrl.resolved(seriesUrl);
+        fullUrl = fullUrl.resolved(cardListBaseUrlEnd_);
+        return fullUrl.toString();
+    }
+    QString getCardListDatabasePath() const { return cardListDatabasePath_;}
+
+    QString getCardListEtag() const { return cardListEtag_; }
+    void setCardListEtag(const QString &etag);
+
+    // ---------------------------
+
     bool getModelNative() const {return native_;}
     int getModelImgSize() const {return imgSize_;}
 
@@ -39,7 +66,7 @@ private:
     Config();
     ~Config() = default;
 
-    const QString baseImgUrl_ = "https://ws-tcg.com/wordpress/wp-content/images/cardlist/";
+    const QUrl baseImgUrl_ = QUrl("https://www.encoredecks.com/images/");
 
     std::unique_ptr<QSettings> settings_;
 
@@ -47,10 +74,21 @@ private:
     QString curYoloModelPath_;
     QString curIndexId_;
 
-    // Dataset config
-    QString curDatasetEtag_;
-    const QString datasetPath_ = QDir(QCoreApplication::applicationDirPath()).filePath("global_cards.db");
-    const QString datasetSourceUrl_ = "https://huggingface.co/datasets/SamTheCoder777/ws-index/resolve/main/cards_global.json";
+    // ----- Dataset config ------
+
+    // Series List
+    const QUrl jpSerieslistUrl_ = QUrl("https://www.encoredecks.com/api/serieslist/JP/");
+    QString jpSeriesListEtag_;
+
+    const QString serieslistDatabasePath_ = QDir(QCoreApplication::applicationDirPath()).filePath("seriesList.db");
+
+    // Card List
+    const QUrl cardListBaseUrlStart_ = QUrl("https://www.encoredecks.com/api/series/");
+    const QUrl cardListBaseUrlEnd_ = QUrl("cardList");
+    const QString cardListDatabasePath_ = QDir(QCoreApplication::applicationDirPath()).filePath("cardList.db");
+    QString cardListEtag_;
+    // ---------------------------
+
     bool native_ = true;
     int imgSize_ = 336;
 };

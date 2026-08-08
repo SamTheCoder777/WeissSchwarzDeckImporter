@@ -20,7 +20,7 @@ class DetectionPage: public QWidget {
     Q_OBJECT
 
 public:
-    explicit DetectionPage(ModelService* models, DatabaseUtil* dbUtil, DatasetManager* dbManager,
+    explicit DetectionPage(ModelService* models, DatabaseUtil* dbUtil, DatasetManager* cardListDbManager,
                            SelectionModel* selModel, UiBridge* bridge,
                            IndexCatalog* catalog, QSortFilterProxyModel* installedProxy,
                            QWidget* parent = nullptr);
@@ -28,7 +28,7 @@ public:
 private:
     ModelService* models_;
     DatabaseUtil* dbUtil_;
-    DatasetManager* dbManager_;
+    DatasetManager* cardListDbManager_;
     SelectionModel* selModel_;
     UiBridge* bridge_;
     IndexCatalog* catalog_;

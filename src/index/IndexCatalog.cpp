@@ -9,11 +9,13 @@
 #include <QLocale>
 #include <QUrl>
 
-// ── EDIT ME: where your published manifest lives ────────────────────────────
 static const char* MANIFEST_URL =
     "https://huggingface.co/datasets/SamTheCoder777/ws-index/raw/main/manifest.json";
 
-IndexCatalog::IndexCatalog(QObject* parent) : QAbstractListModel(parent) {
+IndexCatalog::IndexCatalog(DatasetManager* cardListDbManager, DatasetManager* seriesListDbManager,
+                           QObject* parent) :
+    QAbstractListModel(parent), cardListDbManager_(cardListDbManager), seriesListDbManager_(seriesListDbManager)
+{
     QDir().mkpath(installRoot());
 }
 

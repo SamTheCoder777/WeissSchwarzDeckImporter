@@ -25,8 +25,13 @@ static QImage matToQImage(const cv::Mat& bgr) {
 }
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
+    cardListDbManager_ = new DatasetManager(DatabaseWorker::DatabaseMode::cardList, this);
+    seriesListDbManager_ = new DatasetManager(DatabaseWorker::DatabaseMode::seriesList, this);
+    seriesListDbManager_->setDatasetUrl_(Config::instance().getJpSeriesListUrl());
+    dbUtil_    = new DatabaseUtil(this);
+    models_    = new ModelService(this);
 
-    catalog_ = new IndexCatalog(this);
+    catalog_ = new IndexCatalog(cardListDbManager_, seriesListDbManager_, this);
 
     searchProxy_ = new IndexSearchProxy(this);
     searchProxy_->setSourceModel(catalog_);
@@ -36,18 +41,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     installedProxy_->setFilterRole(IndexCatalog::StatusRole);
     installedProxy_->setFilterRegularExpression(QRegularExpression("^[12]$"));
 
-    dbManager_ = new DatasetManager(QUrl(Config::instance().getDatasetSourceUrl()), this);
-    dbUtil_    = new DatabaseUtil(this);
-    models_    = new ModelService(this);
-
     // shared view-models (used by detection + gallery)
     selModel_ = new SelectionModel(this);
     bridge_   = new UiBridge(this);
 
     // ── pages ───────────────────────────────────────────────────────────────
-    detection_ = new DetectionPage(models_, dbUtil_, dbManager_, selModel_, bridge_,
+    detection_ = new DetectionPage(models_, dbUtil_, cardListDbManager_, selModel_, bridge_,
                                    catalog_, installedProxy_, this);
-    settings_  = new SettingsPage(models_, dbManager_, this);
+    settings_  = new SettingsPage(models_, cardListDbManager_, seriesListDbManager_, this);
     faiss_     = new FaissPage(models_, catalog_, this);
     gallery_   = new GalleryPage(dbUtil_, selModel_, bridge_, this);
 

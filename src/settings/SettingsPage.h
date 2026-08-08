@@ -15,12 +15,14 @@ class SettingsPage: public QWidget {
     Q_OBJECT
 
 public:
-    explicit SettingsPage(ModelService* models, DatasetManager* dbManager, QWidget* parent = nullptr);
+    explicit SettingsPage(ModelService* models, DatasetManager* cardListDbManager, DatasetManager* seriesListDbManager,
+                          QWidget* parent = nullptr);
 
 private:
     void buildUi();
 
-    DatasetManager* dbManager_;
+    DatasetManager* cardListDbManager_;
+    DatasetManager* seriesListDbManager_;
     ModelService* models_;
 
     // settings widgets

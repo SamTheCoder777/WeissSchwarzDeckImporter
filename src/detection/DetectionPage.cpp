@@ -34,12 +34,12 @@ cv::Mat qImageToBgrMat(const QImage &imgIn)
 }
 
 
-DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, DatasetManager* dbManager,
+DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, DatasetManager* cardListDbManager,
                              SelectionModel* selModel, UiBridge* bridge,
                              IndexCatalog* catalog, QSortFilterProxyModel* installedProxy,
                              QWidget* parent)
     : QWidget(parent),
-    models_(models), dbUtil_(dbUtil), dbManager_(dbManager), selModel_(selModel), bridge_(bridge),
+    models_(models), dbUtil_(dbUtil), cardListDbManager_(cardListDbManager), selModel_(selModel), bridge_(bridge),
     catalog_(catalog), installedProxy_(installedProxy) {
     buildUi();
 
@@ -49,7 +49,7 @@ DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, Dataset
     candModel_->setDatabaseUtil(dbUtil_);
 
     auto refreshModel = [this]() {
-        QSqlDatabase db = dbManager_->getUiDatabase();
+        QSqlDatabase db = cardListDbManager_->getUiDatabase();
         if (db.isOpen()) {
             candModel_->setCardDatabase(db);
         } else {
@@ -62,11 +62,11 @@ DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, Dataset
     qDebug() << "refreshModel took" << t.elapsed() << "ms";
 
 
-    connect(dbManager_, &DatasetManager::readyToUse, this, refreshModel);
+    connect(cardListDbManager_, &DatasetManager::readyToUse, this, refreshModel);
 
     // check for dataset update
     QElapsedTimer t2; t2.start();
-    dbManager_->checkForUpdates();
+    cardListDbManager_->checkForUpdates();
     qDebug() << "checkForUpdates took" << t2.elapsed() << "ms";
 
     // allow pasting images/files only on windows. Mac crashes for some reason

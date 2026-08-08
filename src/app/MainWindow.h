@@ -47,7 +47,8 @@ private:
     IndexCatalog*          catalog_        = nullptr;
     IndexSearchProxy*      searchProxy_    = nullptr;
     QSortFilterProxyModel* installedProxy_ = nullptr;
-    DatasetManager*        dbManager_      = nullptr;
+    DatasetManager*   cardListDbManager_   = nullptr;
+    DatasetManager*   seriesListDbManager_  = nullptr;
     DatabaseUtil*          dbUtil_         = nullptr;
     ModelService*          models_         = nullptr;
     SelectionModel*        selModel_       = nullptr;   // shared: detection writes, gallery reads

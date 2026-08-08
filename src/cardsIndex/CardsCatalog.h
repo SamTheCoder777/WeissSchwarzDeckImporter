@@ -8,7 +8,7 @@
 #include <QFile>
 #include "../database/DatasetManager.h"
 
-class IndexCatalog : public QAbstractListModel {
+class CardsCatalog : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(QString status   READ status   NOTIFY stateChanged)
     Q_PROPERTY(bool    busy     READ busy     NOTIFY stateChanged)
@@ -23,7 +23,7 @@ public:
                  InstalledVersionRole, SizeTextRole, StatusRole,
                  ProgressRole, DownloadingRole };
 
-    explicit IndexCatalog(DatasetManager* cardListDbManager, DatasetManager* seriesListDbManager, QObject* parent = nullptr);
+    explicit CardsCatalog(DatasetManager* cardListDbManager, DatasetManager* seriesListDbManager, QObject* parent = nullptr);
 
     int rowCount(const QModelIndex& = {}) const override { return rows_.size(); }
     QVariant data(const QModelIndex& idx, int role) const override;

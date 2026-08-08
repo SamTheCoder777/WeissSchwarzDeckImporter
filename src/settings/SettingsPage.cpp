@@ -11,8 +11,9 @@
 #include <QTimer>
 #include <QStyle>
 
-SettingsPage::SettingsPage(ModelService* models, DatasetManager *dbManager, QWidget *parent): QWidget(parent),
-    models_(models), dbManager_(dbManager)
+SettingsPage::SettingsPage(ModelService* models, DatasetManager *cardListDbManager, DatasetManager *seriesListDbManager,
+                           QWidget *parent): QWidget(parent),
+    models_(models), cardListDbManager_(cardListDbManager), seriesListDbManager_(seriesListDbManager)
 {
     buildUi();
 }
@@ -149,7 +150,7 @@ void SettingsPage::buildUi()
     groupLayout->setContentsMargins(20, 20, 20, 20);
     groupLayout->setSpacing(16);
 
-    auto* datasetHeading = new QLabel("Dataset maintenance", datasetGroup);
+    auto* datasetHeading = new QLabel("Cards Series Dataset Maintenance", datasetGroup);
     datasetHeading->setObjectName("sectionHeading");
     groupLayout->addWidget(datasetHeading);
 
@@ -182,18 +183,18 @@ void SettingsPage::buildUi()
     outer->addWidget(datasetGroup);
 
     connect(btnDatasetAction_, &QPushButton::clicked, this, [this]{
-        if (!dbManager_ || dbManager_->isDownloading()) return;
+        if (!seriesListDbManager_ || seriesListDbManager_->isDownloading()) return;
         pbDataset_->setVisible(true);
-        if (dbUpdateStatus_ == DatasetManager::UpdateStatus::UpdateAvailable) dbManager_->startDownloadAndImport();
-        else                 dbManager_->checkAndLoad(true);
+        if (dbUpdateStatus_ == DatasetManager::UpdateStatus::UpdateAvailable) seriesListDbManager_->startDownloadAndImport();
+        else                 seriesListDbManager_->checkAndLoad(true);
     });
 
-    connect(dbManager_, &DatasetManager::statusChanged, this, [this](const QString& s){
+    connect(seriesListDbManager_, &DatasetManager::statusChanged, this, [this](const QString& s){
         lblDatasetStatus_->setVisible(!s.isEmpty());
         lblDatasetStatus_->setText(s);
     });
 
-    connect(dbManager_, &DatasetManager::updateAvailable, this, [this](DatasetManager::UpdateStatus status , const QString&){
+    connect(seriesListDbManager_, &DatasetManager::updateAvailable, this, [this](DatasetManager::UpdateStatus status , const QString&){
         dbUpdateStatus_ = status;
 
         switch (status) {
@@ -218,7 +219,7 @@ void SettingsPage::buildUi()
         btnDatasetAction_->style()->polish(btnDatasetAction_);
     });
 
-    connect(dbManager_, &DatasetManager::downloadProgress, this, [this](qint64 got, qint64 total){
+    connect(seriesListDbManager_, &DatasetManager::downloadProgress, this, [this](qint64 got, qint64 total){
         double recMB = got / (1024.0*1024.0);
         pbDataset_->setVisible(true);
         lblDatasetStatus_->setVisible(true);

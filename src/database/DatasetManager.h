@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DatabaseWorker.h"
+#include "../core/Config.h"
 
 #include <QNetworkAccessManager>
 #include <QThread>
@@ -19,8 +20,10 @@ private:
     QByteArray streamBuffer_;
     bool isDownloading_ = false;
 
+    DatabaseWorker::DatabaseMode curMode_;
+
 public:
-    explicit DatasetManager(const QUrl &datasetUrl, QObject *parent = nullptr);
+    explicit DatasetManager(const DatabaseWorker::DatabaseMode mode, QObject *parent = nullptr);
 
     ~DatasetManager() {
         if (workerThread_.isRunning()) {
@@ -35,7 +38,11 @@ public:
         Error
     };
 
+
     QSqlDatabase getUiDatabase();
+    QSqlDatabase getCardListDatabase();
+
+    void setDatasetUrl_(const QString &url){ datasetUrl_ = url; }
 
     bool isDownloading() const { return isDownloading_; }
 
