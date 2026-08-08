@@ -5,9 +5,6 @@
 #include <QSqlQuery>
 #include <QtWidgets>
 
-// toDeckCode lives in Models.cpp
-QString toDeckCode(const std::string& cardId);
-
 CompareDialog::CompareDialog(const QImage& crop,
                              const std::vector<Candidate>& candidates,
                              int startIndex, QSqlDatabase& db, DatabaseUtil* dbUtil, QWidget* parent)
@@ -104,7 +101,7 @@ void CompareDialog::showCandidate(int i) {
 
     const Candidate& c = cands_[cur_];
     candCaption_->setText(QString("%1   ·   score %2   ·   rank %3/%4")
-                              .arg(toDeckCode(c.card_id))
+                              .arg(c.card_id)
                               .arg(c.score, 0, 'f', 4)
                               .arg(cur_ + 1).arg(cands_.size()));
     counterLabel_->setText(QString("Candidate %1 of %2").arg(cur_ + 1).arg(cands_.size()));
