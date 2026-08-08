@@ -34,7 +34,28 @@ endif()
 #   -DCMAKE_TOOLCHAIN_FILE=D:/Coding/vcpkg/scripts/buildsystems/vcpkg.cmake
 find_package(faiss CONFIG REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(PkgConfig REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickWidgets Network Concurrent Sql Svg QuickControls2)
+
+# Experimental translation reqs -----
+find_package(absl CONFIG REQUIRED)
+find_package(protobuf CONFIG REQUIRED)
+find_path(SENTENCEPIECE_INCLUDE_DIR NAMES sentencepiece_processor.h)
+find_library(SENTENCEPIECE_LIBRARY NAMES sentencepiece sentencepiece_train)
+
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(SentencePiece
+    REQUIRED_VARS SENTENCEPIECE_LIBRARY SENTENCEPIECE_INCLUDE_DIR)
+
+if(SentencePiece_FOUND AND NOT TARGET sentencepiece::sentencepiece)
+    add_library(sentencepiece::sentencepiece UNKNOWN IMPORTED)
+    set_target_properties(sentencepiece::sentencepiece PROPERTIES
+        IMPORTED_LOCATION "${SENTENCEPIECE_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${SENTENCEPIECE_INCLUDE_DIR}"
+    )
+endif()
+# ----------------------------------------
+
 
 # ── headless retrieval test (Piece 1 acceptance test) ──────────────────────
 # add_executable(tcg_infer_test main_infer_test.cpp tcg_infer.cpp)
@@ -64,6 +85,7 @@ add_executable(tcg_app WIN32
     src/settings/SettingsPage.h src/settings/SettingsPage.cpp
     src/detection/DetectionPage.h src/detection/DetectionPage.cpp
     src/services/ModelService.h src/services/ModelService.cpp
+    src/translate/TranslationWorker.h src/translate/TranslationWorker.cpp
 )
 target_include_directories(tcg_app PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(tcg_app PRIVATE
@@ -78,6 +100,13 @@ target_link_libraries(tcg_app PRIVATE
     onnxruntime
     faiss
     ${OpenCV_LIBS}
+    sentencepiece::sentencepiece
+    absl::flags
+    absl::flags_internal
+    absl::strings
+    absl::log
+    absl::raw_logging_internal
+    protobuf::libprotobuf
 )
 
 if (WIN32)

@@ -3,6 +3,7 @@
 #include "../viewmodels/Models.h"
 #include "../viewmodels/UiBridge.h"
 #include "../index/IndexCatalog.h"
+#include "../translate/TranslationWorker.h"
 
 #include <QtWidgets>
 #include <QQuickWidget>
@@ -39,6 +40,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     dbManager_ = new DatasetManager(QUrl(Config::instance().getDatasetSourceUrl()), this);
     dbUtil_    = new DatabaseUtil(this);
     models_    = new ModelService(this);
+    TranslationWorker *translationWorker = new TranslationWorker("D:/Coding/WeissSchwarz/dino_finetune/QtQML/wstcg_mt/encoder_model.onnx",
+                                                                 "D:/Coding/WeissSchwarz/dino_finetune/QtQML/wstcg_mt/decoder_model_merged.onnx",
+                                                                 "D:/Coding/WeissSchwarz/dino_finetune/QtQML/wstcg_mt/source.spm",
+                                                                 "D:/Coding/WeissSchwarz/dino_finetune/QtQML/wstcg_mt/target.spm",
+                                                                 "D:/Coding/WeissSchwarz/dino_finetune/QtQML/wstcg_mt/vocab.json",
+                                                                 "D:/Coding/WeissSchwarz/dino_finetune/QtQML/wstcg_mt/added_tokens.json",
+                                                                 this);
 
     // shared view-models (used by detection + gallery)
     selModel_ = new SelectionModel(this);
@@ -49,7 +57,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                                    catalog_, installedProxy_, this);
     settings_  = new SettingsPage(models_, dbManager_, this);
     faiss_     = new FaissPage(models_, catalog_, this);
-    gallery_   = new GalleryPage(dbUtil_, selModel_, bridge_, this);
+    gallery_   = new GalleryPage(dbUtil_, selModel_, bridge_, translationWorker, this);
 
     pages_ = new QStackedWidget(this);
     pages_->addWidget(detection_);   // 0

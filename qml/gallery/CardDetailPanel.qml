@@ -116,6 +116,21 @@ ScrollView {
             visible: (root.card.text || "") !== ""
         }
 
+        Label {
+            text: "Translated Card Text"
+            color: "#888"
+            font.pixelSize: 12
+            visible: (root.card.text || "") !== ""
+        }
+        SelText {
+            Layout.fillWidth: true
+            text: root.card.translatedText || ""
+            color: "#e6e6e6"
+            font.pixelSize: 13
+            visible: (root.card.translatedText || "") !== ""
+        }
+
+
         Item { Layout.preferredHeight: 12 }
     }
 }
