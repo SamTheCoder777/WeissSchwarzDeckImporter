@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QFile>
 #include <QPixmapCache>
+#include <QTimer>
 
 QString CardImageProvider::cacheDir() {
     QString d = QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/cards";
@@ -19,24 +20,36 @@ QString CardImageProvider::cacheFilePath(const QString& url) {
     return cacheDir() + "/" + QString::fromLatin1(h) + ".img";
 }
 
+static QNetworkAccessManager& sharedNam() {
+    thread_local QNetworkAccessManager nam;
+    return nam;
+}
+
 CardImageResponse::CardImageResponse(const QString& cardCode, const QSize& requestedSize,
-                                     DatabaseUtil* dbUtil, QNetworkAccessManager* nam)
+                                     DatabaseUtil* dbUtil)
     : requestedSize_(requestedSize) {
 
     const QString url = dbUtil ? dbUtil->imageUrlFor(cardCode) : QString();
-    if (url.isEmpty()) { emit finished(); return; }
+    if (url.isEmpty()) {
+        QTimer::singleShot(0, this, [this] { emit finished(); });
+        return;
+    }
 
     const QString path = CardImageProvider::cacheFilePath(url);
     if (QFile::exists(path)) {
         QImage img(path);
-        if (!img.isNull()) { image_ = img; emit finished(); return; }
+        if (!img.isNull()) {
+            image_ = img;
+            QTimer::singleShot(0, this, [this] { emit finished(); });
+            return;
+        }
     }
 
     QNetworkRequest req{QUrl(url)};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
     req.setHeader(QNetworkRequest::UserAgentHeader, "TCGDeckBuilder/1.0");
-    reply_ = nam->get(req);
+    reply_ = sharedNam().get(req);
     cachePath_ = path;
     connect(reply_, &QNetworkReply::finished, this, &CardImageResponse::onFinished);
 }
@@ -67,5 +80,5 @@ CardImageProvider::CardImageProvider(DatabaseUtil* dbUtil)
 QQuickImageResponse* CardImageProvider::requestImageResponse(const QString& id,
                                                              const QSize& requestedSize) {
     const QString cardCode = QUrl::fromPercentEncoding(id.toUtf8());
-    return new CardImageResponse(cardCode, requestedSize, dbUtil_, &nam_);
+    return new CardImageResponse(cardCode, requestedSize, dbUtil_);
 }

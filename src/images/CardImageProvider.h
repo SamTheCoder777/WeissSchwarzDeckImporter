@@ -15,7 +15,7 @@ class CardImageResponse : public QQuickImageResponse {
     Q_OBJECT
 public:
     CardImageResponse(const QString& cardCode, const QSize& requestedSize,
-                      DatabaseUtil* dbUtil, QNetworkAccessManager* nam);
+                      DatabaseUtil* dbUtil);
 
     QQuickTextureFactory* textureFactory() const override;
 
@@ -41,5 +41,4 @@ public:
 
 private:
     DatabaseUtil*         dbUtil_;
-    QNetworkAccessManager nam_;
 };

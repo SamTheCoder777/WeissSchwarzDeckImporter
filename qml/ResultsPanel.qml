@@ -277,6 +277,8 @@ Rectangle {
                     border.width: isConfirmed ? 2 : 0
                     Behavior on color { ColorAnimation { duration: 120 } }
 
+                    Component.onCompleted: if (deckCode) cardDatabase.ensureCardData(deckCode)
+
                     RowLayout {
                         anchors.fill: parent
                         anchors.margins: 9

@@ -184,6 +184,7 @@ void DetectionPage::buildUi() {
     auto* qmlPanel = new QQuickWidget;
     qmlPanel->engine()->addImageProvider("crop", cropProvider_);
     qmlPanel->engine()->addImageProvider("cardcache", new CardImageProvider(dbUtil_));
+    qmlPanel->rootContext()->setContextProperty("cardDatabase", dbUtil_);
     qmlPanel->rootContext()->setContextProperty("bridge",   bridge_);
     qmlPanel->rootContext()->setContextProperty("candModel", candModel_);
     qmlPanel->rootContext()->setContextProperty("selModel",  selModel_);
