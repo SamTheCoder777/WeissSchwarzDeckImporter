@@ -99,3 +99,15 @@ void Config::clearCardListEtags()
     save();
 }
 
+void Config::setIndexInstallPath(const QString &p)
+{
+    indexInstallPath_ = p;
+    save();
+}
+
+void Config::setIndexManifestUrl(const QString &u)
+{
+    indexManifestUrl_ = u;
+    save();
+}
+

@@ -42,7 +42,13 @@ void FaissPage::buildUi()
         QString id = dir.split("/").last();
         Config::instance().setCurIndexId(id);
 
-        if (models_->isLoaded()) models_->load();     // hot-swap if a model is set
+        if (models_->isLoaded()) {
+            try{
+                models_->load();     // hot-swap if a model is set
+            }catch(const std::exception& e){
+                QMessageBox::critical(this, "Error Loading Model", QString::fromStdString(e.what()));
+            }
+        }
         else if(!models_->isSilent()) QMessageBox::information(this, "Index selected",
                                      "Index set. Choose the ONNX model in Settings, then press Load.");
 

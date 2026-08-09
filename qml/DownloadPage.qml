@@ -314,6 +314,7 @@ Rectangle {
 
                         Button {
                             id: actionBtn
+                            visible: hasRemote
                             display: AbstractButton.TextBesideIcon
                             enabled: !catalog.busy || downloading
                             implicitWidth: 128; implicitHeight: 32

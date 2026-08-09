@@ -60,7 +60,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // ── pages ───────────────────────────────────────────────────────────────
     detection_ = new DetectionPage(models_, dbUtil_, selModel_, bridge_,
                                    catalog_, installedProxy_, this);
-    settings_  = new SettingsPage(models_, seriesRepo_, this);
+    settings_  = new SettingsPage(models_, seriesRepo_, catalog_, this);
     faiss_     = new FaissPage(models_, catalog_, this);
     cards_     = new CardsPage(seriesCatalog_, this);
     gallery_   = new GalleryPage(dbUtil_, selModel_, bridge_, this);

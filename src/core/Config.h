@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QUrl>
+#include <QStandardPaths>
 
 using StringStringMap = QMap<QString, QString>;
 Q_DECLARE_METATYPE(StringStringMap)
@@ -75,6 +76,19 @@ public:
     bool getModelNative() const {return native_;}
     int getModelImgSize() const {return imgSize_;}
 
+    // --- index settings ---
+    QString getIndexInstallPath() const {
+        return indexInstallPath_.isEmpty()
+        ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
+                .filePath("indexes")
+        : indexInstallPath_;
+    }
+    void setIndexInstallPath(const QString& p);
+    QString getIndexManifestUrl() const {
+        return indexManifestUrl_.isEmpty() ? kDefaultManifestUrl : indexManifestUrl_;
+    }
+    void setIndexManifestUrl(const QString& u);
+
 private:
     Config();
     ~Config() = default;
@@ -106,6 +120,12 @@ private:
 
     bool native_ = true;
     int imgSize_ = 336;
+
+    // --- index settings ---
+    QString kDefaultManifestUrl = "https://huggingface.co/datasets/SamTheCoder777/ws-index/raw/main/manifest.json";
+    QString indexInstallPath_;
+    QString indexManifestUrl_;
+
 };
 
 

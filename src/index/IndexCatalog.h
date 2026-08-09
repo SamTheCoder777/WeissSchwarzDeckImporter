@@ -20,7 +20,7 @@ public:
 
     enum Roles { IdRole = Qt::UserRole + 1, NameRole, DescRole, VersionRole,
                  InstalledVersionRole, SizeTextRole, StatusRole,
-                 ProgressRole, DownloadingRole };
+                 ProgressRole, DownloadingRole, HasRemoteRole };
 
     explicit IndexCatalog(QObject* parent = nullptr);
 
@@ -62,7 +62,8 @@ private:
         QVector<FileEntry> files;
         qint64 totalSize = 0;
         double progress = 0.0;
-        bool   downloading = false;
+        bool downloading = false;
+        bool isCustom = false;
     };
 
     void setStatus(const QString& s) { qDebug() << "stateChanged! " + s; status_ = s; emit stateChanged(); }
@@ -72,6 +73,8 @@ private:
     void finishDownload(bool ok, const QString& message);
     QString dirFor(const QString& id) const;
     void touchRow(int row);
+    void scanLocalIndexes();
+    int dlRowById();
 
     QNetworkAccessManager nam_;
     QNetworkReply* reply_ = nullptr;
@@ -82,6 +85,7 @@ private:
 
     // active download state
     int     dlRow_ = -1;
+    QString dlId_;
     int     dlFile_ = 0;
     qint64  dlBytesBefore_ = 0;
     QString dlDir_;

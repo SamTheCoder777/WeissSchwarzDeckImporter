@@ -11,9 +11,9 @@
 #include <QTimer>
 #include <QStyle>
 
-SettingsPage::SettingsPage(ModelService* models, SeriesRepository* seriesRepository,
+SettingsPage::SettingsPage(ModelService* models, SeriesRepository* seriesRepository, IndexCatalog* indexCatalog,
                            QWidget *parent): QWidget(parent),
-    models_(models), seriesRepository_(seriesRepository)
+    models_(models), seriesRepository_(seriesRepository), indexCatalog_(indexCatalog)
 {
     buildUi();
 }
@@ -97,9 +97,11 @@ void SettingsPage::buildUi()
     bool modelPathLoaded = !Config::instance().getCurModelPath().isNull()
                         && !Config::instance().getCurModelPath().isEmpty();
     onnxEdit_->setText(modelPathLoaded ? Config::instance().getCurModelPath() : "");
+    onnxEdit_->setReadOnly(true);
     bool yoloModelPathLoaded = !Config::instance().getCurYoloModelPath().isNull()
                             && !Config::instance().getCurYoloModelPath().isEmpty();
     yoloEdit_->setText(yoloModelPathLoaded ? Config::instance().getCurYoloModelPath() : "");
+    yoloEdit_->setReadOnly(true);
 
     if (modelPathLoaded && yoloModelPathLoaded) {
         QTimer::singleShot(0, this, [this]() { models_->load(true); });
@@ -125,9 +127,13 @@ void SettingsPage::buildUi()
 
     connect(loadBtn, &QPushButton::clicked, this, [this]{
         if(models_->isLoading()) return;
-        models_->load(onnxEdit_->text(),
-                      models_->getIndexDir(), yoloEdit_->text(),
-                      Config::instance().getModelNative(), Config::instance().getModelImgSize(), false);
+        try{
+            models_->load(onnxEdit_->text(),
+                          models_->getIndexDir(), yoloEdit_->text(),
+                          Config::instance().getModelNative(), Config::instance().getModelImgSize(), false);
+        }catch(const std::exception& e){
+            QMessageBox::critical(this, "Error Loading Model", QString::fromStdString(e.what()));
+        }
     });
 
     connect(models_, &ModelService::statusChanged, this, [this](const QString &statusText) {
@@ -141,6 +147,67 @@ void SettingsPage::buildUi()
         }
         qDebug()<<message;
     });
+
+    // Index settings
+    auto* indexGroup = new QFrame(this);
+    indexGroup->setObjectName("sectionCard");
+
+    auto* indexOuter = new QVBoxLayout(indexGroup);
+    indexOuter->setContentsMargins(20, 20, 20, 20);
+    indexOuter->setSpacing(16);
+
+    auto* indexHeading = new QLabel("Index paths", indexGroup);
+    indexHeading->setObjectName("sectionHeading");
+    indexOuter->addWidget(indexHeading);
+
+    QFormLayout* indexForm = new QFormLayout;
+    indexForm->setSpacing(12);
+    indexForm->setContentsMargins(0, 0, 0, 0);
+    indexForm->setLabelAlignment(Qt::AlignLeft);
+    indexForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    indexOuter->addLayout(indexForm);
+
+    {
+        indexPathEdit_ = new QLineEdit(Config::instance().getIndexInstallPath(), indexGroup);
+        indexPathEdit_->setReadOnly(true);
+        indexPathEdit_->setMinimumHeight(36);
+
+        auto* btnBrowse = new QPushButton("Browse", indexGroup);
+        btnBrowse->setObjectName("actionGhost");
+        btnBrowse->setCursor(Qt::PointingHandCursor);
+        btnBrowse->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        btnBrowse->setMinimumHeight(36);
+
+        auto* row = new QHBoxLayout;
+        row->setSpacing(8);
+        row->setContentsMargins(0, 0, 0, 0);
+        row->addWidget(indexPathEdit_);
+        row->addWidget(btnBrowse);
+        indexForm->addRow("Index folder", row);
+
+        connect(btnBrowse, &QPushButton::clicked, this, [this]{
+            QString p = QFileDialog::getExistingDirectory(this, "Select index folder",
+                                                          Config::instance().getIndexInstallPath());
+            if (!p.isEmpty()) {
+                Config::instance().setIndexInstallPath(p);
+                indexPathEdit_->setText(p);
+                if (indexCatalog_) indexCatalog_->refresh();
+            }
+        });
+    }
+
+    {
+        manifestUrlEdit_ = new QLineEdit(Config::instance().getIndexManifestUrl(), indexGroup);
+        manifestUrlEdit_->setMinimumHeight(36);
+        indexForm->addRow("Manifest URL", manifestUrlEdit_);
+
+        connect(manifestUrlEdit_, &QLineEdit::editingFinished, this, [this]{
+            Config::instance().setIndexManifestUrl(manifestUrlEdit_->text().trimmed());
+            if (indexCatalog_) indexCatalog_->refresh();
+        });
+    }
+
+    outer->addWidget(indexGroup);
 
     // dataset maintenance
     auto* datasetGroup = new QFrame(this);
