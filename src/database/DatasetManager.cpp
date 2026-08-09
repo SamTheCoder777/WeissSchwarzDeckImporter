@@ -45,6 +45,8 @@ QSqlDatabase DatasetManager::getUiDatabase() {
 
 
 void DatasetManager::startDownloadAndImport() {
+    if (isDownloading_) return;
+
     isDownloading_ = true;
     qRegisterMetaType<QByteArrayList>("QByteArrayList");
 
@@ -335,4 +337,32 @@ double DatasetManager::getDatabaseSizeMB() {
     QFileInfo info(dbPath);
     if (!info.exists()) return 0.0;
     return info.size() / (1024.0 * 1024.0);
+}
+
+void DatasetManager::resetDatabase()
+{
+    if (isDownloading_) return;
+
+    isDownloading_ = true;
+    qRegisterMetaType<QByteArrayList>("QByteArrayList");
+
+    worker_ = new DatabaseWorker();
+    worker_->moveToThread(&workerThread_);
+
+    // connect worker's status
+    connect(worker_, &DatabaseWorker::statusChanged, this, &DatasetManager::statusChanged);
+
+    connect(&workerThread_, &QThread::started, worker_, [this]() {
+        switch (curMode_) {
+        case DatabaseWorker::DatabaseMode::cardList:
+            QMetaObject::invokeMethod(worker_, "initCardListDatabase", Q_ARG(bool, true));
+            break;
+        case DatabaseWorker::DatabaseMode::seriesList:
+            QMetaObject::invokeMethod(worker_, "initSerieslistDatabase", Q_ARG(bool, true));
+            break;
+        }
+    });
+
+    connect(worker_, &DatabaseWorker::finished, &workerThread_, &QThread::quit);
+    connect(&workerThread_, &QThread::finished, worker_, &QObject::deleteLater);
 }

@@ -58,6 +58,8 @@ public:
 
     double getDatabaseSizeMB();
 
+    void resetDatabase();
+
 signals:
     void readyToUse();
     void updateAvailable(DatasetManager::UpdateStatus status, const QString &newVersion);

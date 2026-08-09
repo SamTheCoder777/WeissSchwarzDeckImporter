@@ -150,19 +150,27 @@ void SettingsPage::buildUi()
     groupLayout->setContentsMargins(20, 20, 20, 20);
     groupLayout->setSpacing(16);
 
-    auto* datasetHeading = new QLabel("Cards Series Dataset Maintenance", datasetGroup);
+    auto* datasetHeading = new QLabel("Dataset Maintenance", datasetGroup);
     datasetHeading->setObjectName("sectionHeading");
     groupLayout->addWidget(datasetHeading);
 
-    btnDatasetAction_ = new QPushButton("Check for updates", datasetGroup);
-    btnDatasetAction_->setObjectName("actionPrimary");
-    btnDatasetAction_->setCursor(Qt::PointingHandCursor);
-    btnDatasetAction_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    btnDatasetAction_->setMinimumHeight(36);
+    btnSeriesDatasetAction_ = new QPushButton("Reset SerliesList", datasetGroup);
+    btnSeriesDatasetAction_->setObjectName("actionError");
+    btnSeriesDatasetAction_->setCursor(Qt::PointingHandCursor);
+    btnSeriesDatasetAction_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btnSeriesDatasetAction_->setMinimumHeight(36);
+
+    btnCardDatasetAction_ = new QPushButton("Reset CardList", datasetGroup);
+    btnCardDatasetAction_->setObjectName("actionError");
+    btnCardDatasetAction_->setCursor(Qt::PointingHandCursor);
+    btnCardDatasetAction_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btnCardDatasetAction_->setMinimumHeight(36);
+
 
     auto* datasetBtnRow = new QHBoxLayout();
     datasetBtnRow->setContentsMargins(0, 0, 0, 0);
-    datasetBtnRow->addWidget(btnDatasetAction_);
+    datasetBtnRow->addWidget(btnSeriesDatasetAction_);
+    datasetBtnRow->addWidget(btnCardDatasetAction_);
     datasetBtnRow->addStretch(1);
     groupLayout->addLayout(datasetBtnRow);
 
@@ -182,7 +190,7 @@ void SettingsPage::buildUi()
 
     outer->addWidget(datasetGroup);
 
-    connect(btnDatasetAction_, &QPushButton::clicked, this, [this]{
+    connect(btnSeriesDatasetAction_, &QPushButton::clicked, this, [this]{
         if (!seriesListDbManager_ || seriesListDbManager_->isDownloading()) return;
         pbDataset_->setVisible(true);
         if (dbUpdateStatus_ == DatasetManager::UpdateStatus::UpdateAvailable) seriesListDbManager_->startDownloadAndImport();
@@ -199,24 +207,24 @@ void SettingsPage::buildUi()
 
         switch (status) {
             case DatasetManager::UpdateStatus::UpdateAvailable:
-                btnDatasetAction_->setText("Update Dataset Now");
-                btnDatasetAction_->setIcon(QIcon());
-                btnDatasetAction_->setObjectName("actionAccent");
+                btnSeriesDatasetAction_->setText("Update Dataset Now");
+                btnSeriesDatasetAction_->setIcon(QIcon());
+                btnSeriesDatasetAction_->setObjectName("actionAccent");
                 break;
             case DatasetManager::UpdateStatus::UpToDate:
-                btnDatasetAction_->setText("Redownload Dataset");
-                btnDatasetAction_->setIcon(QIcon());
-                btnDatasetAction_->setObjectName("actionPrimary");
+                btnSeriesDatasetAction_->setText("Redownload Dataset");
+                btnSeriesDatasetAction_->setIcon(QIcon());
+                btnSeriesDatasetAction_->setObjectName("actionPrimary");
                 break;
             case DatasetManager::UpdateStatus::Error:
-                btnDatasetAction_->setText("Redownload Dataset");
-                btnDatasetAction_->setIcon(QIcon(":/icon/error.svg"));
-                btnDatasetAction_->setObjectName("actionError");
+                btnSeriesDatasetAction_->setText("Redownload Dataset");
+                btnSeriesDatasetAction_->setIcon(QIcon(":/icon/error.svg"));
+                btnSeriesDatasetAction_->setObjectName("actionError");
                 break;
         }
 
-        btnDatasetAction_->style()->unpolish(btnDatasetAction_);
-        btnDatasetAction_->style()->polish(btnDatasetAction_);
+        btnSeriesDatasetAction_->style()->unpolish(btnSeriesDatasetAction_);
+        btnSeriesDatasetAction_->style()->polish(btnSeriesDatasetAction_);
     });
 
     connect(seriesListDbManager_, &DatasetManager::downloadProgress, this, [this](qint64 got, qint64 total){
