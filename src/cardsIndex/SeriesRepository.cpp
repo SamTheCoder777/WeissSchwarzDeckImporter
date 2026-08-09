@@ -168,11 +168,13 @@ void SeriesRepository::refreshSeriesList() {
         if (!netOk && http != 304) {
             setStatus("Could not reach the series server: " + err);
             emit errorOccurred(err);
+            emit updateAvailable(UpdateStatus::Error);
             return;
         }
         if (http == 304) {
             setStatus("Series list up to date.");
             emit seriesListUpdated();
+            emit updateAvailable(UpdateStatus::UpToDate);
             return;
         }
 
@@ -181,6 +183,7 @@ void SeriesRepository::refreshSeriesList() {
         if (pe.error != QJsonParseError::NoError || !doc.isArray()) {
             setStatus("Series list is not valid JSON.");
             emit errorOccurred(pe.errorString());
+            emit updateAvailable(UpdateStatus::Error);
             return;
         }
 
@@ -202,6 +205,7 @@ void SeriesRepository::refreshSeriesList() {
 
         setStatus(QString("Series list updated · %1 sets").arg(parsed.size()));
         emit seriesListUpdated();
+        emit updateAvailable(UpdateStatus::UpToDate);
     });
 }
 
@@ -297,6 +301,7 @@ void SeriesRepository::resetSeries() {
     Config::instance().setJpSeriestListEtag("");
     setStatus("Series list reset.");
     emit seriesListUpdated();
+    emit updateAvailable(UpdateStatus::UpdateAvailable);
 }
 
 void SeriesRepository::resetCards() {

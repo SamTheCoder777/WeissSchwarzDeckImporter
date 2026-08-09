@@ -48,6 +48,7 @@ public:
 
 private:
     void buildSidebar();
+    void updateSettingsDot();
 
     // shared services (owned here)
     SeriesRepository*      seriesRepo_     = nullptr;
@@ -70,5 +71,7 @@ private:
     GalleryPage*    gallery_  = nullptr;
     CardsPage*      cards_    = nullptr;
 
+    QAction* settingsAction_ = nullptr;
+    bool     seriesUpdateAvailable_ = false;
     bool indexNotifSilent_ = false;
 };
