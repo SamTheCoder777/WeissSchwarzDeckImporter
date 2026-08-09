@@ -79,6 +79,9 @@ CardImageProvider::CardImageProvider(DatabaseUtil* dbUtil)
 
 QQuickImageResponse* CardImageProvider::requestImageResponse(const QString& id,
                                                              const QSize& requestedSize) {
-    const QString cardCode = QUrl::fromPercentEncoding(id.toUtf8());
+    QString clean = id;
+    int q = clean.indexOf('?');
+    if (q >= 0) clean = clean.left(q);
+    const QString cardCode = QUrl::fromPercentEncoding(clean.toUtf8());
     return new CardImageResponse(cardCode, requestedSize, dbUtil_);
 }

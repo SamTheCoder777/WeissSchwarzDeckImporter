@@ -62,8 +62,10 @@ Rectangle {
     Connections {
         target: cardDatabase
         function onCardReady(code) {
-            if (code === root.cardId)
+            if (code === root.cardId){
                 root.refresh();
+                img.rev++;
+            }
         }
         function onLocaleChanged() {
             root.refresh();
@@ -85,8 +87,9 @@ Rectangle {
 
             Image {
                 id: img
+                property int rev: 0
                 anchors.fill: parent
-                source: root.loaded && root.fullData.cardCode ? "image://cardcache/" + encodeURIComponent(root.fullData.cardCode) : ""
+                source: root.loaded && root.fullData.cardCode ? "image://cardcache/" + encodeURIComponent(root.fullData.cardCode) + "?r=" + rev: ""
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
                 cache: true

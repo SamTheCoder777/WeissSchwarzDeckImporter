@@ -25,6 +25,8 @@ static QImage matToQImage(const cv::Mat& bgr) {
 }
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
+    qDebug() << "Cache Location:" << QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+
     dbUtil_    = new DatabaseUtil(this);
     dbUtil_->setLocale(Config::instance().getPreferredLocale());
     models_    = new ModelService(this);

@@ -332,8 +332,10 @@ Rectangle {
                     Connections {
                         target: cardDatabase
                         function onCardReady(c) {
-                            if (c === delegateRoot.code)
+                            if (c === delegateRoot.code){
                                 delegateRoot.refreshCardData();
+                                candImg.rev++;
+                            }
                         }
                     }
 
@@ -349,11 +351,13 @@ Rectangle {
                             color: "#0e1013"
                             clip: true
                             Image {
+                                id: candImg
+                                property int rev: 0
                                 anchors.fill: parent
                                 anchors.margins: 2
                                 fillMode: Image.PreserveAspectFit
                                 asynchronous: true
-                                source: deckCode ? "image://cardcache/" + encodeURIComponent(deckCode) : ""
+                                source: deckCode ? "image://cardcache/" + encodeURIComponent(deckCode) + "?r=" + candImg.rev: ""
                                 cache: true
                             }
                         }

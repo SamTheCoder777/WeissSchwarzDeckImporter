@@ -59,16 +59,18 @@ QString DatabaseUtil::imageUrlFor(const QString &cardCode) const {
     QJsonObject o = fetchCardObject(cardCode, ok);
     if (ok) {
         const bool isOfficial = o.value("_source").toString() == "official";
-        if (isOfficial) {
-            return OfficialFallback::imageUrlFromCardcode(cardCode);
-        }
         const QString path = o.value("imagepath").toString();
-        if (!path.isEmpty()) return Config::instance().getImgUrl(path);
+        if (!path.isEmpty()) {
+            QString url = isOfficial
+                              ? OfficialFallback::imageBaseUrl() + path
+                              : Config::instance().getImgUrl(path);
+            return url;
+        }
     }
-    //qDebug() << OfficialFallback::imageUrlFromCardcode(cardCode);
 
     // Not in encore decks, fall back to official api
-    return OfficialFallback::imageUrlFromCardcode(cardCode);
+    QString fb = OfficialFallback::imageUrlFromCardcode(cardCode);
+    return fb;
 }
 
 QVariantMap DatabaseUtil::cardDataFor(const QString &cardCode) const {

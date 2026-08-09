@@ -4,15 +4,14 @@
 #include <QRegularExpression>
 
 QString OfficialFallback::imageUrlFromCardcode(const QString& cardcode) {
-    // "BD/W54-061SPMb" -> code "bd_w54_061spmb"
     QString code = cardcode.toLower();
-    code.replace('/', '_').replace('-', '_');        // bd_w54_061spmb
+    code.replace('/', '_').replace('-', '_');
     if (code.isEmpty()) return {};
 
-    const QString first = code.left(1);              // "b"
+    const QString first = code.left(1);
     const QStringList parts = code.split('_');
     if (parts.size() < 2) return {};
-    const QString titleSet = parts[0] + "_" + parts[1];   // "bd_w54"
+    const QString titleSet = parts[0] + "_" + parts[1];
 
     return "https://ws-tcg.com/wordpress/wp-content/images/cardlist/"
            + first + "/" + titleSet + "/" + code + ".png";
@@ -23,9 +22,7 @@ QString OfficialFallback::dataUrlFromCardcode(const QString& cardcode) {
            + QString::fromUtf8(QUrl::toPercentEncoding(cardcode));
 }
 
-// helpers ────────────────────────────────────────────────────────────────────
 static QString colorFromToken(const QString& s) {
-    // "[[red.gif]]" -> "RED"
     QRegularExpression re("\\[\\[(\\w+)\\.gif\\]\\]");
     auto m = re.match(s);
     return m.hasMatch() ? m.captured(1).toUpper() : QString();
@@ -37,7 +34,7 @@ static QString kindToCardtype(const QString& k) {
     if (k == "0") return "CX";
     if (k == "1") return "EV";
     if (k == "2") return "CH";
-    return k;   // fallback: store as-is
+    return k;
 }
 static QJsonArray triggerTokens(const QString& s) {
     QJsonArray out;
@@ -49,7 +46,6 @@ static QJsonArray triggerTokens(const QString& s) {
 }
 
 QJsonObject OfficialFallback::reshapeOfficialItem(const QJsonObject& o) {
-    // attributes from feature1/2/3
     QJsonArray attrs;
     for (const char* f : {"feature1","feature2","feature3"}) {
         QString v = o.value(f).toString();
@@ -71,7 +67,7 @@ QJsonObject OfficialFallback::reshapeOfficialItem(const QJsonObject& o) {
     np["attributes"] = attrs;
 
     const QString cardcode = o.value("card_number").toString();
-    const QString setCode  = cardcode.section('/', 1).section('-', 0, 0);  // W54
+    const QString setCode  = cardcode.section('/', 1).section('-', 0, 0);
 
     auto toInt = [&](const char* k){ return o.value(k).toString().toInt(); };
 
@@ -86,10 +82,10 @@ QJsonObject OfficialFallback::reshapeOfficialItem(const QJsonObject& o) {
     card["soul"]      = soulCount(o.value("soul").toString());
     card["rarity"]    = o.value("rare").toString();
     card["trigger"]   = triggerTokens(o.value("card_trigger").toString());
-    card["imagepath"] = o.value("picture").toString();   // "b/bd_w54/..png"
+    card["imagepath"] = o.value("picture").toString();
     QJsonObject locale;
-    locale["EN"] = QJsonObject();   // no English from official
-    locale["NP"] = np;              // Japanese text
+    locale["EN"] = QJsonObject();
+    locale["NP"] = np;
     card["locale"] = locale;
     card["_source"]        = "official";
     card["_localeAvailable"] = false;
