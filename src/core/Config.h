@@ -68,6 +68,7 @@ public:
 
     QString getCardListEtag(QString &id) const { return cardListEtag_[id]; }
     void setCardListEtag(const QString &id, const QString &etag);
+    void clearCardListEtags();
 
     // ---------------------------
 

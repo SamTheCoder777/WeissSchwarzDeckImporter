@@ -4,9 +4,7 @@
 #include "../viewmodels/Models.h"
 #include "../viewmodels/UiBridge.h"
 #include "../index/IndexCatalog.h"
-#include "../index/IndexSearchProxy.h"
 #include "../services/ModelService.h"
-#include "../database/DatasetManager.h"
 
 #include <QPushButton>
 #include <QQuickWidget>
@@ -20,7 +18,7 @@ class DetectionPage: public QWidget {
     Q_OBJECT
 
 public:
-    explicit DetectionPage(ModelService* models, DatabaseUtil* dbUtil, DatasetManager* cardListDbManager,
+    explicit DetectionPage(ModelService* models, DatabaseUtil* dbUtil,
                            SelectionModel* selModel, UiBridge* bridge,
                            IndexCatalog* catalog, QSortFilterProxyModel* installedProxy,
                            QWidget* parent = nullptr);
@@ -28,7 +26,6 @@ public:
 private:
     ModelService* models_;
     DatabaseUtil* dbUtil_;
-    DatasetManager* cardListDbManager_;
     SelectionModel* selModel_;
     UiBridge* bridge_;
     IndexCatalog* catalog_;

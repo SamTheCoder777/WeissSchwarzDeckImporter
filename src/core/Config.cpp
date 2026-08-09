@@ -93,3 +93,9 @@ void Config::setCardListEtag(const QString &id, const QString &etag) {
     save();
 }
 
+void Config::clearCardListEtags()
+{
+    cardListEtag_.clear();
+    save();
+}
+

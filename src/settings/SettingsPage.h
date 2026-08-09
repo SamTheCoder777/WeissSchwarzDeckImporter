@@ -2,6 +2,7 @@
 
 #include "../database/DatasetManager.h"
 #include "../services/ModelService.h"
+#include "../cardsIndex/SeriesRepository.h"
 
 #include <QCheckBox>
 #include <QLabel>
@@ -15,14 +16,13 @@ class SettingsPage: public QWidget {
     Q_OBJECT
 
 public:
-    explicit SettingsPage(ModelService* models, DatasetManager* cardListDbManager, DatasetManager* seriesListDbManager,
+    explicit SettingsPage(ModelService* models, SeriesRepository* seriesRepository_,
                           QWidget* parent = nullptr);
 
 private:
     void buildUi();
 
-    DatasetManager* cardListDbManager_;
-    DatasetManager* seriesListDbManager_;
+    SeriesRepository* seriesRepository_;
     ModelService* models_;
 
     // settings widgets
@@ -33,9 +33,10 @@ private:
     QLabel*    modelStatus_;
 
     // settings dataset
+    QPushButton *btnSeriesDownload_;
     QLabel *lblDatasetStatus_;
-    QPushButton *btnSeriesDatasetAction_;
-    QPushButton *btnCardDatasetAction_;
+    QPushButton *btnSeriesDatasetReset_;
+    QPushButton *btnCardDatasetReset_;
     QProgressBar *pbDataset_;
 
     DatasetManager::UpdateStatus dbUpdateStatus_;

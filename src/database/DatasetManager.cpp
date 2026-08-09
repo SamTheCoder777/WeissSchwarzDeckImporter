@@ -51,6 +51,7 @@ void DatasetManager::startDownloadAndImport() {
     qRegisterMetaType<QByteArrayList>("QByteArrayList");
 
     worker_ = new DatabaseWorker();
+    worker_->setMode(curMode_);
     worker_->moveToThread(&workerThread_);
 
     // connect worker's status
@@ -343,26 +344,46 @@ void DatasetManager::resetDatabase()
 {
     if (isDownloading_) return;
 
-    isDownloading_ = true;
-    qRegisterMetaType<QByteArrayList>("QByteArrayList");
+    emit statusChanged("Resetting database…");
 
-    worker_ = new DatabaseWorker();
-    worker_->moveToThread(&workerThread_);
+    QString dbPath;
+    QString tableName;
+    switch (curMode_) {
+    case DatabaseWorker::DatabaseMode::cardList:
+        dbPath    = Config::instance().getCardListDatabasePath();
+        tableName = "cards";
+        break;
+    case DatabaseWorker::DatabaseMode::seriesList:
+        dbPath    = Config::instance().getSeriesListDatabasePath();
+        tableName = "series";
+        break;
+    }
 
-    // connect worker's status
-    connect(worker_, &DatabaseWorker::statusChanged, this, &DatasetManager::statusChanged);
-
-    connect(&workerThread_, &QThread::started, worker_, [this]() {
-        switch (curMode_) {
-        case DatabaseWorker::DatabaseMode::cardList:
-            QMetaObject::invokeMethod(worker_, "initCardListDatabase", Q_ARG(bool, true));
-            break;
-        case DatabaseWorker::DatabaseMode::seriesList:
-            QMetaObject::invokeMethod(worker_, "initSerieslistDatabase", Q_ARG(bool, true));
-            break;
+    {
+        const QString conn = "reset_connection";
+        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", conn);
+        db.setDatabaseName(dbPath);
+        if (db.open()) {
+            QSqlQuery q(db);
+            if (!q.exec("DROP TABLE IF EXISTS " + tableName))
+                qWarning() << "reset drop failed:" << q.lastError().text();
+            db.close();
+        } else {
+            qWarning() << "reset: could not open" << dbPath << db.lastError().text();
         }
-    });
+    }
+    QSqlDatabase::removeDatabase("reset_connection");
 
-    connect(worker_, &DatabaseWorker::finished, &workerThread_, &QThread::quit);
-    connect(&workerThread_, &QThread::finished, worker_, &QObject::deleteLater);
+    switch (curMode_) {
+    case DatabaseWorker::DatabaseMode::cardList:
+        Config::instance().clearCardListEtags();
+        break;
+    case DatabaseWorker::DatabaseMode::seriesList:
+        Config::instance().setJpSeriestListEtag("");
+        break;
+    }
+
+    emit statusChanged("Database reset. Re-download to repopulate.");
+    emit updateAvailable(DatasetManager::UpdateStatus::Error, "New Version");
+    emit readyToUse();
 }

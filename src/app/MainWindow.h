@@ -23,7 +23,9 @@
 #include "../index/FaissPage.h"
 #include "../cardsIndex/SeriesCatalog.h"
 #include "../cardsIndex/CardsPage.h"
+#include "../cardsIndex/SeriesRepository.h"
 
+class SeriesRepository;
 class SeriesCatalog;
 class IndexCatalog;
 class SelectionModel;
@@ -48,6 +50,7 @@ private:
     void buildSidebar();
 
     // shared services (owned here)
+    SeriesRepository*      seriesRepo_     = nullptr;
     IndexCatalog*          catalog_        = nullptr;
     SeriesCatalog*         seriesCatalog_  = nullptr;
     IndexSearchProxy*      searchProxy_    = nullptr;

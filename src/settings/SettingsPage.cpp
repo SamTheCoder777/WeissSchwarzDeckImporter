@@ -11,9 +11,9 @@
 #include <QTimer>
 #include <QStyle>
 
-SettingsPage::SettingsPage(ModelService* models, DatasetManager *cardListDbManager, DatasetManager *seriesListDbManager,
+SettingsPage::SettingsPage(ModelService* models, SeriesRepository* seriesRepository,
                            QWidget *parent): QWidget(parent),
-    models_(models), cardListDbManager_(cardListDbManager), seriesListDbManager_(seriesListDbManager)
+    models_(models), seriesRepository_(seriesRepository)
 {
     buildUi();
 }
@@ -154,23 +154,15 @@ void SettingsPage::buildUi()
     datasetHeading->setObjectName("sectionHeading");
     groupLayout->addWidget(datasetHeading);
 
-    btnSeriesDatasetAction_ = new QPushButton("Reset SerliesList", datasetGroup);
-    btnSeriesDatasetAction_->setObjectName("actionError");
-    btnSeriesDatasetAction_->setCursor(Qt::PointingHandCursor);
-    btnSeriesDatasetAction_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    btnSeriesDatasetAction_->setMinimumHeight(36);
-
-    btnCardDatasetAction_ = new QPushButton("Reset CardList", datasetGroup);
-    btnCardDatasetAction_->setObjectName("actionError");
-    btnCardDatasetAction_->setCursor(Qt::PointingHandCursor);
-    btnCardDatasetAction_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    btnCardDatasetAction_->setMinimumHeight(36);
-
+    btnSeriesDownload_ = new QPushButton("Download SerliesList", datasetGroup);
+    btnSeriesDownload_->setObjectName("actionPrimary");
+    btnSeriesDownload_->setCursor(Qt::PointingHandCursor);
+    btnSeriesDownload_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btnSeriesDownload_->setMinimumHeight(36);
 
     auto* datasetBtnRow = new QHBoxLayout();
     datasetBtnRow->setContentsMargins(0, 0, 0, 0);
-    datasetBtnRow->addWidget(btnSeriesDatasetAction_);
-    datasetBtnRow->addWidget(btnCardDatasetAction_);
+    datasetBtnRow->addWidget(btnSeriesDownload_);
     datasetBtnRow->addStretch(1);
     groupLayout->addLayout(datasetBtnRow);
 
@@ -190,59 +182,57 @@ void SettingsPage::buildUi()
 
     outer->addWidget(datasetGroup);
 
-    connect(btnSeriesDatasetAction_, &QPushButton::clicked, this, [this]{
-        if (!seriesListDbManager_ || seriesListDbManager_->isDownloading()) return;
+    connect(btnSeriesDownload_, &QPushButton::clicked, this, [this]{
+        if (seriesRepository_->isBusy()) return;
         pbDataset_->setVisible(true);
-        if (dbUpdateStatus_ == DatasetManager::UpdateStatus::UpdateAvailable) seriesListDbManager_->startDownloadAndImport();
-        else                 seriesListDbManager_->checkAndLoad(true);
+        seriesRepository_->refreshSeriesList();
     });
 
-    connect(seriesListDbManager_, &DatasetManager::statusChanged, this, [this](const QString& s){
+    connect(seriesRepository_, &SeriesRepository::statusChanged, this, [this](const QString& s){
         lblDatasetStatus_->setVisible(!s.isEmpty());
         lblDatasetStatus_->setText(s);
     });
 
-    connect(seriesListDbManager_, &DatasetManager::updateAvailable, this, [this](DatasetManager::UpdateStatus status , const QString&){
-        dbUpdateStatus_ = status;
+    connect(seriesRepository_, &SeriesRepository::updateAvailable, this,
+            [this](SeriesRepository::UpdateStatus status){
+                switch (status) {
+                case SeriesRepository::UpdateStatus::UpdateAvailable:
+                    btnSeriesDownload_->setText("Update Series List Now");
+                    btnSeriesDownload_->setIcon(QIcon());
+                    btnSeriesDownload_->setObjectName("actionAccent");
+                    break;
+                case SeriesRepository::UpdateStatus::UpToDate:
+                    btnSeriesDownload_->setText("Redownload Series List");
+                    btnSeriesDownload_->setIcon(QIcon());
+                    btnSeriesDownload_->setObjectName("actionPrimary");
+                    break;
+                case SeriesRepository::UpdateStatus::Error:
+                    btnSeriesDownload_->setText("Download Series List");
+                    btnSeriesDownload_->setIcon(QIcon(":/icon/error.svg"));
+                    btnSeriesDownload_->setObjectName("actionError");
+                    break;
+                }
+                btnSeriesDownload_->style()->unpolish(btnSeriesDownload_);
+                btnSeriesDownload_->style()->polish(btnSeriesDownload_);
+            });
 
-        switch (status) {
-            case DatasetManager::UpdateStatus::UpdateAvailable:
-                btnSeriesDatasetAction_->setText("Update Dataset Now");
-                btnSeriesDatasetAction_->setIcon(QIcon());
-                btnSeriesDatasetAction_->setObjectName("actionAccent");
-                break;
-            case DatasetManager::UpdateStatus::UpToDate:
-                btnSeriesDatasetAction_->setText("Redownload Dataset");
-                btnSeriesDatasetAction_->setIcon(QIcon());
-                btnSeriesDatasetAction_->setObjectName("actionPrimary");
-                break;
-            case DatasetManager::UpdateStatus::Error:
-                btnSeriesDatasetAction_->setText("Redownload Dataset");
-                btnSeriesDatasetAction_->setIcon(QIcon(":/icon/error.svg"));
-                btnSeriesDatasetAction_->setObjectName("actionError");
-                break;
-        }
-
-        btnSeriesDatasetAction_->style()->unpolish(btnSeriesDatasetAction_);
-        btnSeriesDatasetAction_->style()->polish(btnSeriesDatasetAction_);
-    });
-
-    connect(seriesListDbManager_, &DatasetManager::downloadProgress, this, [this](qint64 got, qint64 total){
-        double recMB = got / (1024.0*1024.0);
-        pbDataset_->setVisible(true);
-        lblDatasetStatus_->setVisible(true);
-        if (total > 0) {
-            pbDataset_->setRange(0, 100);
-            int percent = static_cast<int>((got * 100) / total);
-            pbDataset_->setValue(percent);
-            double totalMB = total / (1024.0*1024.0);
-            lblDatasetStatus_->setText(QString("Downloading: %1 MB / %2 MB (%3%)")
-                .arg(recMB,0,'f',1).arg(totalMB,0,'f',1).arg(percent));
-        } else if (got > 0) {
-            pbDataset_->setRange(0, 0);
-            lblDatasetStatus_->setText(QString("Downloading: %1 MB...").arg(recMB,0,'f',1));
-        }
-    });
+    connect(seriesRepository_, &SeriesRepository::seriesProgress, this,
+            [this](qint64 got, qint64 total){
+                double recMB = got / (1024.0*1024.0);
+                pbDataset_->setVisible(true);
+                lblDatasetStatus_->setVisible(true);
+                if (total > 0) {
+                    pbDataset_->setRange(0, 100);
+                    int percent = static_cast<int>((got * 100) / total);
+                    pbDataset_->setValue(percent);
+                    double totalMB = total / (1024.0*1024.0);
+                    lblDatasetStatus_->setText(QString("Downloading: %1 MB / %2 MB (%3%)")
+                                                   .arg(recMB,0,'f',1).arg(totalMB,0,'f',1).arg(percent));
+                } else if (got > 0) {
+                    pbDataset_->setRange(0, 0);
+                    lblDatasetStatus_->setText(QString("Downloading: %1 MB...").arg(recMB,0,'f',1));
+                }
+            });
 
     // advanced settings
     auto* advToggle = new QPushButton("▸ Advanced settings");
@@ -264,6 +254,34 @@ void SettingsPage::buildUi()
     advForm->setContentsMargins(20, 20, 20, 20);
     advForm->setSpacing(12);
     advForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+
+    btnSeriesDatasetReset_ = new QPushButton("Reset SeriesList", advWidget);
+    btnSeriesDatasetReset_->setObjectName("actionError");
+    btnSeriesDatasetReset_->setCursor(Qt::PointingHandCursor);
+    btnSeriesDatasetReset_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btnSeriesDatasetReset_->setMinimumHeight(36);
+
+    btnCardDatasetReset_ = new QPushButton("Reset CardList", advWidget);
+    btnCardDatasetReset_->setObjectName("actionError");
+    btnCardDatasetReset_->setCursor(Qt::PointingHandCursor);
+    btnCardDatasetReset_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btnCardDatasetReset_->setMinimumHeight(36);
+
+    auto* resetDatasetBtnRow = new QHBoxLayout();
+    resetDatasetBtnRow->setContentsMargins(0, 0, 0, 0);
+    resetDatasetBtnRow->addWidget(btnSeriesDatasetReset_);
+    resetDatasetBtnRow->addWidget(btnCardDatasetReset_);
+    resetDatasetBtnRow->addStretch(1);
+
+    advForm->addRow(resetDatasetBtnRow);
+
+    connect(btnSeriesDatasetReset_, &QPushButton::clicked, this, [this]{
+        seriesRepository_->resetSeries();
+    });
+
+    connect(btnCardDatasetReset_, &QPushButton::clicked, this, [this]{
+        seriesRepository_->resetCards();
+    });
 
     imgSizeSpin_ = new QSpinBox;
     imgSizeSpin_->setRange(64, 1024);

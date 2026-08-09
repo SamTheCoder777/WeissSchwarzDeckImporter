@@ -6,7 +6,6 @@
 #include <QVector>
 #include <QString>
 #include <QFile>
-#include "../database/DatasetManager.h"
 
 class IndexCatalog : public QAbstractListModel {
     Q_OBJECT
@@ -23,7 +22,7 @@ public:
                  InstalledVersionRole, SizeTextRole, StatusRole,
                  ProgressRole, DownloadingRole };
 
-    explicit IndexCatalog(DatasetManager* cardListDbManager, DatasetManager* seriesListDbManager, QObject* parent = nullptr);
+    explicit IndexCatalog(QObject* parent = nullptr);
 
     int rowCount(const QModelIndex& = {}) const override { return rows_.size(); }
     QVariant data(const QModelIndex& idx, int role) const override;
@@ -73,9 +72,6 @@ private:
     void finishDownload(bool ok, const QString& message);
     QString dirFor(const QString& id) const;
     void touchRow(int row);
-
-    DatasetManager* cardListDbManager_;
-    DatasetManager* seriesListDbManager_;
 
     QNetworkAccessManager nam_;
     QNetworkReply* reply_ = nullptr;

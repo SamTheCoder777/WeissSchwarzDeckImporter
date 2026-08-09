@@ -12,9 +12,8 @@
 static const char* MANIFEST_URL =
     "https://huggingface.co/datasets/SamTheCoder777/ws-index/raw/main/manifest.json";
 
-IndexCatalog::IndexCatalog(DatasetManager* cardListDbManager, DatasetManager* seriesListDbManager,
-                           QObject* parent) :
-    QAbstractListModel(parent), cardListDbManager_(cardListDbManager), seriesListDbManager_(seriesListDbManager)
+IndexCatalog::IndexCatalog(QObject* parent) :
+    QAbstractListModel(parent)
 {
     QDir().mkpath(installRoot());
 }
@@ -56,13 +55,11 @@ void IndexCatalog::touchRow(int row) {
         emit dataChanged(index(row), index(row));
 }
 
-// ── installed-state file: <appdata>/indexes/installed.json ─────────────────
 void IndexCatalog::loadInstalledState() {
     QFile f(installRoot() + "/installed.json");
     if (!f.open(QIODevice::ReadOnly)) return;
     QJsonObject o = QJsonDocument::fromJson(f.readAll()).object();
     for (Row& r : rows_) {
-        // only count it as installed if the files are actually still on disk
         const QString v = o.value(r.id).toString();
         if (!v.isEmpty() && QFile::exists(dirFor(r.id) + "/index.faiss"))
             r.installedVersion = v;
@@ -81,7 +78,6 @@ void IndexCatalog::saveInstalledState() {
         f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));
 }
 
-// ── manifest ────────────────────────────────────────────────────────────────
 void IndexCatalog::refresh() {
     if (reply_) return;
     setStatus("Checking for index updates…");
@@ -152,7 +148,6 @@ void IndexCatalog::useById(const QString& id) {
         if (rows_[i].id == id) { use(i); return; }
 }
 
-// ── download (files fetched one after another) ─────────────────────────────
 void IndexCatalog::download(int row) {
     if (reply_ || row < 0 || row >= rows_.size()) return;
     dlRow_  = row;
@@ -172,7 +167,7 @@ void IndexCatalog::startNextFile() {
     if (dlRow_ < 0 || dlRow_ >= rows_.size()) return;
     Row& r = rows_[dlRow_];
 
-    if (dlFile_ >= r.files.size()) {              // all files done
+    if (dlFile_ >= r.files.size()) {
         r.installedVersion = r.version;
         saveInstalledState();
         finishDownload(true, r.name + " installed (v" + r.version + ").");
@@ -220,7 +215,6 @@ void IndexCatalog::startNextFile() {
         Row& r = rows_[dlRow_];
         const FileEntry& fe = r.files[dlFile_];
 
-        // optional integrity check
         if (!fe.sha256.isEmpty()) {
             QFile f(outFile_.fileName());
             if (f.open(QIODevice::ReadOnly)) {
