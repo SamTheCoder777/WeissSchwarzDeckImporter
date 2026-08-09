@@ -92,8 +92,9 @@ void IndexCatalog::loadInstalledState()
         const QString v = o.value(r.id).toString();
         if (!v.isEmpty() && QFile::exists(dirFor(r.id) + "/index.faiss"))
             r.installedVersion = v;
-        else
+        else if (!r.isCustom){
             r.installedVersion.clear();
+        }
     }
 }
 
