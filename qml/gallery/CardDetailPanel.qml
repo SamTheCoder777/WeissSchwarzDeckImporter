@@ -65,7 +65,7 @@ ScrollView {
 
         SelText {
             Layout.fillWidth: true
-            text: !root.card.cardName ? "Data not available\nChange Language" : root.card.cardName
+            text: !root.card.cardName ? "Data not available" : root.card.cardName
             font.pixelSize: 20
             font.bold: true
             color: "#f0f0f0"

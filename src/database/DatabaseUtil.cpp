@@ -112,22 +112,37 @@ QVariantMap DatabaseUtil::cardDataFor(const QString &cardCode) const {
         return !b.value("name").toString().isEmpty()
         || !b.value("ability").toArray().isEmpty();
     };
-    QJsonObject blk = localeBlock(locale_);
-    const bool available = blockHasContent(blk);
-    card["locale"] = locale_;
-    card["localeAvailable"] = available;
 
-    if (!available) {
+    QJsonObject selBlk = localeBlock(locale_);
+    QString otherLoc = (locale_ == "EN") ? "JP" : "EN";
+    QJsonObject otherBlk = localeBlock(otherLoc);
+
+    QJsonObject blk;
+    bool anyAvailable = true;
+    if (blockHasContent(selBlk)) {
+        blk = selBlk;
+        card["locale"] = locale_;
+    } else if (blockHasContent(otherBlk)) {
+        blk = otherBlk;
+        card["locale"] = otherLoc;
+    } else {
+        anyAvailable = false;
+    }
+    card["localeAvailable"] = anyAvailable;
+
+    if (!anyAvailable) {
         card["cardName"] = "";
         card["text"]     = "";
         card["flavor"]   = "";
         card["feature1"] = "";
         card["feature2"] = "";
+        card["features"] = "";
+        card["source"]   = o.value("_source").toString().isEmpty()
+                             ? "encoredecks" : o.value("_source").toString();
         return card;
     }
 
     QString name = blk.value("name").toString();
-    if (name.isEmpty()) name = o.value("name").toString();
     card["cardName"] = name;
 
     QStringList lines;
@@ -142,8 +157,7 @@ QVariantMap DatabaseUtil::cardDataFor(const QString &cardCode) const {
     card["feature2"] = attrs.value(1);
     card["features"] = attrs.join(" / ");
 
-    card["localeAvailable"] = o.value("_localeAvailable").toBool(true);
-    card["source"]          = o.value("_source").toString().isEmpty()
+    card["source"] = o.value("_source").toString().isEmpty()
                          ? "encoredecks" : o.value("_source").toString();
 
     return card;

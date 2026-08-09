@@ -37,6 +37,7 @@ private:
     QLabel *lblDatasetStatus_;
     QPushButton *btnSeriesDatasetReset_;
     QPushButton *btnCardDatasetReset_;
+    QPushButton *btnPurgeFallback_;
     QProgressBar *pbDataset_;
 
     DatasetManager::UpdateStatus dbUpdateStatus_;

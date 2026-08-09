@@ -267,10 +267,17 @@ void SettingsPage::buildUi()
     btnCardDatasetReset_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     btnCardDatasetReset_->setMinimumHeight(36);
 
+    btnPurgeFallback_ = new QPushButton("Purge Fallbacks", advWidget);
+    btnPurgeFallback_->setObjectName("actionError");
+    btnPurgeFallback_->setCursor(Qt::PointingHandCursor);
+    btnPurgeFallback_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btnPurgeFallback_->setMinimumHeight(36);
+
     auto* resetDatasetBtnRow = new QHBoxLayout();
     resetDatasetBtnRow->setContentsMargins(0, 0, 0, 0);
     resetDatasetBtnRow->addWidget(btnSeriesDatasetReset_);
     resetDatasetBtnRow->addWidget(btnCardDatasetReset_);
+    resetDatasetBtnRow->addWidget(btnPurgeFallback_);
     resetDatasetBtnRow->addStretch(1);
 
     advForm->addRow(resetDatasetBtnRow);
@@ -281,6 +288,16 @@ void SettingsPage::buildUi()
 
     connect(btnCardDatasetReset_, &QPushButton::clicked, this, [this]{
         seriesRepository_->resetCards();
+    });
+
+    connect(btnPurgeFallback_, &QPushButton::clicked, this, [this]{
+        seriesRepository_->purgeFallbackCards();
+    });
+
+    connect(seriesRepository_, &SeriesRepository::fallbackCardsPurged, this, [this](int n){
+        QMessageBox::information(this, "Purge complete",
+                                 QString("Removed %1 fallback card(s). They will re-fetch from EncoreDecks "
+                                         "if available next time they're viewed.").arg(n));
     });
 
     imgSizeSpin_ = new QSpinBox;

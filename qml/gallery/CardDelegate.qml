@@ -104,7 +104,7 @@ Rectangle {
             width: parent.width
             text: {
                 if (!root.fullData.cardName)
-                    return "Data not available\nChange Language";
+                    return "Data not available";
                 else
                     return root.fullData.cardName;
                 //return root.label;

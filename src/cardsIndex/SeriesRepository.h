@@ -33,6 +33,7 @@ public:
     void cancel();
     void resetSeries();
     void resetCards();
+    void purgeFallbackCards();
 
 signals:
     void statusChanged(const QString& s);
@@ -43,6 +44,7 @@ signals:
     void seriesProgress(qint64 received, qint64 total);
     void updateAvailable(SeriesRepository::UpdateStatus status);
     void busyChanged();
+    void fallbackCardsPurged(int count);
 
 private:
     QSqlDatabase seriesDb() const;

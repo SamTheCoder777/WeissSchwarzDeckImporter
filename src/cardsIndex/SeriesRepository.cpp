@@ -313,3 +313,18 @@ void SeriesRepository::resetCards() {
     setStatus("Card lists reset.");
     emit seriesListUpdated();
 }
+
+void SeriesRepository::purgeFallbackCards()
+{
+    QSqlDatabase db = cardDb();
+    QSqlQuery q(db);
+    q.prepare("DELETE FROM cards WHERE series_id = '__official__'");
+    if (q.exec()) {
+        int n = q.numRowsAffected();
+        setStatus(QString("Purged %1 fallback card(s).").arg(n));
+        emit fallbackCardsPurged(n);
+        emit seriesListUpdated();
+    } else {
+        emit errorOccurred("Purge failed: " + q.lastError().text());
+    }
+}
