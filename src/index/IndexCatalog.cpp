@@ -17,6 +17,14 @@ IndexCatalog::IndexCatalog(QObject *parent)
     QDir().mkpath(installRoot());
 }
 
+QJsonObject IndexCatalog::readInstalledJson() const
+{
+    QFile f(installRoot() + "/installed.json");
+    if (!f.open(QIODevice::ReadOnly))
+        return {};
+    return QJsonDocument::fromJson(f.readAll()).object();
+}
+
 QString IndexCatalog::installRoot() const
 {
     return Config::instance().getIndexInstallPath();
@@ -84,15 +92,25 @@ void IndexCatalog::touchRow(int row)
 
 void IndexCatalog::loadInstalledState()
 {
-    QFile f(installRoot() + "/installed.json");
-    if (!f.open(QIODevice::ReadOnly))
-        return;
-    QJsonObject o = QJsonDocument::fromJson(f.readAll()).object();
+    const QJsonObject o = readInstalledJson();
     for (Row &r : rows_) {
-        const QString v = o.value(r.id).toString();
-        if (!v.isEmpty() && QFile::exists(dirFor(r.id) + "/index.faiss"))
+        const QJsonValue entry = o.value(r.id);
+        QString v;
+        bool storedCustom = r.isCustom;
+
+        if (entry.isObject()) {
+            const QJsonObject eo = entry.toObject();
+            v = eo.value("version").toString();
+            storedCustom = eo.value("custom").toBool(r.isCustom);
+        } else if (entry.isString()) {
+            v = entry.toString();
+            storedCustom = (v == "local");
+        }
+
+        if (!v.isEmpty() && QFile::exists(dirFor(r.id) + "/index.faiss")) {
             r.installedVersion = v;
-        else if (!r.isCustom){
+            r.isCustom = storedCustom;
+        } else if (!r.isCustom) {
             r.installedVersion.clear();
         }
     }
@@ -101,9 +119,14 @@ void IndexCatalog::loadInstalledState()
 void IndexCatalog::saveInstalledState()
 {
     QJsonObject o;
-    for (const Row &r : rows_)
-        if (!r.installedVersion.isEmpty())
-            o.insert(r.id, r.installedVersion);
+    for (const Row &r : rows_){
+        if (r.installedVersion.isEmpty())
+            continue;
+        QJsonObject entry;
+        entry.insert("version", r.installedVersion);
+        entry.insert("custom", r.isCustom);
+        o.insert(r.id, entry);
+    }
     QDir().mkpath(installRoot());
     QFile f(installRoot() + "/installed.json");
     if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
@@ -128,6 +151,7 @@ void IndexCatalog::refresh()
     rows_.clear();
     scanLocalIndexes();
     loadInstalledState();
+    pruneMissingCustomRows();
     endResetModel();
 
     QNetworkRequest req{QUrl(Config::instance().getIndexManifestUrl())};
@@ -201,6 +225,7 @@ void IndexCatalog::refresh()
             }
         }
         loadInstalledState();
+        pruneMissingCustomRows();
         endResetModel();
 
         int updates = 0;
@@ -396,8 +421,32 @@ void IndexCatalog::removeIndex(int row)
     setStatus(rows_[row].name + " removed.");
 }
 
+void IndexCatalog::pruneMissingCustomRows()
+{
+    bool changed = false;
+    for (int i = rows_.size() - 1; i >= 0; --i) {
+        Row &r = rows_[i];
+
+        if (!r.isCustom)
+            continue;
+        if (r.downloading)
+            continue;
+        if (dlId_ == r.id)
+            continue;
+
+        const bool folderGone = !QFile::exists(dirFor(r.id) + "/index.faiss");
+        if (folderGone) {
+            rows_.remove(i);
+            changed = true;
+        }
+    }
+    if (changed)
+        saveInstalledState();
+}
+
 void IndexCatalog::scanLocalIndexes()
 {
+    const QJsonObject installed = readInstalledJson();
     QDir root(installRoot());
     QVector<Row> disk;
     const QStringList subdirs = root.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
@@ -414,7 +463,12 @@ void IndexCatalog::scanLocalIndexes()
         r.name = id;
         r.desc = "Local index";
         r.installedVersion = "local";
-        r.isCustom = true;
+
+        bool knownAsCatalog = false;
+        const QJsonValue entry = installed.value(id);
+        if (entry.isObject())
+            knownAsCatalog = !entry.toObject().value("custom").toBool(true);
+        r.isCustom = !knownAsCatalog;
 
         for (const QFileInfo &fi : d.entryInfoList(QDir::Files))
             r.totalSize += fi.size();

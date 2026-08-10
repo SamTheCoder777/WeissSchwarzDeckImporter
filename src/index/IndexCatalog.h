@@ -75,6 +75,8 @@ private:
     void touchRow(int row);
     void scanLocalIndexes();
     int dlRowById();
+    QJsonObject readInstalledJson() const;
+    void pruneMissingCustomRows();
 
     QNetworkAccessManager nam_;
     QNetworkReply* reply_ = nullptr;
