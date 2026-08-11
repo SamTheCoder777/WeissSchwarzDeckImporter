@@ -45,6 +45,8 @@ private:
     cv::Mat  sourceBgr_;
     QString  sourcePath_;
 
+    QMap<int, int> selRotations_;
+
     QFutureWatcher<void> detectWatcher_;
 
     struct SelState {
@@ -53,6 +55,7 @@ private:
         std::string cardId;
         int         qty = 1;
         int id = -1;
+        int rotation = 0;
     };
 
     QVector<SelState> sel_;
@@ -73,6 +76,7 @@ private:
     cv::Mat cropForSelection(int index) const;
     void runDetection();
     void showSelectionResults(int index);
+    void rotateSelectionImage(int index, int rot);
     void confirmCandidate(int candIndex);
     void exportDeck();
     QImage handlePasteImage(QLabel *imageLabel);

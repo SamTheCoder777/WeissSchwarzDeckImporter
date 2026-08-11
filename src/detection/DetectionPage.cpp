@@ -208,6 +208,7 @@ void DetectionPage::buildUi() {
     });
 
     connect(bridge_, &UiBridge::selectCardRequested, this, &DetectionPage::showSelectionResults);
+    connect(bridge_, &UiBridge::rotateCardRequested, this, &DetectionPage::rotateSelectionImage);
     connect(bridge_, &UiBridge::confirmRequested,    this, &DetectionPage::confirmCandidate);
     connect(bridge_, &UiBridge::exportRequested,     this, &DetectionPage::exportDeck);
     connect(bridge_, &UiBridge::detectRequested,     this, &DetectionPage::runDetection);
@@ -439,7 +440,8 @@ void DetectionPage::pushStateToQml() {
     QString confText = isConf ? QString("Confirmed: %1").arg(QString::fromStdString(sel_[currentSel_].cardId))
                               : QStringLiteral("Not confirmed");
     int qty = (currentSel_ >= 0 && currentSel_ < sel_.size()) ? sel_[currentSel_].qty : 1;
-    bridge_->setState(summary, confText, isConf, qty, currentSel_, models_->retriever() != nullptr);
+    int rotation = (currentSel_ >= 0) ? sel_[currentSel_].rotation : 0;
+    bridge_->setState(summary, confText, isConf, qty, currentSel_, rotation, models_->retriever() != nullptr);
 }
 
 void DetectionPage::openImage() {
@@ -478,6 +480,18 @@ cv::Mat DetectionPage::cropForSelection(int index) const {
     QPolygonF poly = canvas_->selection(index);
     if (poly.isEmpty() || sourceBgr_.empty()) return {};
 
+    auto applyRotation = [this, index](cv::Mat& img) {
+        int deg = sel_[index].rotation;
+        deg = ((deg % 360) + 360) % 360;
+
+        if (deg == 90)
+            cv::rotate(img, img, cv::ROTATE_90_CLOCKWISE);
+        else if (deg == 180)
+            cv::rotate(img, img, cv::ROTATE_180);
+        else if (deg == 270)
+            cv::rotate(img, img, cv::ROTATE_90_COUNTERCLOCKWISE);
+    };
+
     if (poly.size() == 4) {
         std::vector<cv::Point2f> p;
         for (const QPointF& q : poly) p.emplace_back((float)q.x(), (float)q.y());
@@ -502,6 +516,7 @@ cv::Mat DetectionPage::cropForSelection(int index) const {
             cv::Mat warped;
             cv::warpPerspective(sourceBgr_, warped, M, cv::Size(W, H),
                                 cv::INTER_CUBIC, cv::BORDER_CONSTANT, cv::Scalar(114,114,114));
+            applyRotation(warped);
             return warped;
         }
     }
@@ -522,6 +537,7 @@ cv::Mat DetectionPage::cropForSelection(int index) const {
     cv::fillPoly(mask, polys, cv::Scalar(255));
     cv::Mat out(crop.size(), crop.type(), cv::Scalar(114, 114, 114));
     crop.copyTo(out, mask);
+    applyRotation(out);
     return out;
 }
 
@@ -579,6 +595,13 @@ void DetectionPage::showSelectionResults(int index) {
 
     candModel_->setCandidates(sel_[index].cands, sel_[index].cardId);
     pushStateToQml();
+}
+
+void DetectionPage::rotateSelectionImage(int index, int rot)
+{
+    sel_[index].rotation = sel_[index].rotation + rot;
+    //qDebug() << "Rotation "<<index<<": "<<sel_[index].rotation;
+    showSelectionResults(index); //update image
 }
 
 void DetectionPage::confirmCandidate(int candIndex) {

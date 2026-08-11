@@ -140,6 +140,7 @@ Rectangle {
             }
         }
 
+
         // ── crop preview + confirmed state + quantity ──────────────────────
         Rectangle {
             Layout.fillWidth: true
@@ -165,6 +166,7 @@ Rectangle {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: bridge.openCompare()
                         Image {
+                            id: cropImage
                             anchors.fill: parent
                             anchors.margins: 4
                             fillMode: Image.PreserveAspectFit
@@ -186,6 +188,18 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     spacing: 6
+                    RowLayout {
+                            spacing: 2
+
+                            Button {
+                                text: "⟲"
+                                onClicked: bridge.rotateCardRequested(bridge.currentIndex, -90)
+                            }
+                            Button {
+                                text: "⟳"
+                                onClicked: bridge.rotateCardRequested(bridge.currentIndex, 90)
+                            }
+                        }
                     Label {
                         text: "Your crop"
                         color: root.text2
