@@ -281,6 +281,7 @@ Rectangle {
                 model: candModel
                 spacing: 8
                 clip: true
+                reuseItems: true
                 WheelHandler {
                     onWheel: event => {
                         candView.contentY = Math.max(0, Math.min(candView.contentHeight - candView.height, candView.contentY - event.angleDelta.y));
@@ -308,6 +309,7 @@ Rectangle {
                     property string code: deckCode
                     property var _cardData: ({})
                     property bool isOfficial: _cardData.source === "official"
+                    property bool imageLoaded: false
 
                     function refreshCardData() {
                         if (code)
@@ -316,24 +318,24 @@ Rectangle {
 
                     onCodeChanged: {
                         _cardData = ({});
+                        imageLoaded = false;
                         if (code) {
                             cardDatabase.ensureCardData(code);
-                            refreshCardData();
                         }
                     }
 
                     Component.onCompleted: {
                         if (code) {
                             cardDatabase.ensureCardData(code);
-                            refreshCardData();
                         }
                     }
 
                     Connections {
                         target: cardDatabase
                         function onCardReady(c) {
-                            if (c === delegateRoot.code){
+                            if (c === delegateRoot.code && !delegateRoot.imageLoaded){
                                 delegateRoot.refreshCardData();
+                                delegateRoot.imageLoaded = true;
                                 candImg.rev++;
                             }
                         }
