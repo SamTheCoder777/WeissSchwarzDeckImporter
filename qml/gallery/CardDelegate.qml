@@ -51,11 +51,9 @@ Rectangle {
 
     Component.onCompleted: {
         cardDatabase.ensureCardData(cardId);
-        refresh();
     }
     onCardIdChanged: {
         cardDatabase.ensureCardData(cardId);
-        refresh();
     }
     onPreloadedChanged: refresh()
 
