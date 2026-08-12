@@ -140,7 +140,6 @@ Rectangle {
             }
         }
 
-
         // ── crop preview + confirmed state + quantity ──────────────────────
         Rectangle {
             Layout.fillWidth: true
@@ -162,8 +161,10 @@ Rectangle {
                     border.width: 1
                     clip: true
                     MouseArea {
+                        id: imageArea
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
                         onClicked: bridge.openCompare()
                         Image {
                             id: cropImage
@@ -172,6 +173,100 @@ Rectangle {
                             fillMode: Image.PreserveAspectFit
                             cache: true
                             source: bridge.currentIndex >= 0 ? "image://crop/current?rev=" + bridge.cropRev : ""
+                        }
+
+                        Rectangle{
+                            width: parent.width
+                            height: parent.height
+                            anchors.centerIn: parent
+                            color: Qt.rgba(0, 0, 0, 0.50)
+
+                            Text {
+                                text: "Click to expand"
+                                color: "yellow"
+                                font.pixelSize: 12
+                                opacity: imageArea.containsMouse ? 1.0 : 0.0
+                            }
+                        }
+
+                        Rectangle {
+                            id: dropdownBar
+                            width: parent.width
+                            anchors.margins: 4
+                            anchors.bottom: parent.bottom
+                            height: 28
+                            color: Qt.rgba(0, 0, 0, 0.50)
+                            radius: 12
+
+                            y: imageArea.containsMouse ? 0 : height
+                            opacity: imageArea.containsMouse ? 1.0 : 0.0
+
+                            Behavior on y {
+                                NumberAnimation {
+                                    duration: 200
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 150
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.ArrowCursor
+                            }
+
+
+                            // Rotate image buttons
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 20
+
+                                Rectangle {
+                                    width: 26
+                                    height: 26
+                                    radius: 13
+                                    color: leftBtnArea.containsMouse ? Qt.rgba(1, 1, 1, 0.2) : "transparent"
+
+                                    Image {
+                                        anchors.centerIn: parent
+                                        source: "qrc:/icon/rotate_l.svg"
+                                        sourceSize: Qt.size(20, 20)
+                                    }
+
+                                    MouseArea {
+                                        id: leftBtnArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: bridge.rotateCardRequested(bridge.currentIndex, -90)
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: 26
+                                    height: 26
+                                    radius: 13
+                                    color: rightBtnArea.containsMouse ? Qt.rgba(1, 1, 1, 0.2) : "transparent"
+
+                                    Image {
+                                        anchors.centerIn: parent
+                                        source: "qrc:/icon/rotate_r.svg"
+                                        sourceSize: Qt.size(20, 20)
+                                    }
+
+                                    MouseArea {
+                                        id: rightBtnArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: bridge.rotateCardRequested(bridge.currentIndex, 90)
+                                    }
+                                }
+                            }
                         }
                     }
                     Label {
@@ -188,18 +283,6 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     spacing: 6
-                    RowLayout {
-                            spacing: 2
-
-                            Button {
-                                text: "⟲"
-                                onClicked: bridge.rotateCardRequested(bridge.currentIndex, -90)
-                            }
-                            Button {
-                                text: "⟳"
-                                onClicked: bridge.rotateCardRequested(bridge.currentIndex, 90)
-                            }
-                        }
                     Label {
                         text: "Your crop"
                         color: root.text2
@@ -347,7 +430,7 @@ Rectangle {
                     Connections {
                         target: cardDatabase
                         function onCardReady(c) {
-                            if (c === delegateRoot.code && !delegateRoot.imageLoaded){
+                            if (c === delegateRoot.code && !delegateRoot.imageLoaded) {
                                 delegateRoot.refreshCardData();
                                 delegateRoot.imageLoaded = true;
                                 candImg.rev++;
@@ -373,7 +456,7 @@ Rectangle {
                                 anchors.margins: 2
                                 fillMode: Image.PreserveAspectFit
                                 asynchronous: true
-                                source: deckCode ? "image://cardcache/" + encodeURIComponent(deckCode) + "?r=" + candImg.rev: ""
+                                source: deckCode ? "image://cardcache/" + encodeURIComponent(deckCode) + "?r=" + candImg.rev : ""
                                 cache: true
                             }
                         }
