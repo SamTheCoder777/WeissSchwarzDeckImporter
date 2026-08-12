@@ -31,6 +31,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     dbUtil_->setLocale(Config::instance().getPreferredLocale());
     models_    = new ModelService(this);
 
+    connect(models_, &ModelService::statusChanged, this, [this](QString msg){
+        statusBar()->showMessage(msg);
+    });
+
     catalog_ = new IndexCatalog(this);
     seriesRepo_    = new SeriesRepository(this);
     seriesRepo_->checkForUpdates();

@@ -37,7 +37,7 @@ ModelService::ModelService(QObject *parent):
         Config::instance().setCurModelPath(onnx_);
         Config::instance().setCurYoloModelPath(pendingYolo_);
         loaded_ = true;
-        emit statusChanged("Model + index loaded OK. Go to Detection.");
+        emit statusChanged("Model + index loaded OK.");
         //pushStateToQml();
     });
 }
