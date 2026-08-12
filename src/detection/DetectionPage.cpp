@@ -599,8 +599,8 @@ void DetectionPage::showSelectionResults(int index) {
 
 void DetectionPage::rotateSelectionImage(int index, int rot)
 {
+    if (index+1 > sel_.length() || sel_.isEmpty()) return;
     sel_[index].rotation = sel_[index].rotation + rot;
-    //qDebug() << "Rotation "<<index<<": "<<sel_[index].rotation;
     showSelectionResults(index); //update image
 }
 
