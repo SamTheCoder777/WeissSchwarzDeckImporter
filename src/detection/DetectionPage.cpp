@@ -48,12 +48,9 @@ DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, Selecti
     });
     candModel_->setDatabaseUtil(dbUtil_);
 
-    // allow pasting images/files only on windows. Mac crashes for some reason
-    #ifdef _WIN32
     QShortcut *pasteShortcut = new QShortcut(QKeySequence::Paste, this);
     connect(pasteShortcut, &QShortcut::activated, this, [this]{
-        QLabel imgLabel;
-        QImage pasted = handlePasteImage(&imgLabel);
+        QImage pasted = handlePasteImage();
         if (pasted.isNull()) return;
         if (models_->isLoading()) {
             QMessageBox::information(this, "Please wait", "The model is still loading.\nCheck status in settings.");
@@ -85,7 +82,6 @@ DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, Selecti
         candModel_->clear();
         pushStateToQml();
     });
-    #endif
 }
 
 void DetectionPage::onModelLoaded(bool) {
@@ -93,7 +89,7 @@ void DetectionPage::onModelLoaded(bool) {
 }
 
 
-QImage DetectionPage::handlePasteImage(QLabel *imageLabel)
+QImage DetectionPage::handlePasteImage()
 {
     QClipboard *clipboard = QGuiApplication::clipboard();
     const QMimeData *mimeData = clipboard->mimeData();
@@ -108,9 +104,6 @@ QImage DetectionPage::handlePasteImage(QLabel *imageLabel)
         if (!urls.isEmpty() && urls.first().isLocalFile())
             image = QImage(urls.first().toLocalFile());
     }
-
-    if (!image.isNull() && imageLabel)
-        imageLabel->setPixmap(QPixmap::fromImage(image));
 
     return image;
 }

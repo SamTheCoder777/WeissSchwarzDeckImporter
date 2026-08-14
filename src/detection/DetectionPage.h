@@ -35,7 +35,7 @@ private:
     QPushButton *polyBtn_;
     QPushButton *autoBtn_;
 
-    std::vector<CardDetection> autoDets_;           // cached detections for current image
+    std::vector<CardDetection> autoDets_;
     bool autoDetectMode_ = false;
     ImageCanvas *canvas_;
 
@@ -79,7 +79,7 @@ private:
     void rotateSelectionImage(int index, int rot);
     void confirmCandidate(int candIndex);
     void exportDeck();
-    QImage handlePasteImage(QLabel *imageLabel);
+    QImage handlePasteImage();
 };
 
 
