@@ -101,3 +101,7 @@ if (WIN32)
                     "$<TARGET_FILE:tcg_app>")
     endif()
 endif()
+
+if (APPLE)
+    set_target_properties(tcg_app PROPERTIES MACOSX_BUNDLE TRUE)
+endif()
