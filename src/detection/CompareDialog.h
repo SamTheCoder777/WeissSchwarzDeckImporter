@@ -7,11 +7,11 @@
 
 #include <QDialog>
 #include <QImage>
-#include <vector>
-#include <QtNetwork>
 #include <QSqlDatabase>
+#include <QtNetwork>
 #include "../database/DatabaseUtil.h"
-#include "../retrieval/tcg_infer.h"      // Candidate
+#include "../models/tcg_infer.h" // Candidate
+#include <vector>
 
 class QLabel;
 class QPushButton;

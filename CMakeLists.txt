@@ -49,7 +49,7 @@ add_executable(tcg_app WIN32
     src/viewmodels/Models.cpp       src/viewmodels/Models.h
     src/index/IndexCatalog.cpp src/index/IndexCatalog.h
     src/viewmodels/UiBridge.h
-    src/retrieval/tcg_infer.cpp    src/retrieval/tcg_infer.h
+
     qml.qrc
     src/retrieval/CardDetector.cpp  src/retrieval/CardDetector.h
     src/detection/CompareDialog.cpp  src/detection/CompareDialog.h
@@ -70,6 +70,7 @@ add_executable(tcg_app WIN32
     src/images/CardImageProvider.h src/images/CardImageProvider.cpp
     src/database/OfficialFallback.cpp src/database/OfficialFallback.h
     src/cardsIndex/CardsPage.cpp src/cardsIndex/CardsPage.h src/cardsIndex/SeriesCatalog.cpp src/cardsIndex/SeriesCatalog.h src/cardsIndex/SeriesRepository.cpp src/cardsIndex/SeriesRepository.h src/cardsIndex/SeriesSearchProxy.h
+    src/models/index_builder.cpp src/models/index_builder.h src/models/tcg_core.cpp src/models/tcg_core.h src/models/tcg_infer.cpp src/models/tcg_infer.h
 )
 target_include_directories(tcg_app PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(tcg_app PRIVATE
