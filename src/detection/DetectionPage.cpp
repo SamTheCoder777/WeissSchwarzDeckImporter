@@ -320,7 +320,7 @@ void DetectionPage::openCompareDialog() {
         for (int i = 0; i < (int)cands.size(); ++i)
             if (cands[i].card_id == sel_[currentSel_].cardId) { start = i; break; }
 
-    QSqlDatabase db;   // CompareDialog signature kept; pass a default db (uses dbUtil_ for images)
+    QSqlDatabase db;
     CompareDialog dlg(cropImg, cands, start, db, dbUtil_, this);
     if (dlg.exec() == QDialog::Accepted) {
         int idx = dlg.confirmedIndex();
@@ -552,6 +552,10 @@ void DetectionPage::runDetection() {
     if (!models_->tcgCore()) {
         QMessageBox::information(this, "No model", "Load a model in Settings first."); return;
     }
+    if (models_->busy()) {
+        QMessageBox::information(this, "please wait", "Model services busy...");
+        return;
+    }
     syncSelections();
     if (sel_.isEmpty()) { QMessageBox::information(this, "No selection", "Select at least one card."); return; }
 
@@ -567,11 +571,17 @@ void DetectionPage::runDetection() {
 
     auto errorMsg = std::make_shared<QString>();
 
+    ModelService *models = models_;
+
     connect(
         &detectWatcher_,
         &QFutureWatcher<void>::finished,
         this,
-        [this, results, errorMsg] {
+        [this, results, errorMsg, models] {
+            models->setBusy(false);
+            QApplication::restoreOverrideCursor();
+            detecting_ = false;
+
             if (!errorMsg->isEmpty()) {
                 QMessageBox::critical(this, "Search Error", *errorMsg);
                 return;
@@ -580,16 +590,15 @@ void DetectionPage::runDetection() {
             for (int i = 0; i < sel_.size() && i < (int) results->size(); ++i)
                 if (!(*results)[i].empty())
                     sel_[i].cands = (*results)[i];
-            QApplication::restoreOverrideCursor();
             if (!sel_.isEmpty()) {
                 showSelectionResults(0);
             }
             pushStateToQml();
-            detecting_ = false;
         },
         Qt::SingleShotConnection);
 
-    ModelService* models = models_;
+    models->setBusy(true);
+
     QFuture<void> fut = QtConcurrent::run([models, crops, results, errorMsg] {
         try {
             for (size_t i = 0; i < crops->size(); ++i)

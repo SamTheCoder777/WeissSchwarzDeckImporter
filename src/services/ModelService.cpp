@@ -49,10 +49,6 @@ ModelService::ModelService(QObject *parent):
     // Model index change watcher
     connect(&coreIndexChangeWatcher_, &QFutureWatcher<void>::finished, this, [this] {
         loading_ = false;
-
-        Config::instance().setIndexInstallPath(indexDir_);
-
-        loaded_ = true;
         emit statusChanged("Index successfully switched");
         //pushStateToQml();
     });
@@ -110,7 +106,7 @@ void ModelService::load(bool silent)
 
 void ModelService::changeIndex(const QString &indexDir)
 {
-    if (loading_)
+    if (loading_ || !loaded_)
         return;
 
     if (indexDir.isEmpty()) {
@@ -124,7 +120,6 @@ void ModelService::changeIndex(const QString &indexDir)
     }
 
     loading_ = true;
-    loaded_ = false;
 
     indexDir_ = indexDir;
 

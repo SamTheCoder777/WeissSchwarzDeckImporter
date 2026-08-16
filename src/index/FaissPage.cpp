@@ -35,7 +35,7 @@ void FaissPage::buildUi()
             models_->setSilent(true);
     });
 
-    // "Use" on a downloaded index -> point the app at it and (re)load the model
+    // use index requested
     connect(catalog_, &IndexCatalog::useIndexRequested, this, [this](const QString& dir) {
         models_->setIndexDir(dir);
         // update default index
@@ -44,13 +44,15 @@ void FaissPage::buildUi()
 
         if (models_->isLoaded()) {
             try{
-                models_->load();     // hot-swap if a model is set
+                models_->changeIndex(dir); // hot-swap if a model is set
             }catch(const std::exception& e){
                 QMessageBox::critical(this, "Error Loading Model", QString::fromStdString(e.what()));
             }
-        }
-        else if(!models_->isSilent()) QMessageBox::information(this, "Index selected",
-                                     "Index set. Choose the ONNX model in Settings, then press Load.");
+        } else if (!models_->isSilent())
+            QMessageBox::information(
+                this,
+                "Index selected",
+                "Index set. Choose the ONNX model in Settings, then press Load.");
 
         models_->setSilent(false);
     });
