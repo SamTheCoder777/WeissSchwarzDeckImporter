@@ -13,6 +13,9 @@ Rectangle {
     property var fullData: ({})
     readonly property bool loaded: fullData && fullData.picture !== undefined
 
+    property bool fetchFailed: false
+    property string failReason: ""
+
     signal cardClicked(var data)
 
     property int pad: 12
@@ -53,6 +56,8 @@ Rectangle {
         cardDatabase.ensureCardData(cardId);
     }
     onCardIdChanged: {
+        fetchFailed = false;
+        failReason = "";
         cardDatabase.ensureCardData(cardId);
     }
     onPreloadedChanged: refresh()
@@ -60,13 +65,20 @@ Rectangle {
     Connections {
         target: cardDatabase
         function onCardReady(code) {
-            if (code === root.cardId){
+            if (code === root.cardId) {
+                root.fetchFailed = false;
                 root.refresh();
                 img.rev++;
             }
         }
         function onLocaleChanged() {
             root.refresh();
+        }
+        function onCardFetchFailed(code, reason) {
+            if (code === root.cardId) {
+                root.fetchFailed = true;
+                root.failReason = reason;
+            }
         }
     }
 
@@ -87,7 +99,7 @@ Rectangle {
                 id: img
                 property int rev: 0
                 anchors.fill: parent
-                source: root.loaded && root.fullData.cardCode ? "image://cardcache/" + encodeURIComponent(root.fullData.cardCode) + "?r=" + rev: ""
+                source: root.loaded && root.fullData.cardCode ? "image://cardcache/" + encodeURIComponent(root.fullData.cardCode) + "?r=" + rev : ""
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
                 cache: true
@@ -98,6 +110,16 @@ Rectangle {
                 height: 24
                 running: img.status === Image.Loading
                 visible: running
+            }
+            Text {
+                anchors.centerIn: parent
+                width: parent.width - 16
+                visible: root.fetchFailed
+                text: root.failReason
+                color: "#9aa0a6"
+                font.pixelSize: 12
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
             }
         }
 

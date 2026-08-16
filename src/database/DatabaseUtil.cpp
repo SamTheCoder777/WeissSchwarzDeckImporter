@@ -68,9 +68,7 @@ QString DatabaseUtil::imageUrlFor(const QString &cardCode) const {
         }
     }
 
-    // Not in encore decks, fall back to official api
-    QString fb = OfficialFallback::imageUrlFromCardcode(cardCode);
-    return fb;
+    return QString();
 }
 
 QVariantMap DatabaseUtil::cardDataFor(const QString &cardCode) const {
@@ -185,7 +183,17 @@ void DatabaseUtil::ensureCardData(const QString& cardCode) {
         }
     }
 
+    auto it = fetchState_.find(cardCode);
+    if (it != fetchState_.end()) {
+        if (it->permanent) {emit cardFetchFailed(cardCode, "No card data available"); return;}
+        if (QDateTime::currentMSecsSinceEpoch() < it->nextRetryMs){
+            emit cardFetchFailed(cardCode, "Rate limited — try again later");
+            return;
+        }
+    }
+
     const QUrl url(OfficialFallback::dataUrlFromCardcode(cardCode));
+    qDebug() << "[DatabaseUtil] api call to: " << url;
     QNetworkRequest req(url);
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
@@ -193,13 +201,38 @@ void DatabaseUtil::ensureCardData(const QString& cardCode) {
     QNetworkReply* reply = nam_.get(req);
     connect(reply, &QNetworkReply::finished, this, [this, reply, cardCode] {
         reply->deleteLater();
+
+        const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
         if (reply->error() != QNetworkReply::NoError) {
-            qDebug() << "official fetch failed for" << cardCode << reply->errorString();
+            auto& st = fetchState_[cardCode];
+            st.failures++;
+
+            if (st.failures >= kMaxRetries) {
+                st.permanent = true;
+                emit cardFetchFailed(cardCode, "Couldn't load...");
+                return;
+            }
+
+            qint64 base = (http == 429) ? 60000 : 5000;
+            qint64 backoff = base * (1 << qMin(st.failures - 1, 4));
+            st.nextRetryMs = QDateTime::currentMSecsSinceEpoch() + backoff;
+            qDebug() << "fetch failed" << cardCode << "http" << http
+                     << "retry in" << backoff << "ms";
+
+            const QString reason = (http == 429) ? "Rate limited — try again later"
+                                                : "Network error";
+            emit cardFetchFailed(cardCode, reason);
             return;
         }
         QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
         QJsonArray items = doc.object().value("items").toArray();
-        if (items.isEmpty()) { qDebug() << "official: no items for" << cardCode; return; }
+        if (items.isEmpty()) {
+            fetchState_[cardCode].permanent = true;
+            qDebug() << "official: no items for" << cardCode;
+            emit cardFetchFailed(cardCode, "No card data available");
+            return;
+        }
         QJsonObject item = items.first().toObject();
         for (const QJsonValue& v : items) {
             if (v.toObject().value("card_number").toString() == cardCode) {
@@ -208,6 +241,7 @@ void DatabaseUtil::ensureCardData(const QString& cardCode) {
         }
         QJsonObject shaped = OfficialFallback::reshapeOfficialItem(item);
         storeOfficialCard(cardCode, shaped);
+        fetchState_.remove(cardCode);
         emit cardReady(cardCode);
     });
 }

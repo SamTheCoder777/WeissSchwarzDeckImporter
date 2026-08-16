@@ -3,19 +3,19 @@
 #include <QJsonArray>
 #include <QRegularExpression>
 
-QString OfficialFallback::imageUrlFromCardcode(const QString& cardcode) {
-    QString code = cardcode.toLower();
-    code.replace('/', '_').replace('-', '_');
-    if (code.isEmpty()) return {};
+// QString OfficialFallback::imageUrlFromCardcode(const QString& cardcode) {
+//     QString code = cardcode.toLower();
+//     code.replace('/', '_').replace('-', '_');
+//     if (code.isEmpty()) return {};
 
-    const QString first = code.left(1);
-    const QStringList parts = code.split('_');
-    if (parts.size() < 2) return {};
-    const QString titleSet = parts[0] + "_" + parts[1];
+//     const QString first = code.left(1);
+//     const QStringList parts = code.split('_');
+//     if (parts.size() < 2) return {};
+//     const QString titleSet = parts[0] + "_" + parts[1];
 
-    return "https://ws-tcg.com/wordpress/wp-content/images/cardlist/"
-           + first + "/" + titleSet + "/" + code + ".png";
-}
+//     return "https://ws-tcg.com/wordpress/wp-content/images/cardlist/"
+//            + first + "/" + titleSet + "/" + code + ".png";
+// }
 
 QString OfficialFallback::dataUrlFromCardcode(const QString& cardcode) {
     return "https://ws-tcg.com/manage/CardListUser/searchJson?keyword="

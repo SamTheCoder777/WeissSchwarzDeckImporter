@@ -24,8 +24,19 @@ public:
 signals:
     void localeChanged();
     void cardReady(const QString& cardCode);
+    void cardFetchFailed(const QString& cardCode, const QString& reason);
 
 private:
+    struct FetchState {
+        int failures = 0;
+        qint64 nextRetryMs = 0;
+        bool permanent = false;
+    };
+
+    static constexpr int kMaxRetries = 4;
+
+    QHash<QString, FetchState> fetchState_;
+
     QString locale_ = "EN";
     QNetworkAccessManager nam_;
     bool cardInDb(const QString& cardCode) const;

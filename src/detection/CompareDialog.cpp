@@ -123,6 +123,7 @@ void CompareDialog::showCandidate(int i) {
 
     candLabel_->setText("loading…");
     const int requested = cur_;
+    qDebug() << "[CompareDialog] api call to: " << url;
     QNetworkReply* r = net_.get(QNetworkRequest(QUrl(url)));
     connect(r, &QNetworkReply::finished, this, [this, r, requested, cachePath]{
         r->deleteLater();

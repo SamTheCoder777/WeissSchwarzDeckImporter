@@ -45,6 +45,7 @@ CardImageResponse::CardImageResponse(const QString& cardCode, const QSize& reque
         }
     }
 
+    qDebug() << "[CandImageProvider] api call to: " << url;
     QNetworkRequest req{QUrl(url)};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);

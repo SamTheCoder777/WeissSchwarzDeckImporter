@@ -175,7 +175,7 @@ Rectangle {
                             source: bridge.currentIndex >= 0 ? "image://crop/current?rev=" + bridge.cropRev : ""
                         }
 
-                        Rectangle{
+                        Rectangle {
                             width: parent.width
                             height: parent.height
                             anchors.centerIn: parent
@@ -218,7 +218,6 @@ Rectangle {
                                 hoverEnabled: true
                                 cursorShape: Qt.ArrowCursor
                             }
-
 
                             // Rotate image buttons
                             Row {
@@ -407,6 +406,9 @@ Rectangle {
                     property var _cardData: ({})
                     property bool isOfficial: _cardData.source === "official"
                     property bool imageLoaded: false
+                    property bool fetchFailed: false
+                    property string failReason: ""
+                    property bool dataLoading: false
 
                     function refreshCardData() {
                         if (code)
@@ -415,8 +417,11 @@ Rectangle {
 
                     onCodeChanged: {
                         _cardData = ({});
+                        fetchFailed = false;
+                        failReason = "";
                         imageLoaded = false;
                         if (code) {
+                            dataLoading = true;
                             cardDatabase.ensureCardData(code);
                         }
                     }
@@ -431,9 +436,18 @@ Rectangle {
                         target: cardDatabase
                         function onCardReady(c) {
                             if (c === delegateRoot.code && !delegateRoot.imageLoaded) {
+                                delegateRoot.dataLoading = false;
+                                delegateRoot.fetchFailed = false;
                                 delegateRoot.refreshCardData();
                                 delegateRoot.imageLoaded = true;
                                 candImg.rev++;
+                            }
+                        }
+                        function onCardFetchFailed(c, reason) {
+                            if (c === delegateRoot.code) {
+                                delegateRoot.dataLoading = false;
+                                delegateRoot.fetchFailed = true;
+                                delegateRoot.failReason = reason;
                             }
                         }
                     }
@@ -458,6 +472,24 @@ Rectangle {
                                 asynchronous: true
                                 source: deckCode ? "image://cardcache/" + encodeURIComponent(deckCode) + "?r=" + candImg.rev : ""
                                 cache: true
+                                visible: !delegateRoot.fetchFailed && status === Image.Ready
+                            }
+                            BusyIndicator {
+                                anchors.centerIn: parent
+                                width: 20
+                                height: 20
+                                running: !delegateRoot.fetchFailed && (delegateRoot.dataLoading || candImg.status === Image.Loading)
+                                visible: running
+                            }
+                            Text {
+                                anchors.centerIn: parent
+                                width: parent.width - 6
+                                visible: delegateRoot.fetchFailed
+                                text: delegateRoot.failReason
+                                color: "#9aa0a6"
+                                font.pixelSize: 9
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.WordWrap
                             }
                         }
 
