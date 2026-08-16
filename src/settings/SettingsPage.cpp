@@ -11,8 +11,9 @@
 #include <QTimer>
 #include <QStyle>
 
-SettingsPage::SettingsPage(ModelService* models, DatasetManager *dbManager, QWidget *parent): QWidget(parent),
-    models_(models), dbManager_(dbManager)
+SettingsPage::SettingsPage(ModelService* models, SeriesRepository* seriesRepository, IndexCatalog* indexCatalog,
+                           QWidget *parent): QWidget(parent),
+    models_(models), seriesRepository_(seriesRepository), indexCatalog_(indexCatalog)
 {
     buildUi();
 }
@@ -96,9 +97,11 @@ void SettingsPage::buildUi()
     bool modelPathLoaded = !Config::instance().getCurModelPath().isNull()
                         && !Config::instance().getCurModelPath().isEmpty();
     onnxEdit_->setText(modelPathLoaded ? Config::instance().getCurModelPath() : "");
+    onnxEdit_->setReadOnly(true);
     bool yoloModelPathLoaded = !Config::instance().getCurYoloModelPath().isNull()
                             && !Config::instance().getCurYoloModelPath().isEmpty();
     yoloEdit_->setText(yoloModelPathLoaded ? Config::instance().getCurYoloModelPath() : "");
+    yoloEdit_->setReadOnly(true);
 
     if (modelPathLoaded && yoloModelPathLoaded) {
         QTimer::singleShot(0, this, [this]() { models_->load(true); });
@@ -124,9 +127,13 @@ void SettingsPage::buildUi()
 
     connect(loadBtn, &QPushButton::clicked, this, [this]{
         if(models_->isLoading()) return;
-        models_->load(onnxEdit_->text(),
-                      models_->getIndexDir(), yoloEdit_->text(),
-                      Config::instance().getModelNative(), Config::instance().getModelImgSize(), false);
+        try{
+            models_->load(onnxEdit_->text(),
+                          models_->getIndexDir(), yoloEdit_->text(),
+                          Config::instance().getModelNative(), Config::instance().getModelImgSize(), false);
+        }catch(const std::exception& e){
+            QMessageBox::critical(this, "Error Loading Model", QString::fromStdString(e.what()));
+        }
     });
 
     connect(models_, &ModelService::statusChanged, this, [this](const QString &statusText) {
@@ -141,6 +148,67 @@ void SettingsPage::buildUi()
         qDebug()<<message;
     });
 
+    // Index settings
+    auto* indexGroup = new QFrame(this);
+    indexGroup->setObjectName("sectionCard");
+
+    auto* indexOuter = new QVBoxLayout(indexGroup);
+    indexOuter->setContentsMargins(20, 20, 20, 20);
+    indexOuter->setSpacing(16);
+
+    auto* indexHeading = new QLabel("Index paths", indexGroup);
+    indexHeading->setObjectName("sectionHeading");
+    indexOuter->addWidget(indexHeading);
+
+    QFormLayout* indexForm = new QFormLayout;
+    indexForm->setSpacing(12);
+    indexForm->setContentsMargins(0, 0, 0, 0);
+    indexForm->setLabelAlignment(Qt::AlignLeft);
+    indexForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    indexOuter->addLayout(indexForm);
+
+    {
+        indexPathEdit_ = new QLineEdit(Config::instance().getIndexInstallPath(), indexGroup);
+        indexPathEdit_->setReadOnly(true);
+        indexPathEdit_->setMinimumHeight(36);
+
+        auto* btnBrowse = new QPushButton("Browse", indexGroup);
+        btnBrowse->setObjectName("actionGhost");
+        btnBrowse->setCursor(Qt::PointingHandCursor);
+        btnBrowse->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        btnBrowse->setMinimumHeight(36);
+
+        auto* row = new QHBoxLayout;
+        row->setSpacing(8);
+        row->setContentsMargins(0, 0, 0, 0);
+        row->addWidget(indexPathEdit_);
+        row->addWidget(btnBrowse);
+        indexForm->addRow("Index folder", row);
+
+        connect(btnBrowse, &QPushButton::clicked, this, [this]{
+            QString p = QFileDialog::getExistingDirectory(this, "Select index folder",
+                                                          Config::instance().getIndexInstallPath());
+            if (!p.isEmpty()) {
+                Config::instance().setIndexInstallPath(p);
+                indexPathEdit_->setText(p);
+                if (indexCatalog_) indexCatalog_->refresh();
+            }
+        });
+    }
+
+    {
+        manifestUrlEdit_ = new QLineEdit(Config::instance().getIndexManifestUrl(), indexGroup);
+        manifestUrlEdit_->setMinimumHeight(36);
+        indexForm->addRow("Manifest URL", manifestUrlEdit_);
+
+        connect(manifestUrlEdit_, &QLineEdit::editingFinished, this, [this]{
+            Config::instance().setIndexManifestUrl(manifestUrlEdit_->text().trimmed());
+            if (indexCatalog_) indexCatalog_->refresh();
+        });
+    }
+
+    outer->addWidget(indexGroup);
+
     // dataset maintenance
     auto* datasetGroup = new QFrame(this);
     datasetGroup->setObjectName("sectionCard");
@@ -149,19 +217,19 @@ void SettingsPage::buildUi()
     groupLayout->setContentsMargins(20, 20, 20, 20);
     groupLayout->setSpacing(16);
 
-    auto* datasetHeading = new QLabel("Dataset maintenance", datasetGroup);
+    auto* datasetHeading = new QLabel("Dataset Maintenance", datasetGroup);
     datasetHeading->setObjectName("sectionHeading");
     groupLayout->addWidget(datasetHeading);
 
-    btnDatasetAction_ = new QPushButton("Check for updates", datasetGroup);
-    btnDatasetAction_->setObjectName("actionPrimary");
-    btnDatasetAction_->setCursor(Qt::PointingHandCursor);
-    btnDatasetAction_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    btnDatasetAction_->setMinimumHeight(36);
+    btnSeriesDownload_ = new QPushButton("Download SerliesList", datasetGroup);
+    btnSeriesDownload_->setObjectName("actionPrimary");
+    btnSeriesDownload_->setCursor(Qt::PointingHandCursor);
+    btnSeriesDownload_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btnSeriesDownload_->setMinimumHeight(36);
 
     auto* datasetBtnRow = new QHBoxLayout();
     datasetBtnRow->setContentsMargins(0, 0, 0, 0);
-    datasetBtnRow->addWidget(btnDatasetAction_);
+    datasetBtnRow->addWidget(btnSeriesDownload_);
     datasetBtnRow->addStretch(1);
     groupLayout->addLayout(datasetBtnRow);
 
@@ -181,59 +249,57 @@ void SettingsPage::buildUi()
 
     outer->addWidget(datasetGroup);
 
-    connect(btnDatasetAction_, &QPushButton::clicked, this, [this]{
-        if (!dbManager_ || dbManager_->isDownloading()) return;
+    connect(btnSeriesDownload_, &QPushButton::clicked, this, [this]{
+        if (seriesRepository_->isBusy()) return;
         pbDataset_->setVisible(true);
-        if (dbUpdateStatus_ == DatasetManager::UpdateStatus::UpdateAvailable) dbManager_->startDownloadAndImport();
-        else                 dbManager_->checkAndLoad(true);
+        seriesRepository_->refreshSeriesList();
     });
 
-    connect(dbManager_, &DatasetManager::statusChanged, this, [this](const QString& s){
+    connect(seriesRepository_, &SeriesRepository::statusChanged, this, [this](const QString& s){
         lblDatasetStatus_->setVisible(!s.isEmpty());
         lblDatasetStatus_->setText(s);
     });
 
-    connect(dbManager_, &DatasetManager::updateAvailable, this, [this](DatasetManager::UpdateStatus status , const QString&){
-        dbUpdateStatus_ = status;
+    connect(seriesRepository_, &SeriesRepository::updateAvailable, this,
+            [this](SeriesRepository::UpdateStatus status){
+                switch (status) {
+                case SeriesRepository::UpdateStatus::UpdateAvailable:
+                    btnSeriesDownload_->setText("Update Series List Now");
+                    btnSeriesDownload_->setIcon(QIcon());
+                    btnSeriesDownload_->setObjectName("actionAccent");
+                    break;
+                case SeriesRepository::UpdateStatus::UpToDate:
+                    btnSeriesDownload_->setText("Redownload Series List");
+                    btnSeriesDownload_->setIcon(QIcon());
+                    btnSeriesDownload_->setObjectName("actionPrimary");
+                    break;
+                case SeriesRepository::UpdateStatus::Error:
+                    btnSeriesDownload_->setText("Download Series List");
+                    btnSeriesDownload_->setIcon(QIcon(":/icon/error.svg"));
+                    btnSeriesDownload_->setObjectName("actionError");
+                    break;
+                }
+                btnSeriesDownload_->style()->unpolish(btnSeriesDownload_);
+                btnSeriesDownload_->style()->polish(btnSeriesDownload_);
+            });
 
-        switch (status) {
-            case DatasetManager::UpdateStatus::UpdateAvailable:
-                btnDatasetAction_->setText("Update Dataset Now");
-                btnDatasetAction_->setIcon(QIcon());
-                btnDatasetAction_->setObjectName("actionAccent");
-                break;
-            case DatasetManager::UpdateStatus::UpToDate:
-                btnDatasetAction_->setText("Redownload Dataset");
-                btnDatasetAction_->setIcon(QIcon());
-                btnDatasetAction_->setObjectName("actionPrimary");
-                break;
-            case DatasetManager::UpdateStatus::Error:
-                btnDatasetAction_->setText("Redownload Dataset");
-                btnDatasetAction_->setIcon(QIcon(":/icon/error.svg"));
-                btnDatasetAction_->setObjectName("actionError");
-                break;
-        }
-
-        btnDatasetAction_->style()->unpolish(btnDatasetAction_);
-        btnDatasetAction_->style()->polish(btnDatasetAction_);
-    });
-
-    connect(dbManager_, &DatasetManager::downloadProgress, this, [this](qint64 got, qint64 total){
-        double recMB = got / (1024.0*1024.0);
-        pbDataset_->setVisible(true);
-        lblDatasetStatus_->setVisible(true);
-        if (total > 0) {
-            pbDataset_->setRange(0, 100);
-            int percent = static_cast<int>((got * 100) / total);
-            pbDataset_->setValue(percent);
-            double totalMB = total / (1024.0*1024.0);
-            lblDatasetStatus_->setText(QString("Downloading: %1 MB / %2 MB (%3%)")
-                .arg(recMB,0,'f',1).arg(totalMB,0,'f',1).arg(percent));
-        } else if (got > 0) {
-            pbDataset_->setRange(0, 0);
-            lblDatasetStatus_->setText(QString("Downloading: %1 MB...").arg(recMB,0,'f',1));
-        }
-    });
+    connect(seriesRepository_, &SeriesRepository::seriesProgress, this,
+            [this](qint64 got, qint64 total){
+                double recMB = got / (1024.0*1024.0);
+                pbDataset_->setVisible(true);
+                lblDatasetStatus_->setVisible(true);
+                if (total > 0) {
+                    pbDataset_->setRange(0, 100);
+                    int percent = static_cast<int>((got * 100) / total);
+                    pbDataset_->setValue(percent);
+                    double totalMB = total / (1024.0*1024.0);
+                    lblDatasetStatus_->setText(QString("Downloading: %1 MB / %2 MB (%3%)")
+                                                   .arg(recMB,0,'f',1).arg(totalMB,0,'f',1).arg(percent));
+                } else if (got > 0) {
+                    pbDataset_->setRange(0, 0);
+                    lblDatasetStatus_->setText(QString("Downloading: %1 MB...").arg(recMB,0,'f',1));
+                }
+            });
 
     // advanced settings
     auto* advToggle = new QPushButton("▸ Advanced settings");
@@ -255,6 +321,51 @@ void SettingsPage::buildUi()
     advForm->setContentsMargins(20, 20, 20, 20);
     advForm->setSpacing(12);
     advForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+
+    btnSeriesDatasetReset_ = new QPushButton("Reset SeriesList", advWidget);
+    btnSeriesDatasetReset_->setObjectName("actionError");
+    btnSeriesDatasetReset_->setCursor(Qt::PointingHandCursor);
+    btnSeriesDatasetReset_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btnSeriesDatasetReset_->setMinimumHeight(36);
+
+    btnCardDatasetReset_ = new QPushButton("Reset CardList", advWidget);
+    btnCardDatasetReset_->setObjectName("actionError");
+    btnCardDatasetReset_->setCursor(Qt::PointingHandCursor);
+    btnCardDatasetReset_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btnCardDatasetReset_->setMinimumHeight(36);
+
+    btnPurgeFallback_ = new QPushButton("Purge Fallbacks", advWidget);
+    btnPurgeFallback_->setObjectName("actionError");
+    btnPurgeFallback_->setCursor(Qt::PointingHandCursor);
+    btnPurgeFallback_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btnPurgeFallback_->setMinimumHeight(36);
+
+    auto* resetDatasetBtnRow = new QHBoxLayout();
+    resetDatasetBtnRow->setContentsMargins(0, 0, 0, 0);
+    resetDatasetBtnRow->addWidget(btnSeriesDatasetReset_);
+    resetDatasetBtnRow->addWidget(btnCardDatasetReset_);
+    resetDatasetBtnRow->addWidget(btnPurgeFallback_);
+    resetDatasetBtnRow->addStretch(1);
+
+    advForm->addRow(resetDatasetBtnRow);
+
+    connect(btnSeriesDatasetReset_, &QPushButton::clicked, this, [this]{
+        seriesRepository_->resetSeries();
+    });
+
+    connect(btnCardDatasetReset_, &QPushButton::clicked, this, [this]{
+        seriesRepository_->resetCards();
+    });
+
+    connect(btnPurgeFallback_, &QPushButton::clicked, this, [this]{
+        seriesRepository_->purgeFallbackCards();
+    });
+
+    connect(seriesRepository_, &SeriesRepository::fallbackCardsPurged, this, [this](int n){
+        QMessageBox::information(this, "Purge complete",
+                                 QString("Removed %1 fallback card(s). They will re-fetch from EncoreDecks "
+                                         "if available next time they're viewed.").arg(n));
+    });
 
     imgSizeSpin_ = new QSpinBox;
     imgSizeSpin_->setRange(64, 1024);

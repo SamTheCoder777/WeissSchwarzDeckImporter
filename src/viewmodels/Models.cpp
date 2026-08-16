@@ -5,21 +5,7 @@
 #include <QUrl>
 #include <QtSql/qsqlerror.h>
 
-// "bd_w125_021" -> "BD/W125-021" (series prefix fixed to BD for now)
-QString toDeckCode(const std::string& cardId) {
-    QString s = QString::fromStdString(cardId).trimmed();
-    QStringList parts = s.split('_', Qt::SkipEmptyParts);
-    if (!parts.isEmpty() && parts.first().compare("bd", Qt::CaseInsensitive) == 0)
-        parts.removeFirst();
-    if (parts.size() >= 2) {
-        QString set = parts.takeFirst().toUpper();
-        return QString("BD/%1-%2").arg(set, parts.join('-').toUpper());
-    }
 
-    return s; // TODO already has CODE/card
-
-    return "BD/" + s.toUpper();
-}
 
 QVariant CandidateModel::data(const QModelIndex& idx, int role) const {
     if (!idx.isValid() || idx.row() >= rows_.size()) return {};
@@ -46,7 +32,7 @@ void CandidateModel::setCandidates(const std::vector<Candidate>& c, const std::s
     for (const auto& x : c) {
         Row r;
         r.cardId    = QString::fromStdString(x.card_id);
-        r.deckCode  = toDeckCode(x.card_id);
+        r.deckCode  = QString::fromStdString(x.card_id);
         r.score     = x.score;
         r.masterUrl = dbUtil_->imageUrlFor(r.cardId);
         r.confirmed = (!confirmedId.empty() && confirmedId == x.card_id);

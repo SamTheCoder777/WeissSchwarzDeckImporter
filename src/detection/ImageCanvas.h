@@ -1,15 +1,3 @@
-// ImageCanvas.h — image display + LabelMe-style card selection.
-//
-// Modes:
-//   Rectangle : drag a box (snip style)
-//   Polygon   : click corners, LIVE preview line follows the cursor,
-//               Enter/double-click/right-click->Finish to close,
-//               Ctrl+Z removes the last point, Esc cancels.
-//
-// Editing (both modes): drag any vertex of a committed selection to move it,
-// click inside a selection to select it, right-click a selection to delete it.
-//
-// Selections are stored in IMAGE coordinates so they survive window resizing.
 #pragma once
 
 #include <QWidget>
@@ -29,7 +17,7 @@ public:
     Mode mode() const { return mode_; }
 
     void clearSelections();
-    void undo();                       // Ctrl+Z: last polygon point, else last selection
+    void undo();
 
     int  selectionCount() const { return sel_.size(); }
     QPolygonF selection(int i) const { return sel_.value(i).poly; }
@@ -37,21 +25,19 @@ public:
     void setHighlight(int index);
     int  highlight() const { return highlight_; }
 
-    // confirmed state drives the colour + label drawn on the canvas
     void setSelectionState(int index, bool confirmed, const QString& label);
 
-    // Add a detected card (4 corners in IMAGE coords) as a committed selection.
     void addQuadSelection(const QPolygonF& quadImageCoords);
-    // Which committed selection contains this WIDGET-space point? -1 if none.
+
     int  selectionAtWidgetPoint(const QPointF& widgetPt) const;
 
-    void reorder(const QVector<int>& newOrder);   // permute selections in place
+    void reorder(const QVector<int>& newOrder);
     int selectionId(int i) const { return sel_.value(i).id; }
 
 signals:
-    void selectionsChanged();              // count changed (added/removed/cleared)
-    void selectionGeometryChanged(int i);  // vertices moved -> crop must be recomputed
-    void selectionClicked(int index);      // user clicked a selection on the image
+    void selectionsChanged();
+    void selectionGeometryChanged(int i);
+    void selectionClicked(int index);
     void canvasClickedImagePoint(const QPointF& imagePt);
 
 protected:
@@ -84,6 +70,11 @@ private:
     double  scale_ = 1.0;
     QPointF offset_{0, 0};
 
+    // cache
+    QImage   scaledCache_;
+    double   cachedScale_ = -1.0;
+    QSize    cachedSize_;
+
     Mode mode_ = Rectangle;
     QVector<Sel> sel_;
     int  highlight_ = -1;
@@ -92,7 +83,7 @@ private:
     bool    dragging_ = false;
     QPointF dragStartImg_, dragCurImg_;
 
-    // in-progress polygon (+ live cursor for the preview line)
+    // in-progress polygon
     QPolygonF polyInProgress_;
     QPointF   cursorImg_;
     bool      haveCursor_ = false;

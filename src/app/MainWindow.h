@@ -21,7 +21,12 @@
 #include "../gallery/GalleryPage.h"
 #include "../settings/SettingsPage.h"
 #include "../index/FaissPage.h"
+#include "../cardsIndex/SeriesCatalog.h"
+#include "../cardsIndex/CardsPage.h"
+#include "../cardsIndex/SeriesRepository.h"
 
+class SeriesRepository;
+class SeriesCatalog;
 class IndexCatalog;
 class SelectionModel;
 class UiBridge;
@@ -29,6 +34,7 @@ class ModelService;
 class DetectionPage;
 class SettingsPage;
 class FaissPage;
+class CardsPage;
 class GalleryPage;
 class QStackedWidget;
 class QSortFilterProxyModel;
@@ -42,12 +48,16 @@ public:
 
 private:
     void buildSidebar();
+    void updateSettingsDot();
 
     // shared services (owned here)
+    SeriesRepository*      seriesRepo_     = nullptr;
     IndexCatalog*          catalog_        = nullptr;
+    SeriesCatalog*         seriesCatalog_  = nullptr;
     IndexSearchProxy*      searchProxy_    = nullptr;
     QSortFilterProxyModel* installedProxy_ = nullptr;
-    DatasetManager*        dbManager_      = nullptr;
+    DatasetManager*   cardListDbManager_   = nullptr;
+    DatasetManager*   seriesListDbManager_ = nullptr;
     DatabaseUtil*          dbUtil_         = nullptr;
     ModelService*          models_         = nullptr;
     SelectionModel*        selModel_       = nullptr;   // shared: detection writes, gallery reads
@@ -59,6 +69,9 @@ private:
     SettingsPage*   settings_ = nullptr;
     FaissPage*      faiss_    = nullptr;
     GalleryPage*    gallery_  = nullptr;
+    CardsPage*      cards_    = nullptr;
 
+    QAction* settingsAction_ = nullptr;
+    bool     seriesUpdateAvailable_ = false;
     bool indexNotifSilent_ = false;
 };

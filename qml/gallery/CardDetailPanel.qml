@@ -8,6 +8,31 @@ ScrollView {
     clip: true
     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
+    Component.onCompleted: {
+        var id = card.cardCode || card.cardId;
+        if (id)
+            cardDatabase.ensureCardData(id);
+    }
+
+    onCardChanged: {
+        var id = card.cardCode || card.cardId;
+        if (id && card.localeAvailable === undefined)
+            cardDatabase.ensureCardData(id);
+    }
+
+    // Connections {
+    //     target: cardDatabase
+    //     function onCardReady(code) {
+    //         if (code === root.card.cardCode || code === root.card.cardId)
+    //             root.card = cardDatabase.cardDataFor(code);
+    //     }
+    //     function onLocaleChanged() {
+    //         var id = root.card.cardCode || root.card.cardId;
+    //         if (id)
+    //             root.card = cardDatabase.cardDataFor(id);
+    //     }
+    // }
+
     component SelText: TextEdit {
         readOnly: true
         selectByMouse: true
@@ -32,7 +57,7 @@ ScrollView {
             clip: true
             Image {
                 anchors.fill: parent
-                source: root.card.picture ? root.card.picture : ""
+                source: root.card.cardCode ? "image://cardcache/" + encodeURIComponent(root.card.cardCode) : ""
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
             }
@@ -40,7 +65,7 @@ ScrollView {
 
         SelText {
             Layout.fillWidth: true
-            text: root.card.cardName || ""
+            text: !root.card.cardName ? "Data not available" : root.card.cardName
             font.pixelSize: 20
             font.bold: true
             color: "#f0f0f0"
@@ -53,7 +78,11 @@ ScrollView {
             font.pixelSize: 13
         }
 
-        Rectangle { Layout.fillWidth: true; height: 1; color: "#3a3c40" }
+        Rectangle {
+            Layout.fillWidth: true
+            height: 1
+            color: "#3a3c40"
+        }
 
         GridLayout {
             Layout.fillWidth: true
@@ -61,23 +90,77 @@ ScrollView {
             rowSpacing: 6
             columnSpacing: 12
 
-            Label   { text: "Color"; color: "#888"; font.pixelSize: 12 }
-            SelText { Layout.fillWidth: true; text: root.card.color || "-"; color: "#e6e6e6"; font.pixelSize: 12 }
+            Label {
+                text: "Color"
+                color: "#888"
+                font.pixelSize: 12
+            }
+            SelText {
+                Layout.fillWidth: true
+                text: root.card.color || "-"
+                color: "#e6e6e6"
+                font.pixelSize: 12
+            }
 
-            Label   { text: "Power"; color: "#888"; font.pixelSize: 12 }
-            SelText { Layout.fillWidth: true; text: root.card.power || "-"; color: "#e6e6e6"; font.pixelSize: 12 }
+            Label {
+                text: "Power"
+                color: "#888"
+                font.pixelSize: 12
+            }
+            SelText {
+                Layout.fillWidth: true
+                text: root.card.power || "-"
+                color: "#e6e6e6"
+                font.pixelSize: 12
+            }
 
-            Label   { text: "Soul"; color: "#888"; font.pixelSize: 12 }
-            SelText { Layout.fillWidth: true; text: root.card.soul || "-"; color: "#e6e6e6"; font.pixelSize: 12 }
+            Label {
+                text: "Soul"
+                color: "#888"
+                font.pixelSize: 12
+            }
+            SelText {
+                Layout.fillWidth: true
+                text: root.card.soul || "-"
+                color: "#e6e6e6"
+                font.pixelSize: 12
+            }
 
-            Label   { text: "Trigger"; color: "#888"; font.pixelSize: 12 }
-            SelText { Layout.fillWidth: true; text: root.card.cardTrigger || "-"; color: "#e6e6e6"; font.pixelSize: 12 }
+            Label {
+                text: "Trigger"
+                color: "#888"
+                font.pixelSize: 12
+            }
+            SelText {
+                Layout.fillWidth: true
+                text: root.card.cardTrigger || "-"
+                color: "#e6e6e6"
+                font.pixelSize: 12
+            }
 
-            Label   { text: "Feature 1"; color: "#888"; font.pixelSize: 12 }
-            SelText { Layout.fillWidth: true; text: root.card.feature1 || "-"; color: "#e6e6e6"; font.pixelSize: 12 }
+            Label {
+                text: "Feature 1"
+                color: "#888"
+                font.pixelSize: 12
+            }
+            SelText {
+                Layout.fillWidth: true
+                text: root.card.feature1 || "-"
+                color: "#e6e6e6"
+                font.pixelSize: 12
+            }
 
-            Label   { text: "Feature 2"; color: "#888"; font.pixelSize: 12 }
-            SelText { Layout.fillWidth: true; text: root.card.feature2 || "-"; color: "#e6e6e6"; font.pixelSize: 12 }
+            Label {
+                text: "Feature 2"
+                color: "#888"
+                font.pixelSize: 12
+            }
+            SelText {
+                Layout.fillWidth: true
+                text: root.card.feature2 || "-"
+                color: "#e6e6e6"
+                font.pixelSize: 12
+            }
         }
 
         Rectangle {
@@ -116,6 +199,8 @@ ScrollView {
             visible: (root.card.text || "") !== ""
         }
 
-        Item { Layout.preferredHeight: 12 }
+        Item {
+            Layout.preferredHeight: 12
+        }
     }
 }

@@ -7,11 +7,20 @@
 #include <QSqlQuery>
 #include <QSqlError>
 
-DatasetManager::DatasetManager(const QUrl &datasetUrl, QObject *parent):
-    datasetUrl_(datasetUrl), QObject(parent){}
+DatasetManager::DatasetManager(const DatabaseWorker::DatabaseMode mode, QObject *parent):
+    curMode_(mode), QObject(parent){}
 
 QSqlDatabase DatasetManager::getUiDatabase() {
-    const QString connName = "main_ui_connection";
+    QString connName;
+
+    switch (curMode_) {
+        case DatabaseWorker::DatabaseMode::cardList:
+            connName = "seriesList_ui_connection";
+            break;
+        case DatabaseWorker::DatabaseMode::seriesList:
+            connName = "cardList_ui_connection";
+            break;
+    }
 
     if (QSqlDatabase::contains(connName)) {
         QSqlDatabase db = QSqlDatabase::database(connName);
@@ -25,7 +34,7 @@ QSqlDatabase DatasetManager::getUiDatabase() {
 
     // First time setup
     QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", connName);
-    db.setDatabaseName(Config::instance().getDatasetPath());
+    db.setDatabaseName(Config::instance().getSeriesListDatabasePath());
 
     if (!db.open()) {
         qCritical() << "Failed to open UI database:" << db.lastError().text();
@@ -36,17 +45,27 @@ QSqlDatabase DatasetManager::getUiDatabase() {
 
 
 void DatasetManager::startDownloadAndImport() {
+    if (isDownloading_) return;
+
     isDownloading_ = true;
     qRegisterMetaType<QByteArrayList>("QByteArrayList");
 
     worker_ = new DatabaseWorker();
+    worker_->setMode(curMode_);
     worker_->moveToThread(&workerThread_);
 
     // connect worker's status
     connect(worker_, &DatabaseWorker::statusChanged, this, &DatasetManager::statusChanged);
 
     connect(&workerThread_, &QThread::started, worker_, [this]() {
-        QMetaObject::invokeMethod(worker_, "initDatabase", Q_ARG(bool, true));
+        switch (curMode_) {
+            case DatabaseWorker::DatabaseMode::cardList:
+                QMetaObject::invokeMethod(worker_, "initCardListDatabase", Q_ARG(bool, false));
+                break;
+            case DatabaseWorker::DatabaseMode::seriesList:
+                QMetaObject::invokeMethod(worker_, "initSerieslistDatabase", Q_ARG(bool, false));
+                break;
+        }
     });
 
     connect(worker_, &DatabaseWorker::finished, &workerThread_, &QThread::quit);
@@ -54,7 +73,17 @@ void DatasetManager::startDownloadAndImport() {
 
     connect(worker_, &DatabaseWorker::finished, this, [this]() {
         isDownloading_ = false;
-        Config::instance().setCurDatasetEtag(remoteEtag_);
+        switch (curMode_) {
+            case DatabaseWorker::DatabaseMode::cardList:{
+                    QRegularExpressionMatch match = seriesRegex_.match(datasetUrl_.toString());
+                    if (match.hasMatch())
+                        Config::instance().setCardListEtag(match.captured(1), remoteEtag_);
+                    break;
+            }
+            case DatabaseWorker::DatabaseMode::seriesList:
+                Config::instance().setJpSeriestListEtag(remoteEtag_);
+                break;
+        }
         emit readyToUse();
         emit statusChanged("Database successfully updated!");
     });
@@ -133,12 +162,41 @@ void DatasetManager::checkForUpdates(){
     QNetworkReply *reply = netManager_.head(request);
 
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+
+        QString dbPath;
+
+        switch (curMode_) {
+            case DatabaseWorker::DatabaseMode::cardList:
+                dbPath = Config::instance().getCardListDatabasePath();
+                break;
+            case DatabaseWorker::DatabaseMode::seriesList:
+                dbPath = Config::instance().getSeriesListDatabasePath();
+                break;
+        }
+
         if (reply->error() == QNetworkReply::NoError) {
             remoteEtag_ = reply->rawHeader("ETag");
 
-            QString cachedEtag = Config::instance().getCurDatasetEtag();
-            bool dbExists = QFile::exists(Config::instance().getDatasetPath())
-                && QFileInfo(Config::instance().getDatasetPath()).size() != 0;
+            QString cachedEtag;
+            bool dbExists;
+
+            switch (curMode_) {
+                case DatabaseWorker::DatabaseMode::cardList:{
+                    QRegularExpressionMatch match = seriesRegex_.match(datasetUrl_.toString());
+                    if (match.hasMatch()){
+                        QString series = match.captured(1);
+                        cachedEtag = Config::instance().getCardListEtag(series);
+                    }
+                        dbExists = QFile::exists(Config::instance().getCardListDatabasePath())
+                                        && QFileInfo(Config::instance().getCardListDatabasePath()).size() != 0;
+                        break;
+                }
+                case DatabaseWorker::DatabaseMode::seriesList:
+                    cachedEtag = Config::instance().getJpSeriesListEtag();
+                    dbExists = QFile::exists(Config::instance().getSeriesListDatabasePath())
+                               && QFileInfo(Config::instance().getSeriesListDatabasePath()).size() != 0;
+                    break;
+            }
 
             if (dbExists && !remoteEtag_.isEmpty() && remoteEtag_ == cachedEtag) {
                 emit statusChanged("Database is up to date.");
@@ -154,7 +212,7 @@ void DatasetManager::checkForUpdates(){
                 emit updateAvailable(DatasetManager::UpdateStatus::UpdateAvailable, "New Version"); //TODO Later replace new version with actual version num if possible
             }
         } else {
-            if (QFile::exists(Config::instance().getDatasetPath())) {
+            if (QFile::exists(dbPath)) {
                 emit statusChanged("Server unreachable. Operating in offline mode.");
                 emit readyToUse();
             } else {
@@ -181,11 +239,40 @@ void DatasetManager::checkAndLoad(bool forceRedownload) {
     QNetworkReply *reply = netManager_.head(request);
 
     connect(reply, &QNetworkReply::finished, this, [this, reply, forceRedownload]() {
+        QString dbPath;
+
+        switch (curMode_) {
+            case DatabaseWorker::DatabaseMode::cardList:
+                dbPath = Config::instance().getCardListDatabasePath();
+                break;
+            case DatabaseWorker::DatabaseMode::seriesList:
+                dbPath = Config::instance().getSeriesListDatabasePath();
+                break;
+        }
+
         if (reply->error() == QNetworkReply::NoError) {
             remoteEtag_ = reply->rawHeader("ETag");
 
-            QString cachedEtag = Config::instance().getCurDatasetEtag();
-            bool dbExists = QFile::exists(Config::instance().getDatasetPath());
+            QString cachedEtag;
+            bool dbExists;
+
+            switch (curMode_) {
+                case DatabaseWorker::DatabaseMode::cardList: {
+                        QRegularExpressionMatch match = seriesRegex_.match(datasetUrl_.toString());
+                        if (match.hasMatch()){
+                            QString series = match.captured(1);
+                            cachedEtag = Config::instance().getCardListEtag(series);
+                        }
+                        dbExists = QFile::exists(Config::instance().getCardListDatabasePath())
+                                   && QFileInfo(Config::instance().getCardListDatabasePath()).size() != 0;
+                        break;
+            }
+                case DatabaseWorker::DatabaseMode::seriesList:
+                    cachedEtag = Config::instance().getJpSeriesListEtag();
+                    dbExists = QFile::exists(Config::instance().getSeriesListDatabasePath())
+                               && QFileInfo(Config::instance().getSeriesListDatabasePath()).size() != 0;
+                    break;
+            }
 
             if (!forceRedownload && dbExists && !remoteEtag_.isEmpty() && remoteEtag_ == cachedEtag) {
                 emit statusChanged("Database is up to date.");
@@ -197,7 +284,7 @@ void DatasetManager::checkAndLoad(bool forceRedownload) {
                 startDownloadAndImport();
             }
         } else {
-            if (QFile::exists(Config::instance().getDatasetPath())) {
+            if (QFile::exists(dbPath)) {
                 emit statusChanged("Server unreachable. Operating in offline mode.");
                 emit updateAvailable(DatasetManager::UpdateStatus::Error, "New Version");
                 emit readyToUse();
@@ -211,10 +298,21 @@ void DatasetManager::checkAndLoad(bool forceRedownload) {
 }
 
 int DatasetManager::getLocalRowCount() {
-    if (!QFile::exists(Config::instance().getDatasetPath())) return 0;
+    QString dbPath;
+
+    switch (curMode_) {
+        case DatabaseWorker::DatabaseMode::cardList:
+            dbPath = Config::instance().getCardListDatabasePath();
+            break;
+        case DatabaseWorker::DatabaseMode::seriesList:
+            dbPath = Config::instance().getSeriesListDatabasePath();
+            break;
+    }
+
+    if (!QFile::exists(dbPath)) return 0;
 
     QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "info_connection");
-    db.setDatabaseName(Config::instance().getDatasetPath());
+    db.setDatabaseName(dbPath);
     int count = 0;
     if (db.open()) {
         QSqlQuery q("SELECT COUNT(*) FROM dataset", db);
@@ -226,7 +324,66 @@ int DatasetManager::getLocalRowCount() {
 }
 
 double DatasetManager::getDatabaseSizeMB() {
-    QFileInfo info(Config::instance().getDatasetPath());
+    QString dbPath;
+
+    switch (curMode_) {
+        case DatabaseWorker::DatabaseMode::cardList:
+            dbPath = Config::instance().getCardListDatabasePath();
+            break;
+        case DatabaseWorker::DatabaseMode::seriesList:
+            dbPath = Config::instance().getSeriesListDatabasePath();
+            break;
+    }
+
+    QFileInfo info(dbPath);
     if (!info.exists()) return 0.0;
     return info.size() / (1024.0 * 1024.0);
+}
+
+void DatasetManager::resetDatabase()
+{
+    if (isDownloading_) return;
+
+    emit statusChanged("Resetting database…");
+
+    QString dbPath;
+    QString tableName;
+    switch (curMode_) {
+    case DatabaseWorker::DatabaseMode::cardList:
+        dbPath    = Config::instance().getCardListDatabasePath();
+        tableName = "cards";
+        break;
+    case DatabaseWorker::DatabaseMode::seriesList:
+        dbPath    = Config::instance().getSeriesListDatabasePath();
+        tableName = "series";
+        break;
+    }
+
+    {
+        const QString conn = "reset_connection";
+        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", conn);
+        db.setDatabaseName(dbPath);
+        if (db.open()) {
+            QSqlQuery q(db);
+            if (!q.exec("DROP TABLE IF EXISTS " + tableName))
+                qWarning() << "reset drop failed:" << q.lastError().text();
+            db.close();
+        } else {
+            qWarning() << "reset: could not open" << dbPath << db.lastError().text();
+        }
+    }
+    QSqlDatabase::removeDatabase("reset_connection");
+
+    switch (curMode_) {
+    case DatabaseWorker::DatabaseMode::cardList:
+        Config::instance().clearCardListEtags();
+        break;
+    case DatabaseWorker::DatabaseMode::seriesList:
+        Config::instance().setJpSeriestListEtag("");
+        break;
+    }
+
+    emit statusChanged("Database reset. Re-download to repopulate.");
+    emit updateAvailable(DatasetManager::UpdateStatus::Error, "New Version");
+    emit readyToUse();
 }

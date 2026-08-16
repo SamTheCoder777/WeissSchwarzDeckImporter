@@ -6,6 +6,7 @@
 #include "../services/ModelService.h"
 #include "../index/IndexCatalog.h"
 #include "../database/DatabaseUtil.h"
+#include "../images/CardImageProvider.h"
 
 #include <QtWidgets>
 #include <QQuickWidget>
@@ -34,12 +35,11 @@ cv::Mat qImageToBgrMat(const QImage &imgIn)
 }
 
 
-DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, DatasetManager* dbManager,
-                             SelectionModel* selModel, UiBridge* bridge,
-                             IndexCatalog* catalog, QSortFilterProxyModel* installedProxy,
+DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, SelectionModel* selModel,
+                             UiBridge* bridge, IndexCatalog* catalog, QSortFilterProxyModel* installedProxy,
                              QWidget* parent)
     : QWidget(parent),
-    models_(models), dbUtil_(dbUtil), dbManager_(dbManager), selModel_(selModel), bridge_(bridge),
+    models_(models), dbUtil_(dbUtil), selModel_(selModel), bridge_(bridge),
     catalog_(catalog), installedProxy_(installedProxy) {
     buildUi();
 
@@ -48,33 +48,9 @@ DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, Dataset
     });
     candModel_->setDatabaseUtil(dbUtil_);
 
-    auto refreshModel = [this]() {
-        QSqlDatabase db = dbManager_->getUiDatabase();
-        if (db.isOpen()) {
-            candModel_->setCardDatabase(db);
-        } else {
-            qWarning() << "Database unavailable; model not updated.";
-        }
-    };
-
-    QElapsedTimer t; t.start();
-    refreshModel();
-    qDebug() << "refreshModel took" << t.elapsed() << "ms";
-
-
-    connect(dbManager_, &DatasetManager::readyToUse, this, refreshModel);
-
-    // check for dataset update
-    QElapsedTimer t2; t2.start();
-    dbManager_->checkForUpdates();
-    qDebug() << "checkForUpdates took" << t2.elapsed() << "ms";
-
-    // allow pasting images/files only on windows. Mac crashes for some reason
-    #ifdef _WIN32
     QShortcut *pasteShortcut = new QShortcut(QKeySequence::Paste, this);
     connect(pasteShortcut, &QShortcut::activated, this, [this]{
-        QLabel imgLabel;
-        QImage pasted = handlePasteImage(&imgLabel);
+        QImage pasted = handlePasteImage();
         if (pasted.isNull()) return;
         if (models_->isLoading()) {
             QMessageBox::information(this, "Please wait", "The model is still loading.\nCheck status in settings.");
@@ -106,7 +82,6 @@ DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, Dataset
         candModel_->clear();
         pushStateToQml();
     });
-    #endif
 }
 
 void DetectionPage::onModelLoaded(bool) {
@@ -114,7 +89,7 @@ void DetectionPage::onModelLoaded(bool) {
 }
 
 
-QImage DetectionPage::handlePasteImage(QLabel *imageLabel)
+QImage DetectionPage::handlePasteImage()
 {
     QClipboard *clipboard = QGuiApplication::clipboard();
     const QMimeData *mimeData = clipboard->mimeData();
@@ -129,9 +104,6 @@ QImage DetectionPage::handlePasteImage(QLabel *imageLabel)
         if (!urls.isEmpty() && urls.first().isLocalFile())
             image = QImage(urls.first().toLocalFile());
     }
-
-    if (!image.isNull() && imageLabel)
-        imageLabel->setPixmap(QPixmap::fromImage(image));
 
     return image;
 }
@@ -182,6 +154,8 @@ void DetectionPage::buildUi() {
 
     auto* qmlPanel = new QQuickWidget;
     qmlPanel->engine()->addImageProvider("crop", cropProvider_);
+    qmlPanel->engine()->addImageProvider("cardcache", new CardImageProvider(dbUtil_));
+    qmlPanel->rootContext()->setContextProperty("cardDatabase", dbUtil_);
     qmlPanel->rootContext()->setContextProperty("bridge",   bridge_);
     qmlPanel->rootContext()->setContextProperty("candModel", candModel_);
     qmlPanel->rootContext()->setContextProperty("selModel",  selModel_);
@@ -227,6 +201,7 @@ void DetectionPage::buildUi() {
     });
 
     connect(bridge_, &UiBridge::selectCardRequested, this, &DetectionPage::showSelectionResults);
+    connect(bridge_, &UiBridge::rotateCardRequested, this, &DetectionPage::rotateSelectionImage);
     connect(bridge_, &UiBridge::confirmRequested,    this, &DetectionPage::confirmCandidate);
     connect(bridge_, &UiBridge::exportRequested,     this, &DetectionPage::exportDeck);
     connect(bridge_, &UiBridge::detectRequested,     this, &DetectionPage::runDetection);
@@ -458,7 +433,8 @@ void DetectionPage::pushStateToQml() {
     QString confText = isConf ? QString("Confirmed: %1").arg(QString::fromStdString(sel_[currentSel_].cardId))
                               : QStringLiteral("Not confirmed");
     int qty = (currentSel_ >= 0 && currentSel_ < sel_.size()) ? sel_[currentSel_].qty : 1;
-    bridge_->setState(summary, confText, isConf, qty, currentSel_, models_->retriever() != nullptr);
+    int rotation = (currentSel_ >= 0) ? sel_[currentSel_].rotation : 0;
+    bridge_->setState(summary, confText, isConf, qty, currentSel_, rotation, models_->retriever() != nullptr);
 }
 
 void DetectionPage::openImage() {
@@ -497,6 +473,18 @@ cv::Mat DetectionPage::cropForSelection(int index) const {
     QPolygonF poly = canvas_->selection(index);
     if (poly.isEmpty() || sourceBgr_.empty()) return {};
 
+    auto applyRotation = [this, index](cv::Mat& img) {
+        int deg = sel_[index].rotation;
+        deg = ((deg % 360) + 360) % 360;
+
+        if (deg == 90)
+            cv::rotate(img, img, cv::ROTATE_90_CLOCKWISE);
+        else if (deg == 180)
+            cv::rotate(img, img, cv::ROTATE_180);
+        else if (deg == 270)
+            cv::rotate(img, img, cv::ROTATE_90_COUNTERCLOCKWISE);
+    };
+
     if (poly.size() == 4) {
         std::vector<cv::Point2f> p;
         for (const QPointF& q : poly) p.emplace_back((float)q.x(), (float)q.y());
@@ -521,6 +509,7 @@ cv::Mat DetectionPage::cropForSelection(int index) const {
             cv::Mat warped;
             cv::warpPerspective(sourceBgr_, warped, M, cv::Size(W, H),
                                 cv::INTER_CUBIC, cv::BORDER_CONSTANT, cv::Scalar(114,114,114));
+            applyRotation(warped);
             return warped;
         }
     }
@@ -541,6 +530,7 @@ cv::Mat DetectionPage::cropForSelection(int index) const {
     cv::fillPoly(mask, polys, cv::Scalar(255));
     cv::Mat out(crop.size(), crop.type(), cv::Scalar(114, 114, 114));
     crop.copyTo(out, mask);
+    applyRotation(out);
     return out;
 }
 
@@ -598,6 +588,13 @@ void DetectionPage::showSelectionResults(int index) {
 
     candModel_->setCandidates(sel_[index].cands, sel_[index].cardId);
     pushStateToQml();
+}
+
+void DetectionPage::rotateSelectionImage(int index, int rot)
+{
+    if (index+1 > sel_.length() || sel_.isEmpty()) return;
+    sel_[index].rotation = sel_[index].rotation + rot;
+    showSelectionResults(index); //update image
 }
 
 void DetectionPage::confirmCandidate(int candIndex) {

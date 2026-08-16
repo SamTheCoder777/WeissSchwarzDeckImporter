@@ -27,6 +27,8 @@ void ImageCanvas::reorder(const QVector<int>& order) {
 
 void ImageCanvas::setImage(const QImage& img) {
     image_ = img;
+    scaledCache_ = QImage();
+    cachedScale_ = -1.0;
     sel_.clear();
     polyInProgress_.clear();
     highlight_ = -1;
@@ -88,7 +90,6 @@ void ImageCanvas::setSelectionState(int index, bool confirmed, const QString& la
     update();
 }
 
-// ── coordinate mapping ──────────────────────────────────────────────────────
 void ImageCanvas::recomputeTransform() {
     if (image_.isNull()) { scale_ = 1.0; offset_ = {0, 0}; return; }
     double sx = (double)width() / image_.width();
@@ -137,7 +138,6 @@ void ImageCanvas::finishPolygon() {
     }
 }
 
-// ── painting ────────────────────────────────────────────────────────────────
 void ImageCanvas::paintEvent(QPaintEvent*) {
     QPainter g(this);
     g.setRenderHint(QPainter::Antialiasing, true);
@@ -148,8 +148,18 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
         return;
     }
     recomputeTransform();
-    g.drawImage(QRectF(offset_.x(), offset_.y(),
-                       image_.width() * scale_, image_.height() * scale_), image_);
+
+    const int tw = int(image_.width()  * scale_);
+    const int th = int(image_.height() * scale_);
+
+    // rebuild the scaled cache only when the scale/target size changed
+    if (scaledCache_.isNull() || cachedScale_ != scale_ || cachedSize_ != QSize(tw, th)) {
+        scaledCache_ = image_.scaled(tw, th, Qt::KeepAspectRatio,
+                                     Qt::SmoothTransformation);
+        cachedScale_ = scale_;
+        cachedSize_  = QSize(tw, th);
+    }
+    g.drawImage(QPointF(offset_.x(), offset_.y()), scaledCache_);
 
     for (int i = 0; i < sel_.size(); ++i) {
         QPolygonF wp;
@@ -164,23 +174,22 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
         g.setBrush(QColor(col.red(), col.green(), col.blue(), hi ? 55 : 28));
         g.drawPolygon(wp);
 
-        // vertex handles (so it's obvious they can be dragged)
         g.setBrush(col);
         for (const QPointF& p : wp) g.drawEllipse(p, 3.5, 3.5);
 
         // label: "1" when unconfirmed, "1  BD/W125-021 x2" when confirmed
-        if (!wp.isEmpty()) {
-            QString txt = QString::number(i + 1);
-            if (!sel_[i].label.isEmpty()) txt += "  " + sel_[i].label;
-            QPointF anchor = wp.boundingRect().topLeft() + QPointF(4, 4);
-            QFontMetrics fm(g.font());
-            QRectF box(anchor, QSizeF(fm.horizontalAdvance(txt) + 8, fm.height() + 4));
-            g.setPen(Qt::NoPen);
-            g.setBrush(QColor(0, 0, 0, 165));
-            g.drawRect(box);
-            g.setPen(sel_[i].confirmed ? QColor(150, 255, 190) : Qt::white);
-            g.drawText(box.adjusted(4, 2, 0, 0), Qt::AlignLeft | Qt::AlignTop, txt);
-        }
+        // if (!wp.isEmpty()) {
+        //     QString txt = QString::number(i + 1);
+        //     if (!sel_[i].label.isEmpty()) txt += "  " + sel_[i].label;
+        //     QPointF anchor = wp.boundingRect().topLeft() + QPointF(4, 4);
+        //     QFontMetrics fm(g.font());
+        //     QRectF box(anchor, QSizeF(fm.horizontalAdvance(txt) + 8, fm.height() + 4));
+        //     g.setPen(Qt::NoPen);
+        //     g.setBrush(QColor(0, 0, 0, 165));
+        //     g.drawRect(box);
+        //     g.setPen(sel_[i].confirmed ? QColor(150, 255, 190) : Qt::white);
+        //     g.drawText(box.adjusted(4, 2, 0, 0), Qt::AlignLeft | Qt::AlignTop, txt);
+        // }
     }
 
     // in-progress rectangle
@@ -191,7 +200,7 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
         g.drawRect(r.normalized());
     }
 
-    // in-progress polygon + LIVE preview segment to the cursor (LabelMe style)
+    // in-progress polygon
     if (!polyInProgress_.isEmpty()) {
         QPolygonF wp;
         for (const QPointF& ip : polyInProgress_) wp << toWidget(ip);
@@ -219,7 +228,6 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
     }
 }
 
-// ── mouse ───────────────────────────────────────────────────────────────────
 void ImageCanvas::mousePressEvent(QMouseEvent* e) {
     if (image_.isNull()) return;
     const QPointF ip = toImage(e->position());
@@ -232,13 +240,13 @@ void ImageCanvas::mousePressEvent(QMouseEvent* e) {
         }
 
         emit canvasClickedImagePoint(ip);
-        // 1) grab a vertex to move it (works in both modes)
+
         int si, vi;
         if (polyInProgress_.isEmpty() && hitTestVertex(e->position(), si, vi)) {
             dragSel_ = si; dragVert_ = vi;
             return;
         }
-        // 2) click inside an existing selection -> select it (both modes)
+
         if (polyInProgress_.isEmpty()) {
             int hit = hitTestSelection(e->position());
             if (hit >= 0) {
@@ -248,12 +256,11 @@ void ImageCanvas::mousePressEvent(QMouseEvent* e) {
                 return;
             }
         }
-        // 3) otherwise start/extend a new selection
+
         if (mode_ == Rectangle) {
             dragging_ = true;
             dragStartImg_ = dragCurImg_ = ip;
         } else {
-            // click near the first point closes the polygon (LabelMe behaviour)
             if (polyInProgress_.size() >= 3 &&
                 QLineF(toWidget(polyInProgress_.first()), e->position()).length() <= VERTEX_HIT_PX + 2) {
                 finishPolygon();
@@ -307,7 +314,7 @@ void ImageCanvas::mouseDoubleClickEvent(QMouseEvent* e) {
     QWidget::mouseDoubleClickEvent(e);
 }
 
-// right-click: polygon options while drawing, delete when on a selection
+// right click
 void ImageCanvas::contextMenuEvent(QContextMenuEvent* e) {
     QMenu menu(this);
     if (!polyInProgress_.isEmpty()) {

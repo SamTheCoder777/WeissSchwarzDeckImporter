@@ -14,36 +14,36 @@ DatabaseWorker::DatabaseWorker(QObject *parent): QObject(parent)
 
 }
 
-
+// TODO update flushBatch method
 void DatabaseWorker::flushBatch() {
     if (cardNumberBatch_.isEmpty()) return;
 
-    db_.transaction();
+    curDb_->transaction();
 
-    QSqlQuery query(db_);
+    QSqlQuery query(seriesListDb_);
     query.prepare("INSERT INTO dataset (card_number, picture) VALUES (?, ?)");
     query.addBindValue(cardNumberBatch_);
     query.addBindValue(pictureBatch_);
 
     if (!query.execBatch()) {
         qDebug() << "Worker DB batch exec error:" << query.lastError().text();
-        db_.rollback();
+        curDb_->rollback();
     } else {
-        db_.commit();
+        curDb_->commit();
         qDebug() << "Successfully inserted batch of" << cardNumberBatch_.size() << "rows.";
     }
-    db_.commit();
+    curDb_->commit();
 
     cardNumberBatch_.clear();
     pictureBatch_.clear();
 }
 
-void DatabaseWorker::initDatabase(bool dropExisting) {
-    db_ = QSqlDatabase::addDatabase("QSQLITE", "worker_connection");
-    db_.setDatabaseName(Config::instance().getDatasetPath());
+void DatabaseWorker::initSerieslistDatabase(bool dropExisting) {
+    seriesListDb_ = QSqlDatabase::addDatabase("QSQLITE", "series_connection");
+    seriesListDb_.setDatabaseName(Config::instance().getSeriesListDatabasePath());
 
-    if (db_.open()) {
-        QSqlQuery q(db_);
+    if (seriesListDb_.open()) {
+        QSqlQuery q(seriesListDb_);
         q.exec("PRAGMA journal_mode = WAL;");
         q.exec("PRAGMA synchronous = OFF;");
 
@@ -52,7 +52,40 @@ void DatabaseWorker::initDatabase(bool dropExisting) {
         }
     }
 }
+
+void DatabaseWorker::initCardListDatabase(bool dropExisting) {
+    cardListDb_ = QSqlDatabase::addDatabase("QSQLITE", "cardList_connection");
+    cardListDb_.setDatabaseName(Config::instance().getCardListDatabasePath());
+
+    if (cardListDb_.open()) {
+        QSqlQuery q(cardListDb_);
+        q.exec("PRAGMA journal_mode = WAL;");
+        q.exec("PRAGMA synchronous = OFF;");
+
+        if (dropExisting) {
+            q.exec("DROP TABLE IF EXISTS dataset;");
+        }
+    }
+}
+
+void DatabaseWorker::setMode(DatabaseWorker::DatabaseMode mode){
+    switch (mode){
+        case DatabaseWorker::DatabaseMode::cardList:
+            curDb_ = &cardListDb_;
+            break;
+
+        case DatabaseWorker::DatabaseMode::seriesList:
+            curDb_ = &seriesListDb_;
+            break;
+    }
+}
+
 void DatabaseWorker::processChunk(const QByteArray &data) {
+    if (!curDb_) {
+        qDebug() << "Error: Attempted to process chunk without setting mode first!";
+        emit statusChanged("Error: Attempted to process chunk without setting mode first!");
+    }
+
     QJsonParseError parseError;
     QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
 
@@ -115,7 +148,8 @@ void DatabaseWorker::processChunk(const QByteArray &data) {
         columnDefs.append(QString("\"%1\" TEXT").arg(clean));
     }
 
-    QSqlQuery q(db_);
+    QSqlQuery q = QSqlQuery(*curDb_);
+
 
     q.exec("DROP TABLE IF EXISTS dataset;");
 
@@ -129,8 +163,8 @@ void DatabaseWorker::processChunk(const QByteArray &data) {
         return;
     }
 
-    if (rawKeysCleaned.contains("card_number")) {
-        q.exec("CREATE INDEX IF NOT EXISTS idx_name ON dataset(\"card_number\");");
+    if (rawKeysCleaned.contains("cardcode")) {
+        q.exec("CREATE INDEX IF NOT EXISTS idx_name ON dataset(\"cardcode\");");
     }
 
     QString insertSql = QString("INSERT INTO dataset (%1) VALUES (%2)")
@@ -146,7 +180,7 @@ void DatabaseWorker::processChunk(const QByteArray &data) {
         return;
     }
 
-    db_.transaction();
+    curDb_->transaction();
 
     int count = 0;
     const int BATCH_SIZE = 10000;
@@ -178,11 +212,11 @@ void DatabaseWorker::processChunk(const QByteArray &data) {
         count++;
 
         if (count % BATCH_SIZE == 0) {
-            db_.commit();
-            db_.transaction();
+            curDb_->commit();
+            curDb_->transaction();
         }
     }
-    db_.commit();
+    curDb_->commit();
     qDebug() << "Successfully imported" << count << "records into dataset table!";
     emit statusChanged(QString("Successfully imported %1 records into dataset table!").arg(count));
 
@@ -190,8 +224,8 @@ void DatabaseWorker::processChunk(const QByteArray &data) {
 }
 void DatabaseWorker::finishProcessing() {
     flushBatch();
-    QString connName = db_.connectionName();
-    db_ = QSqlDatabase();
+    QString connName = curDb_->connectionName();
+    seriesListDb_ = QSqlDatabase();
     QSqlDatabase::removeDatabase(connName);
     emit finished();
 }

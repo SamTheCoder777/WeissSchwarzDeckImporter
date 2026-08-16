@@ -10,5 +10,8 @@
         <file>icon/update.svg</file>
         <file>icon/stop.svg</file>
         <file>icon/error.svg</file>
+        <file>qml/download/CardsDownloadPage.qml</file>
+        <file>icon/rotate_l.svg</file>
+        <file>icon/rotate_r.svg</file>
     </qresource>
 </RCC>

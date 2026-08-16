@@ -1,26 +1,3 @@
-// IndexCatalog.h — downloadable FAISS index catalogue.
-//
-// A remote manifest (JSON) lists the indexes you publish. The app compares each
-// entry's version with what is installed locally and offers Download / Update /
-// Use. Files are fetched individually (index.faiss, row2card.npy, id_map.json,
-// engine_meta.json) so no zip library is needed.
-//
-// Manifest format:
-// {
-//   "indexes": [{
-//      "id": "bd_336_v9",
-//      "name": "BanG Dream! (336px)",
-//      "version": "9",
-//      "description": "3,052 cards · 79,352 vectors",
-//      "files": [
-//        {"name":"index.faiss",      "url":"https://…/index.faiss",      "size":81234567,
-//         "sha256":"…"},
-//        {"name":"row2card.npy",     "url":"https://…/row2card.npy",     "size":634816},
-//        {"name":"id_map.json",      "url":"https://…/id_map.json",      "size":73210},
-//        {"name":"engine_meta.json", "url":"https://…/engine_meta.json", "size":64}
-//      ]
-//   }]
-// }
 #pragma once
 
 #include <QAbstractListModel>
@@ -43,7 +20,7 @@ public:
 
     enum Roles { IdRole = Qt::UserRole + 1, NameRole, DescRole, VersionRole,
                  InstalledVersionRole, SizeTextRole, StatusRole,
-                 ProgressRole, DownloadingRole };
+                 ProgressRole, DownloadingRole, HasRemoteRole };
 
     explicit IndexCatalog(QObject* parent = nullptr);
 
@@ -85,7 +62,8 @@ private:
         QVector<FileEntry> files;
         qint64 totalSize = 0;
         double progress = 0.0;
-        bool   downloading = false;
+        bool downloading = false;
+        bool isCustom = false;
     };
 
     void setStatus(const QString& s) { qDebug() << "stateChanged! " + s; status_ = s; emit stateChanged(); }
@@ -95,6 +73,10 @@ private:
     void finishDownload(bool ok, const QString& message);
     QString dirFor(const QString& id) const;
     void touchRow(int row);
+    void scanLocalIndexes();
+    int dlRowById();
+    QJsonObject readInstalledJson() const;
+    void pruneMissingCustomRows();
 
     QNetworkAccessManager nam_;
     QNetworkReply* reply_ = nullptr;
@@ -105,6 +87,7 @@ private:
 
     // active download state
     int     dlRow_ = -1;
+    QString dlId_;
     int     dlFile_ = 0;
     qint64  dlBytesBefore_ = 0;
     QString dlDir_;

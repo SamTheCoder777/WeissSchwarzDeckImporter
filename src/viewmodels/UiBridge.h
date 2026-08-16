@@ -13,6 +13,7 @@ class UiBridge : public QObject {
     Q_PROPERTY(int     currentIndex  READ currentIndex  NOTIFY stateChanged)
     Q_PROPERTY(int     cropRev       READ cropRev       NOTIFY stateChanged)
     Q_PROPERTY(bool    modelLoaded   READ modelLoaded   NOTIFY stateChanged)
+    Q_PROPERTY(int rotation READ rotation NOTIFY stateChanged)
 public:
     using QObject::QObject;
 
@@ -30,13 +31,14 @@ public:
     bool    isConfirmed()   const { return isConfirmed_; }
     int     quantity()      const { return qty_; }
     int     currentIndex()  const { return current_; }
+    int     rotation() const { return rotation_; }
     int     cropRev()       const { return cropRev_; }
     bool    modelLoaded()   const { return modelLoaded_; }
 
     void setState(const QString& summary, const QString& confirmedText,
-                  bool isConfirmed, int qty, int current, bool modelLoaded) {
+                  bool isConfirmed, int qty, int current, int rotation, bool modelLoaded) {
         summary_ = summary; confirmed_ = confirmedText; isConfirmed_ = isConfirmed;
-        qty_ = qty; current_ = current; modelLoaded_ = modelLoaded;
+        qty_ = qty; current_ = current; rotation_ = rotation; modelLoaded_ = modelLoaded;
         emit stateChanged();
     }
     void bumpCrop() { ++cropRev_; emit stateChanged(); }
@@ -44,6 +46,7 @@ public:
 signals:
     void stateChanged();
     void selectCardRequested(int index);
+    void rotateCardRequested(int index, int rot);
     void confirmRequested(int candIndex);
     void quantityRequested(int qty);
     void exportRequested();
@@ -54,5 +57,5 @@ private:
     QString summary_ = "0 selected · 0 confirmed";
     QString confirmed_ = "Not confirmed";
     bool isConfirmed_ = false, modelLoaded_ = false;
-    int qty_ = 1, current_ = -1, cropRev_ = 0;
+    int qty_ = 1, current_ = -1, cropRev_ = 0, rotation_ = 0;
 };

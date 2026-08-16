@@ -25,8 +25,31 @@ static QImage matToQImage(const cv::Mat& bgr) {
 }
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
+    qDebug() << "Cache Location:" << QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+
+    dbUtil_    = new DatabaseUtil(this);
+    dbUtil_->setLocale(Config::instance().getPreferredLocale());
+    models_    = new ModelService(this);
+
+    connect(models_, &ModelService::statusChanged, this, [this](QString msg){
+        statusBar()->showMessage(msg);
+    });
 
     catalog_ = new IndexCatalog(this);
+    seriesRepo_    = new SeriesRepository(this);
+    seriesRepo_->checkForUpdates();
+    seriesCatalog_ = new SeriesCatalog(seriesRepo_, this);
+
+    connect(seriesRepo_, &SeriesRepository::updateAvailable, this,
+            [this](SeriesRepository::UpdateStatus s){
+                seriesUpdateAvailable_ = (s == SeriesRepository::UpdateStatus::UpdateAvailable);
+                updateSettingsDot();
+            });
+
+    connect(seriesRepo_, &SeriesRepository::seriesListUpdated, this, [this]{
+        seriesUpdateAvailable_ = false;
+        updateSettingsDot();
+    });
 
     searchProxy_ = new IndexSearchProxy(this);
     searchProxy_->setSourceModel(catalog_);
@@ -36,30 +59,29 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     installedProxy_->setFilterRole(IndexCatalog::StatusRole);
     installedProxy_->setFilterRegularExpression(QRegularExpression("^[12]$"));
 
-    dbManager_ = new DatasetManager(QUrl(Config::instance().getDatasetSourceUrl()), this);
-    dbUtil_    = new DatabaseUtil(this);
-    models_    = new ModelService(this);
-
     // shared view-models (used by detection + gallery)
     selModel_ = new SelectionModel(this);
     bridge_   = new UiBridge(this);
 
     // ── pages ───────────────────────────────────────────────────────────────
-    detection_ = new DetectionPage(models_, dbUtil_, dbManager_, selModel_, bridge_,
+    detection_ = new DetectionPage(models_, dbUtil_, selModel_, bridge_,
                                    catalog_, installedProxy_, this);
-    settings_  = new SettingsPage(models_, dbManager_, this);
+    settings_  = new SettingsPage(models_, seriesRepo_, catalog_, this);
     faiss_     = new FaissPage(models_, catalog_, this);
+    cards_     = new CardsPage(seriesCatalog_, this);
     gallery_   = new GalleryPage(dbUtil_, selModel_, bridge_, this);
 
     pages_ = new QStackedWidget(this);
-    pages_->addWidget(detection_);   // 0
-    pages_->addWidget(settings_);    // 1
-    pages_->addWidget(faiss_);       // 2
-    pages_->addWidget(gallery_);     // 3
+    pages_->addWidget(detection_);
+    pages_->addWidget(settings_);
+    pages_->addWidget(faiss_);
+    pages_->addWidget(gallery_);
+    pages_->addWidget(cards_);
     setCentralWidget(pages_);
     statusBar();
 
     buildSidebar();
+    updateSettingsDot();
     setWindowTitle("TCG Deck Builder");
     resize(1440, 900);
 }
@@ -88,91 +110,34 @@ void MainWindow::buildSidebar() {
     };
 
     QAction* aDetect = addPage(st->standardIcon(QStyle::SP_ComputerIcon),           "Detection", 0);
-    addPage(st->standardIcon(QStyle::SP_DriveNetIcon),           "Indexes",   2);
-    addPage(st->standardIcon(QStyle::SP_FileDialogDetailedView), "Settings",  1);
+    addPage(st->standardIcon(QStyle::SP_DriveNetIcon),           "Faiss Indexes",   2);
+    addPage(st->standardIcon(QStyle::SP_DriveNetIcon),           "Cards Indexes",   4);
     addPage(st->standardIcon(QStyle::SP_DriveCDIcon),            "Gallery",   3);
+    settingsAction_ = addPage(st->standardIcon(QStyle::SP_FileDialogDetailedView), "Settings",  1);
     aDetect->setChecked(true);
+
+    connect(settingsAction_, &QAction::triggered, this, [this]{
+        seriesUpdateAvailable_ = false;
+        updateSettingsDot();
+    });
 }
 
+void MainWindow::updateSettingsDot() {
+    if (!settingsAction_) return;
+    QToolBar* bar = findChild<QToolBar*>("SideBar");
+    if (!bar) return;
+    QWidget* btn = bar->widgetForAction(settingsAction_);
+    if (!btn) return;
 
-    /**
-     // Faiss catalog
-    catalog_ = new IndexCatalog(this);
-
-    searchProxy_ = new IndexSearchProxy(this);
-    searchProxy_->setSourceModel(catalog_);
-
-    installedProxy_ = new QSortFilterProxyModel(this);
-    installedProxy_->setSourceModel(catalog_);
-    installedProxy_->setFilterRole(IndexCatalog::StatusRole);
-    installedProxy_->setFilterRegularExpression(QRegularExpression("^[12]$"));
-
-    // get global cards database
-    QUrl datasetUrl(Config::instance().getDatasetSourceUrl());
-    dbManager_ = new DatasetManager(datasetUrl, this);
-    dbUtil_ = new DatabaseUtil(this);
-
-    pages_ = new QStackedWidget(this);
-    pages_->addWidget(buildDetectPage());     // 0 (Call first since it inits various models)
-    pages_->addWidget(buildSettingsPage());   // 1
-    pages_->addWidget(buildFaissPage());      // 2  <- index download page
-    pages_->addWidget(buildGalleryPage());    // 3
-    setCentralWidget(pages_);
-    statusBar();                              // used for catalog error messages
-
-    candModel_->setDatabaseUtil(dbUtil_);
-
-    auto refreshModel = [this]() {
-        QSqlDatabase db = dbManager_->getUiDatabase();
-        if (db.isOpen()) {
-            candModel_->setCardDatabase(db);
-        } else {
-            qWarning() << "Database unavailable; model not updated.";
-        }
-    };
-
-    QElapsedTimer t; t.start();
-    refreshModel();
-    qDebug() << "refreshModel took" << t.elapsed() << "ms";
-
-
-    connect(dbManager_, &DatasetManager::readyToUse, this, refreshModel);
-
-    // check for update
-    QElapsedTimer t2; t2.start();
-    dbManager_->checkForUpdates();
-    qDebug() << "checkForUpdates took" << t2.elapsed() << "ms";
-
-    // ── vertical nav rail ──────────────────────────────────────────────────
-    QToolBar* sideBar = new QToolBar("SideBar", this);
-    sideBar->setObjectName("SideBar");        // matches the stylesheet in main.cpp
-    addToolBar(Qt::LeftToolBarArea, sideBar);
-    sideBar->setOrientation(Qt::Vertical);
-    sideBar->setMovable(false);
-    sideBar->setFloatable(false);
-    sideBar->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-    sideBar->setIconSize(QSize(26, 26));
-
-    QStyle* st = QApplication::style();
-    auto* group = new QActionGroup(this);
-    group->setExclusive(true);
-
-    auto addPage = [&](const QIcon& icon, const QString& text, int page) {
-        QAction* a = new QAction(icon, text, this);
-        a->setCheckable(true);
-        group->addAction(a);
-        sideBar->addAction(a);
-        connect(a, &QAction::triggered, this, [this, page] { pages_->setCurrentIndex(page); });
-        return a;
-    };
-
-    QAction* aDetect = addPage(st->standardIcon(QStyle::SP_ComputerIcon),           "Detection",   0);
-                       addPage(st->standardIcon(QStyle::SP_DriveNetIcon),           "Indexes",     2);
-                       addPage(st->standardIcon(QStyle::SP_FileDialogDetailedView), "Settings",    1);
-                       addPage(st->standardIcon(QStyle::SP_DriveCDIcon), "Gallery",    3);
-    aDetect->setChecked(true);
-
-    setWindowTitle("TCG Deck Builder");
-    resize(1440, 900);
-
-    **/
+    QLabel* dot = btn->findChild<QLabel*>("updateDot");
+    if (!dot) {
+        dot = new QLabel(btn);
+        dot->setObjectName("updateDot");
+        dot->setFixedSize(9, 9);
+        dot->setStyleSheet("background:#e5484d; border-radius:4px;");
+        dot->setAttribute(Qt::WA_TransparentForMouseEvents);
+    }
+    dot->move(btn->width() - 14, 6);
+    dot->setVisible(seriesUpdateAvailable_);
+    dot->raise();
+}

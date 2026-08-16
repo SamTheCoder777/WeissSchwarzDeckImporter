@@ -4,9 +4,7 @@
 #include "../viewmodels/Models.h"
 #include "../viewmodels/UiBridge.h"
 #include "../index/IndexCatalog.h"
-#include "../index/IndexSearchProxy.h"
 #include "../services/ModelService.h"
-#include "../database/DatasetManager.h"
 
 #include <QPushButton>
 #include <QQuickWidget>
@@ -20,7 +18,7 @@ class DetectionPage: public QWidget {
     Q_OBJECT
 
 public:
-    explicit DetectionPage(ModelService* models, DatabaseUtil* dbUtil, DatasetManager* dbManager,
+    explicit DetectionPage(ModelService* models, DatabaseUtil* dbUtil,
                            SelectionModel* selModel, UiBridge* bridge,
                            IndexCatalog* catalog, QSortFilterProxyModel* installedProxy,
                            QWidget* parent = nullptr);
@@ -28,7 +26,6 @@ public:
 private:
     ModelService* models_;
     DatabaseUtil* dbUtil_;
-    DatasetManager* dbManager_;
     SelectionModel* selModel_;
     UiBridge* bridge_;
     IndexCatalog* catalog_;
@@ -38,7 +35,7 @@ private:
     QPushButton *polyBtn_;
     QPushButton *autoBtn_;
 
-    std::vector<CardDetection> autoDets_;           // cached detections for current image
+    std::vector<CardDetection> autoDets_;
     bool autoDetectMode_ = false;
     ImageCanvas *canvas_;
 
@@ -48,6 +45,8 @@ private:
     cv::Mat  sourceBgr_;
     QString  sourcePath_;
 
+    QMap<int, int> selRotations_;
+
     QFutureWatcher<void> detectWatcher_;
 
     struct SelState {
@@ -56,6 +55,7 @@ private:
         std::string cardId;
         int         qty = 1;
         int id = -1;
+        int rotation = 0;
     };
 
     QVector<SelState> sel_;
@@ -76,9 +76,10 @@ private:
     cv::Mat cropForSelection(int index) const;
     void runDetection();
     void showSelectionResults(int index);
+    void rotateSelectionImage(int index, int rot);
     void confirmCandidate(int candIndex);
     void exportDeck();
-    QImage handlePasteImage(QLabel *imageLabel);
+    QImage handlePasteImage();
 };
 
 

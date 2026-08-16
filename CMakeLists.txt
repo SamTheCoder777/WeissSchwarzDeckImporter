@@ -56,14 +56,20 @@ add_executable(tcg_app WIN32
     src/core/Config.h src/core/Config.cpp
     src/index/IndexSearchProxy.h
 
-    src/database/DatabaseWorker.h src/database/DatabaseWorker.cpp
-    src/database/DatasetManager.h src/database/DatasetManager.cpp
+
+
     src/database/DatabaseUtil.h src/database/DatabaseUtil.cpp
     src/gallery/GalleryPage.h src/gallery/GalleryPage.cpp
     src/index/FaissPage.h src/index/FaissPage.cpp
     src/settings/SettingsPage.h src/settings/SettingsPage.cpp
     src/detection/DetectionPage.h src/detection/DetectionPage.cpp
     src/services/ModelService.h src/services/ModelService.cpp
+    src/cardsIndex/CardsPage.h src/cardsIndex/CardsPage.cpp
+    src/cardsIndex/SeriesCatalog.h src/cardsIndex/SeriesCatalog.cpp
+    src/cardsIndex/SeriesSearchProxy.h
+    src/images/CardImageProvider.h src/images/CardImageProvider.cpp
+    src/database/OfficialFallback.cpp src/database/OfficialFallback.h
+    src/cardsIndex/CardsPage.cpp src/cardsIndex/CardsPage.h src/cardsIndex/SeriesCatalog.cpp src/cardsIndex/SeriesCatalog.h src/cardsIndex/SeriesRepository.cpp src/cardsIndex/SeriesRepository.h src/cardsIndex/SeriesSearchProxy.h
 )
 target_include_directories(tcg_app PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(tcg_app PRIVATE
@@ -95,3 +101,7 @@ if (WIN32)
                     "$<TARGET_FILE:tcg_app>")
     endif()
 endif()
+
+# if (APPLE)
+#     set_target_properties(tcg_app PROPERTIES MACOSX_BUNDLE TRUE)
+# endif()
