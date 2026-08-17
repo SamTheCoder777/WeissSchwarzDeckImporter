@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Dialogs
 
 Rectangle {
     id: root
@@ -94,15 +93,15 @@ Rectangle {
                             radius: 8
                             color: root.card
                             border.width: 1
-                            border.color: root.nameError.length > 0 ? root.errColor
-                                        : nameField.activeFocus ? root.accent : root.cardBorder
+                            border.color: root.nameError.length > 0 ? root.errColor : nameField.activeFocus ? root.accent : root.cardBorder
                         }
                         onTextChanged: root.validateName()
                     }
                     Label {
                         visible: root.nameError.length > 0
                         text: root.nameError
-                        color: root.errColor; font.pixelSize: 11
+                        color: root.errColor
+                        font.pixelSize: 11
                     }
                 }
 
@@ -137,7 +136,11 @@ Rectangle {
                             text: "Open folder"
                             enabled: !root.building
                             implicitHeight: 38
-                            onClicked: folderDialog.open()
+                            onClicked: {
+                                var dir = config.pickFolder();
+                                if (dir.length > 0)
+                                    root.chosenFolder = dir;
+                            }
                             background: Rectangle {
                                 radius: 8
                                 color: parent.down ? "#111315" : parent.hovered ? "#2c3033" : "#212427"
@@ -316,14 +319,6 @@ Rectangle {
                     onTextChanged: cursorPosition = length
                 }
             }
-        }
-    }
-
-    FolderDialog {
-        id: folderDialog
-        title: "Choose image folder"
-        onAccepted: {
-            root.chosenFolder = config.urlToLocalFile(selectedFolder);
         }
     }
 
