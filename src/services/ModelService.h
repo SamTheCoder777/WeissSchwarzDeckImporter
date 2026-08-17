@@ -35,8 +35,7 @@ public:
     }
     bool busy() const { return busy_; }
 
-    void load(const QString& onnx, const QString& indexDir, const QString& yolo,
-              bool native, int imgSize, bool silent);
+    void load(const QString &onnx, const QString &yolo, bool native, int imgSize, bool silent);
 
     void load(bool silent = false); // For when settings already set
 

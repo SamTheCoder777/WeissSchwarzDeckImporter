@@ -129,8 +129,10 @@ void SettingsPage::buildUi()
         if(models_->isLoading()) return;
         try{
             models_->load(onnxEdit_->text(),
-                          models_->getIndexDir(), yoloEdit_->text(),
-                          Config::instance().getModelNative(), Config::instance().getModelImgSize(), false);
+                          yoloEdit_->text(),
+                          Config::instance().getModelNative(),
+                          Config::instance().getModelImgSize(),
+                          false);
         }catch(const std::exception& e){
             QMessageBox::critical(this, "Error Loading Model", QString::fromStdString(e.what()));
         }

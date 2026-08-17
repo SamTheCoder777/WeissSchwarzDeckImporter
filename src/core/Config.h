@@ -1,11 +1,12 @@
 #pragma once
 
-#include <QString>
-#include <QSettings>
 #include <QCoreApplication>
 #include <QDir>
-#include <QUrl>
+#include <QFileDialog>
+#include <QSettings>
 #include <QStandardPaths>
+#include <QString>
+#include <QUrl>
 
 using StringStringMap = QMap<QString, QString>;
 Q_DECLARE_METATYPE(StringStringMap)
@@ -94,11 +95,16 @@ public:
     // check if index name exists
     Q_INVOKABLE bool indexNameExists(const QString &name);
 
-    // file url translator
+    // file url managers
     Q_INVOKABLE QString urlToLocalFile(const QUrl &url) const { return url.toLocalFile(); }
     Q_INVOKABLE QString localFileToUrl(const QString &path) const
     {
         return QUrl::fromLocalFile(path).toString();
+    }
+    Q_INVOKABLE QString pickFolder()
+    {
+        QString dir = QFileDialog::getExistingDirectory(nullptr, "Choose image folder", QString());
+        return dir;
     }
 
 private:

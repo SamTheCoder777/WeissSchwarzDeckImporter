@@ -1,14 +1,13 @@
 #include "ModelService.h"
 #include "../core/Config.h"
 
-#include <QMessageBox>
-#include <QtConcurrent>
-#include <QStandardPaths>
 #include <QDir>
+#include <QMessageBox>
+#include <QStandardPaths>
+#include <QtConcurrent>
 
-
-ModelService::ModelService(QObject *parent):
-    QObject(parent)
+ModelService::ModelService(QObject *parent)
+    : QObject(parent)
 {
     // Model load watcher
     connect(&coreLoadWatcher_, &QFutureWatcher<TcgCore *>::finished, this, [this] {
@@ -62,24 +61,20 @@ ModelService::ModelService(QObject *parent):
     });
 }
 
-void ModelService::load(const QString &onnx, const QString &indexDir, const QString &yolo, bool native, int imgSize, bool silent)
+void ModelService::load(
+    const QString &onnx, const QString &yolo, bool native, int imgSize, bool silent)
 {
     if (loading_ || busy_)
         return;
 
-    if (!silent && indexDir.isEmpty()) {
-        //QMessageBox::warning(this, "Detector", "Index not set.\nDownload and click 'use'.");
-        emit loaded(false, "Index not set.\nDownload and click 'use'.");
+    if (yolo.isEmpty() || onnx.isEmpty())
         return;
-    }
-    if (indexDir.isEmpty() || onnx.isEmpty()) return;
 
     onnx_ = onnx;
-    indexDir_ = indexDir;
-    const bool native_       = native;
-    const int  imgSize_      = imgSize;
-    pendingYolo_            = yolo;
-    silent_            = silent;
+    const bool native_ = native;
+    const int imgSize_ = imgSize;
+    pendingYolo_ = yolo;
+    silent_ = silent;
 
     loading_ = true;
     loaded_ = false;
@@ -88,14 +83,9 @@ void ModelService::load(const QString &onnx, const QString &indexDir, const QStr
 
     //QApplication::setOverrideCursor(Qt::BusyCursor);
 
-    QFuture<TcgCore *> fut = QtConcurrent::run([onnx, indexDir, native_, imgSize_]() -> TcgCore * {
+    QFuture<TcgCore *> fut = QtConcurrent::run([onnx, native_, imgSize_]() -> TcgCore * {
         try {
-            return new TcgCore(onnx.toStdString(),
-                               indexDir.toStdString(),
-                               std::string(),
-                               native_,
-                               imgSize_,
-                               true);
+            return new TcgCore(onnx.toStdString(), native_, imgSize_, true);
         } catch (...) {
             return nullptr;
         }
@@ -105,9 +95,8 @@ void ModelService::load(const QString &onnx, const QString &indexDir, const QStr
 
 void ModelService::load(bool silent)
 {
-    Config& c = Config::instance();
+    Config &c = Config::instance();
     load(c.getCurModelPath(),
-         indexDirForId(c.getCurIndexId()),
          c.getCurYoloModelPath(),
          c.getModelNative(),
          c.getModelImgSize(),
@@ -147,7 +136,8 @@ void ModelService::changeIndex(const QString &indexDir)
 
 QString ModelService::indexDirForId(const QString &id)
 {
-    if (id.isEmpty()) return {};
+    if (id.isEmpty())
+        return {};
     QString base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QString dir = base + "/indexes/" + id;
     return QDir(dir).exists() ? dir : QString();

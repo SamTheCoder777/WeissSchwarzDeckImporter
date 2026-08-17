@@ -16,16 +16,15 @@
 
 #include "tcg_util.h"
 
-TcgCore::TcgCore(const std::string &onnx_path, const std::string &index_dir,
-                 const std::string &masters_dir, bool native, int img_size,
-                 bool acceleration)
-    : native_(native), S_(img_size), masters_dir_(masters_dir),
-      env_(ORT_LOGGING_LEVEL_WARNING, "tcg") {
-  so_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-  so_.SetIntraOpNumThreads(
-      std::max(1u, std::thread::hardware_concurrency() / 2));
+TcgCore::TcgCore(const std::string &onnx_path, bool native, int img_size, bool acceleration)
+    : native_(native)
+    , S_(img_size)
+    , env_(ORT_LOGGING_LEVEL_WARNING, "tcg")
+{
+    so_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+    so_.SetIntraOpNumThreads(std::max(1u, std::thread::hardware_concurrency() / 2));
 
-  if (acceleration) {
+    if (acceleration) {
 #if defined(_WIN32)
     OrtSessionOptionsAppendExecutionProvider_DML(so_, 0);
 #elif defined(__APPLE__)
@@ -71,9 +70,6 @@ TcgCore::TcgCore(const std::string &onnx_path, const std::string &index_dir,
   auto out = session_->GetOutputNameAllocated(0, alloc);
   out_name_ = out.get();
   output_name_ptrs_.push_back(out_name_.c_str());
-
-  // index files
-  load_index(index_dir);
 }
 
 std::vector<float> TcgCore::preprocess(const cv::Mat &crop_bgr, int64_t &gy,
