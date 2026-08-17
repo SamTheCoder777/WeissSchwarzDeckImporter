@@ -42,6 +42,7 @@ ModelService::ModelService(QObject *parent):
         Config::instance().setCurModelPath(onnx_);
         Config::instance().setCurYoloModelPath(pendingYolo_);
         loaded_ = true;
+        emit loaded(true, "");
         emit statusChanged("Model + index loaded OK.");
         //pushStateToQml();
     });
@@ -52,11 +53,19 @@ ModelService::ModelService(QObject *parent):
         emit statusChanged("Index successfully switched");
         //pushStateToQml();
     });
+
+    // Model index build watcher
+    connect(&builderWatcher_, &QFutureWatcher<bool>::finished, this, [this] {
+        const bool ok = builderWatcher_.result();
+        setBusy(false);
+        emit indexBuildFinished(ok);
+    });
 }
 
 void ModelService::load(const QString &onnx, const QString &indexDir, const QString &yolo, bool native, int imgSize, bool silent)
 {
-    if (loading_) return;
+    if (loading_ || busy_)
+        return;
 
     if (!silent && indexDir.isEmpty()) {
         //QMessageBox::warning(this, "Detector", "Index not set.\nDownload and click 'use'.");
@@ -85,7 +94,8 @@ void ModelService::load(const QString &onnx, const QString &indexDir, const QStr
                                indexDir.toStdString(),
                                std::string(),
                                native_,
-                               imgSize_);
+                               imgSize_,
+                               true);
         } catch (...) {
             return nullptr;
         }
@@ -106,7 +116,7 @@ void ModelService::load(bool silent)
 
 void ModelService::changeIndex(const QString &indexDir)
 {
-    if (loading_ || !loaded_)
+    if (loading_ || !loaded_ || busy_)
         return;
 
     if (indexDir.isEmpty()) {
@@ -125,7 +135,7 @@ void ModelService::changeIndex(const QString &indexDir)
 
     emit statusChanged("Switching index, please wait…");
 
-    QFuture<TcgCore *> fut = QtConcurrent::run([this]() -> TcgCore * {
+    QFuture<void> fut = QtConcurrent::run([this]() {
         try {
             tcgCore_->load_index(indexDir_.toStdString());
         } catch (const std::exception &e) {
@@ -149,15 +159,42 @@ std::vector<Candidate> ModelService::search(const cv::Mat &cropBgr, int topK)
     return tcgInfer_->search(cropBgr, topK);
 }
 
-bool ModelService::buildIndex(const QString &imageDir, const QString &saveDir, const int batchSize)
+void ModelService::buildIndex(const QString &imageDir, const QString &saveDir, int batchSize)
 {
-    std::unique_lock<std::mutex> lock(onnxMutex_, std::try_to_lock);
-    if (!lock.owns_lock()) {
-        emit loaded(false, "Busy searching — try building the index in a moment.");
-        return false;
+    if (busy_) {
+        emit indexLog("Busy — can't build index right now.");
+        return;
     }
+    setBusy(true);
+    indexBuilder_->resetCancel();
+    emit indexLog("Starting index build…");
 
-    indexBuilder_->create_index_batched(imageDir.toStdString(), saveDir.toStdString(), batchSize);
+    QFuture<bool> fut = QtConcurrent::run([this, imageDir, saveDir, batchSize]() -> bool {
+        std::unique_lock<std::mutex> lock(onnxMutex_, std::try_to_lock);
+        if (!lock.owns_lock()) {
+            emit indexLog("Busy searching — try building the index in a moment.");
+            return false;
+        }
+        try {
+            indexBuilder_->create_index_batched(imageDir.toStdString(),
+                                                saveDir.toStdString(),
+                                                batchSize,
+                                                [this](const QString &msg, int done, int total) {
+                                                    emit indexLog(msg);
+                                                    emit indexProgress(done, total);
+                                                });
+        } catch (const std::exception &e) {
+            emit indexLog(QString("Error: %1").arg(e.what()));
+            return false;
+        }
+        return true;
+    });
+    builderWatcher_.setFuture(fut);
+}
 
-    return true;
+void ModelService::cancelIndexBuild()
+{
+    if (indexBuilder_)
+        indexBuilder_->requestCancel();
+    emit indexLog("Cancelling after current batch…");
 }

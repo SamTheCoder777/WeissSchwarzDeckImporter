@@ -29,8 +29,20 @@ void IndexBuilder::create_index_batched(const std::string &image_dir,
     batch_images.reserve(batch_size);
     batch_card_ids.reserve(batch_size);
 
+    int total = 0;
+    for (const auto &entry : fs::recursive_directory_iterator(image_dir))
+        if (entry.is_regular_file())
+            ++total;
+
     int processed_count = 0;
     std::cout << "Starting batch processing on: " << image_dir << "\n";
+    if (progress)
+        progress(QString("Starting processing on: %1 with batch size %2 (total %3 images)")
+                     .arg(image_dir)
+                     .arg(batch_size)
+                     .arg(total),
+                 -1,
+                 -1);
 
     auto process_current_batch = [&]() {
         if (batch_images.empty())
@@ -61,6 +73,10 @@ void IndexBuilder::create_index_batched(const std::string &image_dir,
 
         processed_count += batch_images.size();
         std::cout << "Processed " << processed_count << " images...\n";
+        if (progress)
+            progress(QString("Processed %1 images out of %2").arg(processed_count).arg(total),
+                     processed_count,
+                     total);
 
         batch_images.clear();
         batch_card_ids.clear();
@@ -120,4 +136,6 @@ void IndexBuilder::create_index_batched(const std::string &image_dir,
     //                     std::move(new_card_ids));
 
     std::cout << "Successfully created batched index!\n";
+    if (progress)
+        progress(QString("Successfully created batched index!"), processed_count, total);
 }

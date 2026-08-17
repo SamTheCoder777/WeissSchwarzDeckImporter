@@ -16,6 +16,8 @@
 
 class ModelService : public QObject {
     Q_OBJECT
+    Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+    Q_PROPERTY(bool loaded READ isLoaded NOTIFY loaded)
 public:
     explicit ModelService(QObject* parent = nullptr);
 
@@ -49,12 +51,20 @@ public:
     // faiss index search
     std::vector<Candidate> search(const cv::Mat &cropBgr, int topK);
     // faiss build index
-    bool buildIndex(const QString &imageDir, const QString &saveDir, const int batchSize);
+    Q_INVOKABLE void buildIndex(const QString &imageDir,
+                                const QString &saveDir,
+                                const int batchSize);
+    Q_INVOKABLE void cancelIndexBuild();
 signals:
     void loaded(bool ok, const QString &message);
     void loading(bool finished);
     void statusChanged(const QString& message);
     void busyChanged();
+
+    // faiss build index
+    void indexLog(const QString &line);
+    void indexProgress(int done, int total);
+    void indexBuildFinished(bool ok);
 
 private:
     // Faiss card model
@@ -66,7 +76,7 @@ private:
 
     QFutureWatcher<TcgCore *> coreLoadWatcher_;
     QFutureWatcher<void> coreIndexChangeWatcher_;
-    QFutureWatcher<IndexBuilder *> builderWatcher_;
+    QFutureWatcher<bool> builderWatcher_;
     QFutureWatcher<TcgInfer *> inferWatcher_;
 
     std::mutex onnxMutex_;

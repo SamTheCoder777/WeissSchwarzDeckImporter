@@ -1,6 +1,7 @@
 #include "tcg_core.h"
 
 #define NOMINMAX
+#include <QDebug>
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
@@ -38,7 +39,6 @@ TcgCore::TcgCore(const std::string &onnx_path, const std::string &index_dir,
       TcgUtil::utf8_to_wide(onnx_path); // proper UTF-8 -> UTF-16
   const auto *path_ptr = wpath.c_str();
 #else
-  session_ = std::make_unique<Ort::Session>(env_, onnx_path.c_str(), so_);
   const auto *path_ptr = onnx_path.c_str();
 #endif
 

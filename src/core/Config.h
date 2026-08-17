@@ -77,7 +77,8 @@ public:
     int getModelImgSize() const {return imgSize_;}
 
     // --- index settings ---
-    QString getIndexInstallPath() const {
+    Q_INVOKABLE QString getIndexInstallPath() const
+    {
         return indexInstallPath_.isEmpty()
         ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
                 .filePath("indexes")
@@ -88,6 +89,17 @@ public:
         return indexManifestUrl_.isEmpty() ? kDefaultManifestUrl : indexManifestUrl_;
     }
     void setIndexManifestUrl(const QString& u);
+    // check if index name is valid
+    Q_INVOKABLE bool isValidIndexName(const QString &name);
+    // check if index name exists
+    Q_INVOKABLE bool indexNameExists(const QString &name);
+
+    // file url translator
+    Q_INVOKABLE QString urlToLocalFile(const QUrl &url) const { return url.toLocalFile(); }
+    Q_INVOKABLE QString localFileToUrl(const QString &path) const
+    {
+        return QUrl::fromLocalFile(path).toString();
+    }
 
 private:
     Config();

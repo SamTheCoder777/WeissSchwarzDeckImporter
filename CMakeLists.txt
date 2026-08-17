@@ -10,7 +10,7 @@ set(CMAKE_AUTOUIC ON)
 # ── ONNXRuntime: PREBUILT zip from Microsoft (NOT a vcpkg source build) ─────
 # https://github.com/microsoft/onnxruntime/releases -> onnxruntime-win-x64-<ver>.zip
 if(WIN32)
-    set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/onnxruntime-win-x64-1.27.1" CACHE PATH "ONNXRuntime prebuilt dir")
+    set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/onnxruntime-directml-1.24.4" CACHE PATH "ONNXRuntime prebuilt dir")
 elseif(APPLE)
     set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/onnxruntime-osx-arm64-1.23.2" CACHE PATH "ONNXRuntime prebuilt dir")
 endif()
@@ -72,6 +72,7 @@ add_executable(tcg_app WIN32
     src/cardsIndex/CardsPage.cpp src/cardsIndex/CardsPage.h src/cardsIndex/SeriesCatalog.cpp src/cardsIndex/SeriesCatalog.h src/cardsIndex/SeriesRepository.cpp src/cardsIndex/SeriesRepository.h src/cardsIndex/SeriesSearchProxy.h
     src/models/index_builder.cpp src/models/index_builder.h src/models/tcg_core.cpp src/models/tcg_core.h src/models/tcg_infer.cpp src/models/tcg_infer.h
     src/models/tcg_util.h
+    src/index/IndexGenerationPage.h src/index/IndexGenerationPage.cpp
 )
 target_include_directories(tcg_app PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(tcg_app PRIVATE

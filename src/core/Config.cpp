@@ -1,10 +1,11 @@
 #include "Config.h"
 
 #include <QCoreApplication>
+#include <QRegularExpression>
 #include <QSettings>
 
-
-Config& Config::instance() {
+Config &Config::instance()
+{
     static Config instance;
     return instance;
 }
@@ -111,3 +112,22 @@ void Config::setIndexManifestUrl(const QString &u)
     save();
 }
 
+bool Config::isValidIndexName(const QString &name)
+{
+    QRegularExpression illegalChars("[<>:\"/\\\\|?*\\x00-\\x1F]");
+    if (illegalChars.match(name).hasMatch())
+        return false;
+
+    if (name.endsWith("."))
+        return false;
+
+    if (name == "." || name == "..")
+        return false;
+
+    return true;
+}
+
+bool Config::indexNameExists(const QString &name)
+{
+    return QFileInfo::exists(getIndexInstallPath() + "/" + name.trimmed());
+}
