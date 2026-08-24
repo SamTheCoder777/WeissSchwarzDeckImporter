@@ -189,6 +189,16 @@ Rectangle {
                         enabled: !root.building
                     }
                 }
+
+                CheckBox {
+                    text: "Disable Card Id Format Check"
+                    checked: config.disableNameCheck
+                    palette.windowText: root.text2
+
+                    onCheckedChanged: {
+                        config.toggleNameCheck()
+                    }
+                }
             }
         }
 

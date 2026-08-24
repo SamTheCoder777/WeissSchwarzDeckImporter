@@ -16,6 +16,7 @@ class Config : public QObject {
     Q_PROPERTY(QString curIndexId READ getCurIndexId CONSTANT)
     Q_PROPERTY(QString curYoloModelPath READ getCurYoloModelPath CONSTANT)
     Q_PROPERTY(QString curModelPath READ getCurModelPath CONSTANT)
+    Q_PROPERTY(bool disableNameCheck READ getDisableNameCheck CONSTANT)
 public:
     static Config& instance();
 
@@ -106,6 +107,9 @@ public:
         QString dir = QFileDialog::getExistingDirectory(nullptr, "Choose image folder", QString());
         return dir;
     }
+    // automatic set name forcing for index
+    Q_INVOKABLE void toggleNameCheck();
+    bool getDisableNameCheck() const { return disableNameCheck_; }
 
 private:
     Config();
@@ -143,7 +147,7 @@ private:
     QString kDefaultManifestUrl = "https://huggingface.co/datasets/SamTheCoder777/ws-index/raw/main/manifest.json";
     QString indexInstallPath_;
     QString indexManifestUrl_;
-
+    bool disableNameCheck_ = false;
 };
 
 

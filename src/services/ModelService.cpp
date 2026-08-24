@@ -169,6 +169,7 @@ void ModelService::buildIndex(const QString &imageDir, const QString &saveDir, i
             indexBuilder_->create_index_batched(imageDir.toStdString(),
                                                 saveDir.toStdString(),
                                                 batchSize,
+                                                Config::instance().getDisableNameCheck(),
                                                 [this](const QString &msg, int done, int total) {
                                                     emit indexLog(msg);
                                                     emit indexProgress(done, total);

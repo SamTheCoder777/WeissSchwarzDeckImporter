@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QString>
+#include <regex>
 #include <string>
 
 #include "tcg_core.h"
@@ -16,13 +17,16 @@ public:
     void create_index_batched(const std::string &image_dir,
                               const std::string &save_dir,
                               int batch_size = 32,
+                              bool disable_name_check = false,
                               ProgressFn progress = nullptr);
 
     void requestCancel() { cancelRequested_ = true; }
     void resetCancel() { cancelRequested_ = false; }
 
 private:
-    TcgCore &core_;
+  TcgCore &core_;
 
-    std::atomic<bool> cancelRequested_{false};
+  static const inline std::regex set_pattern_{"\\w+(-)\\w+-.+"};
+
+  std::atomic<bool> cancelRequested_{false};
 };

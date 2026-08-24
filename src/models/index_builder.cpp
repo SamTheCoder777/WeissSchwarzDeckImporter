@@ -16,6 +16,7 @@ namespace fs = std::filesystem;
 void IndexBuilder::create_index_batched(const std::string &image_dir,
                                         const std::string &save_dir,
                                         int batch_size,
+                                        bool disable_name_check,
                                         ProgressFn progress)
 {
     std::vector<float> all_embeddings;
@@ -36,6 +37,7 @@ void IndexBuilder::create_index_batched(const std::string &image_dir,
 
     int processed_count = 0;
     std::cout << "Starting batch processing on: " << image_dir << "\n";
+
     if (progress)
         progress(QString("Starting processing on: %1 with batch size %2 (total %3 images)")
                      .arg(image_dir)
@@ -53,11 +55,21 @@ void IndexBuilder::create_index_batched(const std::string &image_dir,
 
         for (const auto &cid : batch_card_ids) {
             int slot = 0;
-            auto it = card_id_to_slot.find(cid);
+
+            std::smatch match;
+
+            std::string current_id = cid;
+
+            if (!disable_name_check) {
+                std::regex_search(current_id, match, set_pattern_);
+                current_id.replace(match.position(1), match.length(1), "/");
+            }
+
+            auto it = card_id_to_slot.find(current_id);
             if (it == card_id_to_slot.end()) {
                 slot = static_cast<int>(new_card_ids.size());
-                card_id_to_slot[cid] = slot;
-                new_card_ids.push_back(cid);
+                card_id_to_slot[current_id] = slot;
+                new_card_ids.push_back(current_id);
             } else {
                 slot = it->second;
             }
@@ -72,7 +84,6 @@ void IndexBuilder::create_index_batched(const std::string &image_dir,
                             current_batch_slots.end());
 
         processed_count += batch_images.size();
-        std::cout << "Processed " << processed_count << " images...\n";
         if (progress)
             progress(QString("Processed %1 images out of %2").arg(processed_count).arg(total),
                      processed_count,
@@ -81,6 +92,23 @@ void IndexBuilder::create_index_batched(const std::string &image_dir,
         batch_images.clear();
         batch_card_ids.clear();
     };
+
+    // pre check if the folder contains correct file names
+    if (!disable_name_check) {
+        for (const auto &entry : fs::recursive_directory_iterator(image_dir)) {
+            if (!entry.is_regular_file())
+                continue;
+
+            std::string filepath = entry.path().string();
+            std::string card_id = entry.path().stem().string();
+
+            std::smatch match;
+
+            if (!std::regex_search(card_id, match, set_pattern_)) {
+                throw std::runtime_error(filepath + " does not match the required pattern");
+            }
+        }
+    }
 
     for (const auto &entry : fs::recursive_directory_iterator(image_dir)) {
         if (cancelRequested_)

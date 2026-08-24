@@ -35,6 +35,12 @@ void Config::load() {
     jpSeriesListEtag_ = settings_->value("jpSeriesListEtag").toString();
 
     settings_->endGroup();
+
+    settings_->beginGroup("Index");
+
+    disableNameCheck_ = settings_->value("DisableNameCheck").toBool();
+
+    settings_->endGroup();
 }
 
 void Config::save() {
@@ -54,11 +60,16 @@ void Config::save() {
 
     settings_->endGroup();
 
-
-    settings_->sync();
-
     qDebug() << "Config saved to:" << settings_->fileName();
     qDebug() << "IndexId set to:" << curIndexId_;
+
+    settings_->beginGroup("Index");
+
+    settings_->setValue("DisableNameCheck", disableNameCheck_);
+
+    settings_->endGroup();
+
+    settings_->sync();
 }
 
 void Config::setCurModelPath(const QString &curModelPath){
@@ -130,4 +141,10 @@ bool Config::isValidIndexName(const QString &name)
 bool Config::indexNameExists(const QString &name)
 {
     return QFileInfo::exists(getIndexInstallPath() + "/" + name.trimmed());
+}
+
+void Config::toggleNameCheck()
+{
+    disableNameCheck_ = !disableNameCheck_;
+    save();
 }
