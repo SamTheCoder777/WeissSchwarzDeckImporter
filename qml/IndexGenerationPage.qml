@@ -172,18 +172,72 @@ Rectangle {
                         Item {
                             Layout.fillWidth: true
                         }
-                        Label {
-                            text: Math.round(batchSlider.value)
-                            color: root.text1
-                            font.pixelSize: 12
-                            font.weight: Font.DemiBold
+                        Loader {
+                            id: valueLoader
+                            property bool editing: false
+
+                            sourceComponent: editing ? editorComponent : labelComponent
+
+                            Component {
+                                id: labelComponent
+                                Label {
+                                    text: Math.round(batchSlider.value)
+                                    color: root.text1
+                                    font.pixelSize: 12
+                                    font.weight: Font.DemiBold
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        enabled: !root.building
+                                        cursorShape: Qt.IBeamCursor
+                                        onClicked: valueLoader.editing = true
+                                    }
+                                }
+                            }
+
+                            Component {
+                                id: editorComponent
+                                TextField {
+                                    id: inputField
+                                    text: Math.round(batchSlider.value).toString()
+                                    font.pixelSize: 12
+                                    font.weight: Font.DemiBold
+                                    horizontalAlignment: Text.AlignRight
+                                    selectByMouse: true
+
+                                    validator: IntValidator {
+                                        bottom: batchSlider.from
+                                        top: batchSlider.to
+                                    }
+
+                                    Component.onCompleted: {
+                                        forceActiveFocus();
+                                        selectAll();
+                                    }
+
+                                    function commitValue() {
+                                        var val = parseInt(text);
+                                        if (!isNaN(val)) {
+                                            val = Math.max(batchSlider.from, Math.min(batchSlider.to, val));
+                                            batchSlider.value = val;
+                                        }
+                                        valueLoader.editing = false;
+                                    }
+
+                                    onAccepted: commitValue()
+                                    onActiveFocusChanged: {
+                                        if (!activeFocus)
+                                            commitValue();
+                                    }
+                                }
+                            }
                         }
                     }
                     Slider {
                         id: batchSlider
                         Layout.fillWidth: true
                         from: 1
-                        to: 128
+                        to: 256
                         stepSize: 1
                         value: 1
                         enabled: !root.building
@@ -196,7 +250,7 @@ Rectangle {
                     palette.windowText: root.text2
 
                     onCheckedChanged: {
-                        config.toggleNameCheck()
+                        config.toggleNameCheck();
                     }
                 }
             }
