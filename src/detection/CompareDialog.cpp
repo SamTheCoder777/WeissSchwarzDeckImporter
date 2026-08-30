@@ -212,8 +212,14 @@ void CompareDialog::showLoading(bool on)
 
 void CompareDialog::keyPressEvent(QKeyEvent* e) {
     switch (e->key()) {
-    case Qt::Key_Left:  showCandidate(cur_ - 1); return;
-    case Qt::Key_Right: showCandidate(cur_ + 1); return;
+    case Qt::Key_Left:
+    case Qt::Key_A:
+        showCandidate(cur_ - 1);
+        return;
+    case Qt::Key_Right:
+    case Qt::Key_D:
+        showCandidate(cur_ + 1);
+        return;
     case Qt::Key_Return:
     case Qt::Key_Enter:
         confirmed_ = cur_;
