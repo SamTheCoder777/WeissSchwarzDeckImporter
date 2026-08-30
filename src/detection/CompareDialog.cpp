@@ -18,7 +18,6 @@ CompareDialog::CompareDialog(const QImage& crop,
 
     auto* root = new QVBoxLayout(this);
 
-    // ── two big image panels side by side ──────────────────────────────────
     auto* row = new QHBoxLayout;
 
     auto* leftCol = new QVBoxLayout;
@@ -72,7 +71,6 @@ CompareDialog::CompareDialog(const QImage& crop,
     row->addLayout(rightCol, 1);
     root->addLayout(row, 1);
 
-    // ── nav + confirm bar ──────────────────────────────────────────────────
     auto* bar = new QHBoxLayout;
     auto* prevBtn = new QPushButton("◀  Prev  (←)");
     auto* nextBtn = new QPushButton("Next  (→)  ▶");
