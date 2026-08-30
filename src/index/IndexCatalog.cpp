@@ -157,6 +157,7 @@ void IndexCatalog::refresh()
     QNetworkRequest req{QUrl(Config::instance().getIndexManifestUrl())};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
+    qDebug() << "[IndexCatalog] api call to " << Config::instance().getIndexManifestUrl();
     reply_ = nam_.get(req);
     connect(reply_, &QNetworkReply::finished, this, [this] {
         QByteArray body;
