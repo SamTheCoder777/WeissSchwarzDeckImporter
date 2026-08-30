@@ -6,6 +6,11 @@
 #include <QStandardPaths>
 #include <QtConcurrent>
 
+static QString indexDirForId(const QString &id)
+{
+    return Config::instance().getIndexInstallPath() + "/" + id;
+}
+
 ModelService::ModelService(QObject *parent)
     : QObject(parent)
 {
@@ -42,8 +47,29 @@ ModelService::ModelService(QObject *parent)
         Config::instance().setCurYoloModelPath(pendingYolo_);
         loaded_ = true;
         emit loaded(true, "");
+        emit statusChanged("Model loaded OK.");
+
+        // attempt to load prev index
+        const QString id = Config::instance().getCurIndexId();
+        const QString dir = indexDirForId(id);
+
+        if (id.isEmpty() || !QFile::exists(dir + "/index.faiss")) {
+            emit statusChanged("Model loaded without index");
+            if (!silent_)
+                emit loaded(false, "The selected index is missing. Choose or download an index.");
+            return;
+        }
+
+        try {
+            tcgCore_->load_index(dir.toStdString());
+        } catch (const std::exception &e) {
+            emit statusChanged("Model loaded without index");
+            if (!silent_)
+                emit loaded(false, QString("Index load failed: %1").arg(e.what()));
+            return;
+        }
+
         emit statusChanged("Model + index loaded OK.");
-        //pushStateToQml();
     });
 
     // Model index change watcher
