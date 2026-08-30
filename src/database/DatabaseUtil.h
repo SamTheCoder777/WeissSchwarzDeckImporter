@@ -9,6 +9,7 @@
 class DatabaseUtil : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString locale READ locale WRITE setLocale NOTIFY localeChanged)
+
 public:
     using QObject::QObject;
 
@@ -17,7 +18,9 @@ public:
 
     Q_INVOKABLE QString imageUrlFor(const QString &cardCode) const;
     Q_INVOKABLE QVariantMap cardDataFor(const QString &cardCode) const;
-    Q_INVOKABLE void ensureCardData(const QString& cardCode);
+    Q_INVOKABLE void ensureCardData(const QString &cardCode);
+    void purgeMissingCards();
+    void cleanupExpiredMissing();
 
     Q_INVOKABLE void toggleLocale() { setLocale(locale_ == "EN" ? "JP" : "EN"); }
 
@@ -25,6 +28,7 @@ signals:
     void localeChanged();
     void cardReady(const QString& cardCode);
     void cardFetchFailed(const QString& cardCode, const QString& reason);
+    void missingCardsPurged(int count);
 
 private:
     struct FetchState {
@@ -41,4 +45,8 @@ private:
     QNetworkAccessManager nam_;
     bool cardInDb(const QString& cardCode) const;
     void storeOfficialCard(const QString& cardCode, const QJsonObject& encoreShaped);
+
+    bool isKnownMissing(const QString &cardCode) const;
+    void markMissing(const QString &cardCode, const QString &reason);
+    void ensureMissingTable();
 };

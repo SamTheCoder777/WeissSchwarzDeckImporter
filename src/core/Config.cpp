@@ -41,6 +41,13 @@ void Config::load() {
     disableNameCheck_ = settings_->value("DisableNameCheck").toBool();
 
     settings_->endGroup();
+
+    settings_->beginGroup("MissingCards");
+
+    missingPurgeInterval_
+        = settings_->value("MissingPurgeInterval", (int) MissingPurgeInterval::Never).toInt();
+
+    settings_->endGroup();
 }
 
 void Config::save() {
@@ -52,7 +59,6 @@ void Config::save() {
 
     settings_->endGroup();
 
-
     settings_->beginGroup("Dataset");
 
     settings_->setValue("CardListEtag", QVariant::fromValue(cardListEtag_));
@@ -60,20 +66,26 @@ void Config::save() {
 
     settings_->endGroup();
 
-    qDebug() << "Config saved to:" << settings_->fileName();
-    qDebug() << "IndexId set to:" << curIndexId_;
-
     settings_->beginGroup("Index");
 
     settings_->setValue("DisableNameCheck", disableNameCheck_);
 
     settings_->endGroup();
 
+    settings_->beginGroup("MissingCards");
+
+    settings_->setValue("MissingPurgeInterval", missingPurgeInterval_);
+
+    settings_->endGroup();
+
     settings_->sync();
+
+    qDebug() << "Config saved to:" << settings_->fileName();
+    qDebug() << "IndexId set to:" << curIndexId_;
 }
 
-void Config::setCurModelPath(const QString &curModelPath){
-    //if (curModelPath_ == curModelPath) return;
+void Config::setCurModelPath(const QString &curModelPath)
+{
     curModelPath_ = curModelPath;
     save();
 }
@@ -83,8 +95,8 @@ void Config::setCurYoloModelPath(const QString &curYoloModelPath){
     save();
 }
 
-void Config::setCurIndexId(const QString &curIndexId){
-    //if (curIndexId_ == curIndexId) return;
+void Config::setCurIndexId(const QString &curIndexId)
+{
     curIndexId_ = curIndexId;
     save();
 }
@@ -146,5 +158,16 @@ bool Config::indexNameExists(const QString &name)
 void Config::toggleNameCheck()
 {
     disableNameCheck_ = !disableNameCheck_;
+    save();
+}
+
+int Config::getMissingPurgeInterval() const
+{
+    return missingPurgeInterval_;
+}
+
+void Config::setMissingPurgeInterval(int interval)
+{
+    missingPurgeInterval_ = interval;
     save();
 }

@@ -47,6 +47,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     dbUtil_ = new DatabaseUtil(this);
     dbUtil_->setLocale(Config::instance().getPreferredLocale());
+    dbUtil_->cleanupExpiredMissing();
     models_ = new ModelService(this);
 
     connect(models_, &ModelService::statusChanged, this, [this](QString msg) {
@@ -79,14 +80,13 @@ MainWindow::MainWindow(QWidget *parent)
     installedProxy_->setFilterRole(IndexCatalog::StatusRole);
     installedProxy_->setFilterRegularExpression(QRegularExpression("^[12]$"));
 
-    // shared view-models (used by detection + gallery)
     selModel_ = new SelectionModel(this);
     bridge_ = new UiBridge(this);
 
-    // ── pages ───────────────────────────────────────────────────────────────
+    // pages
     detection_
         = new DetectionPage(models_, dbUtil_, selModel_, bridge_, catalog_, installedProxy_, this);
-    settings_ = new SettingsPage(models_, seriesRepo_, catalog_, this);
+    settings_ = new SettingsPage(models_, seriesRepo_, catalog_, dbUtil_, this);
     faiss_ = new FaissPage(models_, catalog_, this);
     cards_ = new CardsPage(seriesCatalog_, this);
     gallery_ = new GalleryPage(dbUtil_, selModel_, bridge_, this);

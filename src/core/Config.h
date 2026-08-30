@@ -111,6 +111,14 @@ public:
     Q_INVOKABLE void toggleNameCheck();
     bool getDisableNameCheck() const { return disableNameCheck_; }
 
+    // ----------------------------
+
+    // --- missing card purge settings ---
+    enum class MissingPurgeInterval { Hourly, Daily, Weekly, Monthly, Never };
+
+    int getMissingPurgeInterval() const;
+    void setMissingPurgeInterval(int interval);
+
 private:
     Config();
     ~Config() = default;
@@ -148,6 +156,9 @@ private:
     QString indexInstallPath_;
     QString indexManifestUrl_;
     bool disableNameCheck_ = false;
+
+    // --- missing card purge settings ---
+    int missingPurgeInterval_;
 };
 
 

@@ -15,15 +15,29 @@
 #include <QDebug>
 #include <QThread>
 
+static qint64 intervalToSeconds(int interval)
+{
+    switch ((Config::MissingPurgeInterval) interval) {
+    case Config::MissingPurgeInterval::Hourly:
+        return 3600;
+    case Config::MissingPurgeInterval::Daily:
+        return 86400;
+    case Config::MissingPurgeInterval::Weekly:
+        return 7LL * 86400;
+    case Config::MissingPurgeInterval::Monthly:
+        return 30LL * 86400;
+    case Config::MissingPurgeInterval::Never:
+        return 0;
+    }
+    return 0;
+}
 
 static const char* kCardConn = "cardlist_catalog_connection";
 
-static QJsonObject fetchCardObject(const QString& cardCode, bool& ok) {
-    ok = false;
-
+static QSqlDatabase getCardDb()
+{
     const QString conn = QStringLiteral("cardlist_conn_%1")
-                             .arg((quintptr)QThread::currentThreadId());
-
+                             .arg((quintptr) QThread::currentThreadId());
     QSqlDatabase db;
     if (QSqlDatabase::contains(conn)) {
         db = QSqlDatabase::database(conn);
@@ -33,8 +47,20 @@ static QJsonObject fetchCardObject(const QString& cardCode, bool& ok) {
     }
     if (!db.isOpen() && !db.open()) {
         qDebug() << "DatabaseUtil - cardList.db open failed";
-        return {};
+        return QSqlDatabase();
     }
+    return db;
+}
+
+static QJsonObject fetchCardObject(const QString& cardCode, bool& ok) {
+    ok = false;
+
+    const QString conn = QStringLiteral("cardlist_conn_%1")
+                             .arg((quintptr)QThread::currentThreadId());
+
+    QSqlDatabase db = getCardDb();
+    if (!db.isValid())
+        return {};
 
     QSqlQuery q(db);
     q.prepare("SELECT data FROM cards WHERE cardcode = ?");
@@ -183,6 +209,11 @@ void DatabaseUtil::ensureCardData(const QString& cardCode) {
         }
     }
 
+    if (isKnownMissing(cardCode)) {
+        emit cardFetchFailed(cardCode, "No card data available");
+        return;
+    }
+
     auto it = fetchState_.find(cardCode);
     if (it != fetchState_.end()) {
         if (it->permanent) {emit cardFetchFailed(cardCode, "No card data available"); return;}
@@ -211,6 +242,7 @@ void DatabaseUtil::ensureCardData(const QString& cardCode) {
             if (st.failures >= kMaxRetries) {
                 st.permanent = true;
                 emit cardFetchFailed(cardCode, "Couldn't load...");
+                markMissing(cardCode, "Couldn't load");
                 return;
             }
 
@@ -231,6 +263,7 @@ void DatabaseUtil::ensureCardData(const QString& cardCode) {
             fetchState_[cardCode].permanent = true;
             qDebug() << "official: no items for" << cardCode;
             emit cardFetchFailed(cardCode, "No card data available");
+            markMissing(cardCode, "No card data available");
             return;
         }
         QJsonObject item = items.first().toObject();
@@ -245,6 +278,100 @@ void DatabaseUtil::ensureCardData(const QString& cardCode) {
         emit cardReady(cardCode);
     });
 }
+
+void DatabaseUtil::ensureMissingTable()
+{
+    QSqlDatabase db = getCardDb();
+    if (!db.isValid())
+        return;
+    QSqlQuery q(db);
+    if (!q.exec("CREATE TABLE IF NOT EXISTS missing_cards ("
+                "cardcode TEXT PRIMARY KEY, "
+                "reason TEXT, "
+                "checked_at INTEGER)")) {
+        qDebug() << "ensureMissingTable failed:" << q.lastError().text();
+    }
+}
+
+bool DatabaseUtil::isKnownMissing(const QString &cardCode) const
+{
+    QSqlDatabase db = getCardDb();
+    if (!db.isValid())
+        return false;
+
+    const qint64 lifetimeSecs = intervalToSeconds(Config::instance().getMissingPurgeInterval());
+
+    QSqlQuery q(db);
+    if (lifetimeSecs == 0) {
+        q.prepare("SELECT 1 FROM missing_cards WHERE cardcode = ?");
+        q.addBindValue(cardCode);
+    } else {
+        const qint64 cutoff = QDateTime::currentSecsSinceEpoch() - lifetimeSecs;
+        q.prepare("SELECT 1 FROM missing_cards WHERE cardcode = ? AND checked_at >= ?");
+        q.addBindValue(cardCode);
+        q.addBindValue(cutoff);
+    }
+    if (!q.exec())
+        return false;
+    return q.next();
+}
+
+void DatabaseUtil::markMissing(const QString &cardCode, const QString &reason)
+{
+    QSqlDatabase db = getCardDb();
+    if (!db.isValid())
+        return;
+
+    ensureMissingTable();
+
+    QSqlQuery q(db);
+    q.prepare("INSERT OR REPLACE INTO missing_cards (cardcode, reason, checked_at) "
+              "VALUES (?, ?, ?)");
+    q.addBindValue(cardCode);
+    q.addBindValue(reason);
+    q.addBindValue((qint64) QDateTime::currentSecsSinceEpoch());
+    if (!q.exec())
+        qDebug() << "markMissing failed:" << q.lastError().text();
+    else
+        qDebug() << "marked missing:" << cardCode << "(" << reason << ")";
+}
+
+void DatabaseUtil::purgeMissingCards()
+{
+    QSqlDatabase db = getCardDb();
+    if (!db.isValid()) {
+        emit missingCardsPurged(0);
+        return;
+    }
+
+    QSqlQuery q(db);
+    int count = 0;
+    if (q.exec("SELECT COUNT(*) FROM missing_cards") && q.next())
+        count = q.value(0).toInt();
+
+    if (!q.exec("DELETE FROM missing_cards"))
+        qDebug() << "purgeMissingCards failed:" << q.lastError().text();
+    else
+        qDebug() << "purged" << count << "missing-card records";
+
+    emit missingCardsPurged(count);
+}
+
+void DatabaseUtil::cleanupExpiredMissing()
+{
+    const qint64 lifetime = intervalToSeconds(Config::instance().getMissingPurgeInterval());
+    if (lifetime == 0)
+        return;
+    QSqlDatabase db = getCardDb();
+    if (!db.isValid())
+        return;
+    const qint64 cutoff = QDateTime::currentSecsSinceEpoch() - lifetime;
+    QSqlQuery q(db);
+    q.prepare("DELETE FROM missing_cards WHERE checked_at < ?");
+    q.addBindValue(cutoff);
+    q.exec();
+}
+
 void DatabaseUtil::storeOfficialCard(const QString& cardCode, const QJsonObject& shaped) {
     const QString conn = QStringLiteral("cardlist_conn_%1")
                              .arg((quintptr)QThread::currentThreadId());
