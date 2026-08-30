@@ -7,11 +7,13 @@
 
 #include <QDialog>
 #include <QImage>
-#include <vector>
-#include <QtNetwork>
+#include <QProgressBar>
 #include <QSqlDatabase>
+#include <QStackedWidget>
+#include <QtNetwork>
 #include "../database/DatabaseUtil.h"
-#include "../retrieval/tcg_infer.h"      // Candidate
+#include "../models/tcg_infer.h"
+#include <vector>
 
 class QLabel;
 class QPushButton;
@@ -33,6 +35,7 @@ protected:
 private:
     void showCandidate(int i);
     void rescale();
+    void showLoading(bool on);
 
     QImage crop_;
     std::vector<Candidate> cands_;
@@ -45,10 +48,14 @@ private:
     QLabel* candCaption_;
     QLabel* counterLabel_;
     QPushButton* confirmBtn_;
-    QImage curCandImage_;      // cached full-res master for rescaling
+    QImage curCandImage_;
 
     QSqlDatabase db_;
     QNetworkAccessManager net_;
     QString imageUrlFor(QString cardId);
     DatabaseUtil* dbUtil_ = nullptr;
+
+    QProgressBar *busyBar_ = nullptr;
+    QStackedWidget *candStack_ = nullptr;
+    bool loading_ = false;
 };

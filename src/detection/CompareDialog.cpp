@@ -40,8 +40,33 @@ CompareDialog::CompareDialog(const QImage& crop,
     candLabel_->setAlignment(Qt::AlignCenter);
     candLabel_->setMinimumSize(360, 500);
     candLabel_->setStyleSheet("background:#111318; border-radius:8px;");
+
+    candStack_ = new QStackedWidget;
+    candStack_->addWidget(candLabel_);
+
+    QWidget *busyPage = new QWidget;
+    auto *bl = new QVBoxLayout(busyPage);
+    bl->addStretch();
+
+    busyBar_ = new QProgressBar;
+    busyBar_->setRange(0, 0);
+    busyBar_->setTextVisible(false);
+    busyBar_->setFixedHeight(4);
+    busyBar_->setMinimumWidth(200);
+    busyBar_->setMaximumWidth(400);
+    busyBar_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+    auto *barRow = new QHBoxLayout;
+    barRow->addStretch();
+    barRow->addWidget(busyBar_, 1);
+    barRow->addStretch();
+
+    bl->addLayout(barRow);
+    bl->addStretch();
+    candStack_->addWidget(busyPage);
+
     rightCol->addWidget(candCaption_);
-    rightCol->addWidget(candLabel_, 1);
+    rightCol->addWidget(candStack_, 1);
 
     row->addLayout(leftCol, 1);
     row->addLayout(rightCol, 1);
@@ -87,7 +112,14 @@ CompareDialog::CompareDialog(const QImage& crop,
         accept();
     });
 
-    showCandidate(startIndex >= 0 && startIndex < (int)cands_.size() ? startIndex : 0);
+    connect(dbUtil_, &DatabaseUtil::cardReady, this, [this](const QString &code) {
+        if (cur_ >= 0 && cur_ < (int) cands_.size()
+            && QString::fromStdString(cands_[cur_].card_id) == code) {
+            showCandidate(cur_);
+        }
+    });
+
+    showCandidate(startIndex >= 0 && startIndex < (int) cands_.size() ? startIndex : 0);
 
     setFocusPolicy(Qt::StrongFocus);
     setFocus();
@@ -109,32 +141,49 @@ void CompareDialog::showCandidate(int i) {
     QString url = dbUtil_->imageUrlFor(QString::fromStdString(c.card_id));
 
     curCandImage_ = QImage();
-    if (url.isEmpty()) { candLabel_->setText("(no image for this card)"); return; }
+    if (url.isEmpty()) {
+        showLoading(true);
+        dbUtil_->ensureCardData(QString::fromStdString(c.card_id));
+        return;
+    }
 
     const QString cachePath = CardImageProvider::cacheFilePath(url);
     if (QFile::exists(cachePath)) {
         QImage cached(cachePath);
         if (!cached.isNull()) {
             curCandImage_ = cached;
+            showLoading(false);
             rescale();
             return;
         }
     }
 
-    candLabel_->setText("loading…");
+    showLoading(true);
     const int requested = cur_;
     qDebug() << "[CompareDialog] api call to: " << url;
     QNetworkReply* r = net_.get(QNetworkRequest(QUrl(url)));
     connect(r, &QNetworkReply::finished, this, [this, r, requested, cachePath]{
         r->deleteLater();
         if (requested != cur_) return;
-        if (r->error() != QNetworkReply::NoError) { candLabel_->setText("(image failed)"); return; }
+        if (r->error() != QNetworkReply::NoError) {
+            showLoading(false);
+            candLabel_->setText("(image failed)");
+            return;
+        }
         const QByteArray bytes = r->readAll();
         curCandImage_.loadFromData(bytes);
+
+        if (!curCandImage_.loadFromData(bytes)) {
+            showLoading(false);
+            candLabel_->setText("(bad image data)");
+            return;
+        }
 
         QFile f(cachePath);
         if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
             f.write(bytes);
+
+        showLoading(false);
         rescale();
     });
 }
@@ -146,13 +195,19 @@ void CompareDialog::rescale() {
     if (!curCandImage_.isNull())
         candLabel_->setPixmap(QPixmap::fromImage(curCandImage_)
             .scaled(candLabel_->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    else
+    else if (!loading_)
         candLabel_->setText("(no master image)");
 }
 
 void CompareDialog::resizeEvent(QResizeEvent* e) {
     QDialog::resizeEvent(e);
     rescale();
+}
+
+void CompareDialog::showLoading(bool on)
+{
+    loading_ = on;
+    candStack_->setCurrentIndex(on ? 1 : 0);
 }
 
 void CompareDialog::keyPressEvent(QKeyEvent* e) {

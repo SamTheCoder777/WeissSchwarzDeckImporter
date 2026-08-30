@@ -1,6 +1,7 @@
 #include "SettingsPage.h"
 #include "../core/Config.h"
 
+#include <QComboBox>
 #include <QElapsedTimer>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -8,12 +9,19 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QTimer>
 #include <QStyle>
+#include <QTimer>
 
-SettingsPage::SettingsPage(ModelService* models, SeriesRepository* seriesRepository, IndexCatalog* indexCatalog,
-                           QWidget *parent): QWidget(parent),
-    models_(models), seriesRepository_(seriesRepository), indexCatalog_(indexCatalog)
+SettingsPage::SettingsPage(ModelService *models,
+                           SeriesRepository *seriesRepository,
+                           IndexCatalog *indexCatalog,
+                           DatabaseUtil *dbUtil,
+                           QWidget *parent)
+    : QWidget(parent)
+    , models_(models)
+    , seriesRepository_(seriesRepository)
+    , indexCatalog_(indexCatalog)
+    , dbUtil_(dbUtil)
 {
     buildUi();
 }
@@ -129,8 +137,10 @@ void SettingsPage::buildUi()
         if(models_->isLoading()) return;
         try{
             models_->load(onnxEdit_->text(),
-                          models_->getIndexDir(), yoloEdit_->text(),
-                          Config::instance().getModelNative(), Config::instance().getModelImgSize(), false);
+                          yoloEdit_->text(),
+                          Config::instance().getModelNative(),
+                          Config::instance().getModelImgSize(),
+                          false);
         }catch(const std::exception& e){
             QMessageBox::critical(this, "Error Loading Model", QString::fromStdString(e.what()));
         }
@@ -300,6 +310,72 @@ void SettingsPage::buildUi()
                     lblDatasetStatus_->setText(QString("Downloading: %1 MB...").arg(recMB,0,'f',1));
                 }
             });
+
+    // Missing card cache settings
+    auto *missingGroup = new QFrame(this);
+    missingGroup->setObjectName("sectionCard");
+
+    auto *missingOuter = new QVBoxLayout(missingGroup);
+    missingOuter->setContentsMargins(20, 20, 20, 20);
+    missingOuter->setSpacing(16);
+
+    auto *missingHeading = new QLabel("Missing-card cache", missingGroup);
+    missingHeading->setObjectName("sectionHeading");
+    missingOuter->addWidget(missingHeading);
+
+    auto *missingDesc
+        = new QLabel("Cards not found in either database are remembered so they aren't looked up "
+                     "again. Choose how long to remember them before re-checking.",
+                     missingGroup);
+    missingDesc->setWordWrap(true);
+    missingDesc->setStyleSheet("color:#9aa0a6; font-size:12px;");
+    missingOuter->addWidget(missingDesc);
+
+    auto *missingForm = new QFormLayout;
+    missingForm->setSpacing(12);
+    missingForm->setContentsMargins(0, 0, 0, 0);
+    missingForm->setLabelAlignment(Qt::AlignLeft);
+    missingForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    missingOuter->addLayout(missingForm);
+
+    missingIntervalCombo_ = new QComboBox(missingGroup);
+    missingIntervalCombo_->addItem("1 hour", (int) Config::MissingPurgeInterval::Hourly);
+    missingIntervalCombo_->addItem("1 day", (int) Config::MissingPurgeInterval::Daily);
+    missingIntervalCombo_->addItem("7 days", (int) Config::MissingPurgeInterval::Weekly);
+    missingIntervalCombo_->addItem("1 month", (int) Config::MissingPurgeInterval::Monthly);
+    missingIntervalCombo_->addItem("Never", (int) Config::MissingPurgeInterval::Never);
+
+    {
+        int cur = Config::instance().getMissingPurgeInterval();
+        int idx = missingIntervalCombo_->findData(cur);
+        if (idx >= 0)
+            missingIntervalCombo_->setCurrentIndex(idx);
+    }
+    missingForm->addRow("Re-check missing cards after", missingIntervalCombo_);
+
+    connect(missingIntervalCombo_,
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this,
+            [this](int) {
+                Config::instance().setMissingPurgeInterval(
+                    missingIntervalCombo_->currentData().toInt());
+            });
+
+    auto *btnPurgeMissing = new QPushButton("Clear now", missingGroup);
+    btnPurgeMissing->setObjectName("actionGhost");
+    missingForm->addRow("Reset cache", btnPurgeMissing);
+
+    connect(btnPurgeMissing, &QPushButton::clicked, this, [this] { dbUtil_->purgeMissingCards(); });
+
+    outer->addWidget(missingGroup);
+
+    connect(dbUtil_, &DatabaseUtil::missingCardsPurged, this, [this](int n) {
+        QMessageBox::information(this,
+                                 "Cache cleared",
+                                 QString("Cleared %1 remembered missing-card record(s). "
+                                         "They'll be re-checked when next viewed.")
+                                     .arg(n));
+    });
 
     // advanced settings
     auto* advToggle = new QPushButton("▸ Advanced settings");

@@ -60,7 +60,7 @@ DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, Selecti
             QMessageBox::information(this, "Please wait", "Detection is running.");
             return;
         }
-        if (!models_->retriever()) {
+        if (!models_->tcgCore()) {
             QMessageBox::information(this, "No model", "Load a model in Settings first.");
             return;
         }
@@ -320,7 +320,7 @@ void DetectionPage::openCompareDialog() {
         for (int i = 0; i < (int)cands.size(); ++i)
             if (cands[i].card_id == sel_[currentSel_].cardId) { start = i; break; }
 
-    QSqlDatabase db;   // CompareDialog signature kept; pass a default db (uses dbUtil_ for images)
+    QSqlDatabase db;
     CompareDialog dlg(cropImg, cands, start, db, dbUtil_, this);
     if (dlg.exec() == QDialog::Accepted) {
         int idx = dlg.confirmedIndex();
@@ -434,7 +434,13 @@ void DetectionPage::pushStateToQml() {
                               : QStringLiteral("Not confirmed");
     int qty = (currentSel_ >= 0 && currentSel_ < sel_.size()) ? sel_[currentSel_].qty : 1;
     int rotation = (currentSel_ >= 0) ? sel_[currentSel_].rotation : 0;
-    bridge_->setState(summary, confText, isConf, qty, currentSel_, rotation, models_->retriever() != nullptr);
+    bridge_->setState(summary,
+                      confText,
+                      isConf,
+                      qty,
+                      currentSel_,
+                      rotation,
+                      models_->tcgCore() != nullptr);
 }
 
 void DetectionPage::openImage() {
@@ -446,7 +452,7 @@ void DetectionPage::openImage() {
         QMessageBox::information(this, "Please wait", "Detection is running.");
         return;
     }
-    if (!models_->retriever()) {
+    if (!models_->tcgCore()) {
         QMessageBox::information(this, "No model", "Load a model in Settings first.");
         return;
     }
@@ -543,8 +549,12 @@ void DetectionPage::runDetection() {
         QMessageBox::information(this, "Please wait", "Detection already running.");
         return;
     }
-    if (!models_->retriever()) {
+    if (!models_->tcgCore()) {
         QMessageBox::information(this, "No model", "Load a model in Settings first."); return;
+    }
+    if (models_->busy()) {
+        QMessageBox::information(this, "please wait", "Model services busy...");
+        return;
     }
     syncSelections();
     if (sel_.isEmpty()) { QMessageBox::information(this, "No selection", "Select at least one card."); return; }
@@ -559,20 +569,44 @@ void DetectionPage::runDetection() {
     QApplication::setOverrideCursor(Qt::WaitCursor);
     auto results = std::make_shared<std::vector<std::vector<Candidate>>>(sel_.size());
 
-    connect(&detectWatcher_, &QFutureWatcher<void>::finished, this, [this, results] {
-        for (int i = 0; i < sel_.size() && i < (int)results->size(); ++i)
-            if (!(*results)[i].empty()) sel_[i].cands = (*results)[i];
-        QApplication::restoreOverrideCursor();
-        if (!sel_.isEmpty()) { showSelectionResults(0); }
-        pushStateToQml();
-        detecting_ = false;
-    }, Qt::SingleShotConnection);
+    auto errorMsg = std::make_shared<QString>();
 
-    ModelService* models = models_;
-    QFuture<void> fut = QtConcurrent::run([models, crops, results] {
-        for (size_t i = 0; i < crops->size(); ++i)
-            if (!(*crops)[i].empty())
-                (*results)[i] = models->retriever()->search((*crops)[i], 15);
+    ModelService *models = models_;
+
+    connect(
+        &detectWatcher_,
+        &QFutureWatcher<void>::finished,
+        this,
+        [this, results, errorMsg, models] {
+            models->setBusy(false);
+            QApplication::restoreOverrideCursor();
+            detecting_ = false;
+
+            if (!errorMsg->isEmpty()) {
+                QMessageBox::critical(this, "Search Error", *errorMsg);
+                return;
+            }
+
+            for (int i = 0; i < sel_.size() && i < (int) results->size(); ++i)
+                if (!(*results)[i].empty())
+                    sel_[i].cands = (*results)[i];
+            if (!sel_.isEmpty()) {
+                showSelectionResults(0);
+            }
+            pushStateToQml();
+        },
+        Qt::SingleShotConnection);
+
+    models->setBusy(true);
+
+    QFuture<void> fut = QtConcurrent::run([models, crops, results, errorMsg] {
+        try {
+            for (size_t i = 0; i < crops->size(); ++i)
+                if (!(*crops)[i].empty())
+                    (*results)[i] = models->search((*crops)[i], 15);
+        } catch (const std::exception &e) {
+            *errorMsg = e.what();
+        }
     });
     detectWatcher_.setFuture(fut);
 }

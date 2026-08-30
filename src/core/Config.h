@@ -1,11 +1,12 @@
 #pragma once
 
-#include <QString>
-#include <QSettings>
 #include <QCoreApplication>
 #include <QDir>
-#include <QUrl>
+#include <QFileDialog>
+#include <QSettings>
 #include <QStandardPaths>
+#include <QString>
+#include <QUrl>
 
 using StringStringMap = QMap<QString, QString>;
 Q_DECLARE_METATYPE(StringStringMap)
@@ -15,6 +16,7 @@ class Config : public QObject {
     Q_PROPERTY(QString curIndexId READ getCurIndexId CONSTANT)
     Q_PROPERTY(QString curYoloModelPath READ getCurYoloModelPath CONSTANT)
     Q_PROPERTY(QString curModelPath READ getCurModelPath CONSTANT)
+    Q_PROPERTY(bool disableNameCheck READ getDisableNameCheck CONSTANT)
 public:
     static Config& instance();
 
@@ -77,7 +79,8 @@ public:
     int getModelImgSize() const {return imgSize_;}
 
     // --- index settings ---
-    QString getIndexInstallPath() const {
+    Q_INVOKABLE QString getIndexInstallPath() const
+    {
         return indexInstallPath_.isEmpty()
         ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
                 .filePath("indexes")
@@ -88,6 +91,33 @@ public:
         return indexManifestUrl_.isEmpty() ? kDefaultManifestUrl : indexManifestUrl_;
     }
     void setIndexManifestUrl(const QString& u);
+    // check if index name is valid
+    Q_INVOKABLE bool isValidIndexName(const QString &name);
+    // check if index name exists
+    Q_INVOKABLE bool indexNameExists(const QString &name);
+
+    // file url managers
+    Q_INVOKABLE QString urlToLocalFile(const QUrl &url) const { return url.toLocalFile(); }
+    Q_INVOKABLE QString localFileToUrl(const QString &path) const
+    {
+        return QUrl::fromLocalFile(path).toString();
+    }
+    Q_INVOKABLE QString pickFolder()
+    {
+        QString dir = QFileDialog::getExistingDirectory(nullptr, "Choose image folder", QString());
+        return dir;
+    }
+    // automatic set name forcing for index
+    Q_INVOKABLE void toggleNameCheck();
+    bool getDisableNameCheck() const { return disableNameCheck_; }
+
+    // ----------------------------
+
+    // --- missing card purge settings ---
+    enum class MissingPurgeInterval { Hourly, Daily, Weekly, Monthly, Never };
+
+    int getMissingPurgeInterval() const;
+    void setMissingPurgeInterval(int interval);
 
 private:
     Config();
@@ -125,7 +155,10 @@ private:
     QString kDefaultManifestUrl = "https://huggingface.co/datasets/SamTheCoder777/ws-index/raw/main/manifest.json";
     QString indexInstallPath_;
     QString indexManifestUrl_;
+    bool disableNameCheck_ = false;
 
+    // --- missing card purge settings ---
+    int missingPurgeInterval_;
 };
 
 

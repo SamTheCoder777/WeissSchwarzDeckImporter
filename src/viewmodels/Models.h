@@ -2,13 +2,13 @@
 #pragma once
 
 #include <QAbstractListModel>
-#include <QQuickImageProvider>
-#include <QVector>
-#include <QString>
 #include <QImage>
+#include <QQuickImageProvider>
 #include <QSqlDatabase>
+#include <QString>
+#include <QVector>
 #include "../database/DatabaseUtil.h"
-#include "../retrieval/tcg_infer.h"
+#include "../models/tcg_infer.h"
 
 // ── top-15 candidates for the currently selected card ───────────────────────
 class CandidateModel : public QAbstractListModel {

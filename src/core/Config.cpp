@@ -1,10 +1,11 @@
 #include "Config.h"
 
 #include <QCoreApplication>
+#include <QRegularExpression>
 #include <QSettings>
 
-
-Config& Config::instance() {
+Config &Config::instance()
+{
     static Config instance;
     return instance;
 }
@@ -34,6 +35,19 @@ void Config::load() {
     jpSeriesListEtag_ = settings_->value("jpSeriesListEtag").toString();
 
     settings_->endGroup();
+
+    settings_->beginGroup("Index");
+
+    disableNameCheck_ = settings_->value("DisableNameCheck").toBool();
+
+    settings_->endGroup();
+
+    settings_->beginGroup("MissingCards");
+
+    missingPurgeInterval_
+        = settings_->value("MissingPurgeInterval", (int) MissingPurgeInterval::Never).toInt();
+
+    settings_->endGroup();
 }
 
 void Config::save() {
@@ -45,7 +59,6 @@ void Config::save() {
 
     settings_->endGroup();
 
-
     settings_->beginGroup("Dataset");
 
     settings_->setValue("CardListEtag", QVariant::fromValue(cardListEtag_));
@@ -53,6 +66,17 @@ void Config::save() {
 
     settings_->endGroup();
 
+    settings_->beginGroup("Index");
+
+    settings_->setValue("DisableNameCheck", disableNameCheck_);
+
+    settings_->endGroup();
+
+    settings_->beginGroup("MissingCards");
+
+    settings_->setValue("MissingPurgeInterval", missingPurgeInterval_);
+
+    settings_->endGroup();
 
     settings_->sync();
 
@@ -60,8 +84,8 @@ void Config::save() {
     qDebug() << "IndexId set to:" << curIndexId_;
 }
 
-void Config::setCurModelPath(const QString &curModelPath){
-    //if (curModelPath_ == curModelPath) return;
+void Config::setCurModelPath(const QString &curModelPath)
+{
     curModelPath_ = curModelPath;
     save();
 }
@@ -71,8 +95,8 @@ void Config::setCurYoloModelPath(const QString &curYoloModelPath){
     save();
 }
 
-void Config::setCurIndexId(const QString &curIndexId){
-    //if (curIndexId_ == curIndexId) return;
+void Config::setCurIndexId(const QString &curIndexId)
+{
     curIndexId_ = curIndexId;
     save();
 }
@@ -111,3 +135,39 @@ void Config::setIndexManifestUrl(const QString &u)
     save();
 }
 
+bool Config::isValidIndexName(const QString &name)
+{
+    QRegularExpression illegalChars("[<>:\"/\\\\|?*\\x00-\\x1F]");
+    if (illegalChars.match(name).hasMatch())
+        return false;
+
+    if (name.endsWith("."))
+        return false;
+
+    if (name == "." || name == "..")
+        return false;
+
+    return true;
+}
+
+bool Config::indexNameExists(const QString &name)
+{
+    return QFileInfo::exists(getIndexInstallPath() + "/" + name.trimmed());
+}
+
+void Config::toggleNameCheck()
+{
+    disableNameCheck_ = !disableNameCheck_;
+    save();
+}
+
+int Config::getMissingPurgeInterval() const
+{
+    return missingPurgeInterval_;
+}
+
+void Config::setMissingPurgeInterval(int interval)
+{
+    missingPurgeInterval_ = interval;
+    save();
+}

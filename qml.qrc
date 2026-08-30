@@ -13,5 +13,6 @@
         <file>qml/download/CardsDownloadPage.qml</file>
         <file>icon/rotate_l.svg</file>
         <file>icon/rotate_r.svg</file>
+        <file>qml/IndexGenerationPage.qml</file>
     </qresource>
 </RCC>
