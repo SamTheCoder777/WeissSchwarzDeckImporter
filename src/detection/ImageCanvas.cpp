@@ -260,7 +260,7 @@ void ImageCanvas::mousePressEvent(QMouseEvent* e) {
         if (mode_ == Rectangle) {
             dragging_ = true;
             dragStartImg_ = dragCurImg_ = ip;
-        } else {
+        } else if (mode_ == Polygon) {
             if (polyInProgress_.size() >= 3 &&
                 QLineF(toWidget(polyInProgress_.first()), e->position()).length() <= VERTEX_HIT_PX + 2) {
                 finishPolygon();
@@ -276,12 +276,13 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* e) {
     cursorImg_ = toImage(e->position());
     haveCursor_ = true;
 
-    if (dragSel_ >= 0 && dragVert_ >= 0) {           // moving a vertex
+    if (dragSel_ >= 0 && dragVert_ >= 0 && mode_ == Hand) { // moving a vertex
         sel_[dragSel_].poly[dragVert_] = cursorImg_;
         update();
         return;
     }
-    if (dragging_ && mode_ == Rectangle) dragCurImg_ = cursorImg_;
+    if (dragging_ && mode_ == Rectangle)
+        dragCurImg_ = cursorImg_;
     if (!polyInProgress_.isEmpty() || dragging_) update();   // live preview
 }
 

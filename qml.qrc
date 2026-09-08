@@ -14,5 +14,13 @@
         <file>icon/rotate_l.svg</file>
         <file>icon/rotate_r.svg</file>
         <file>qml/IndexGenerationPage.qml</file>
+        <file>icon/pan_tool.svg</file>
+        <file>icon/polyline.svg</file>
+        <file>icon/rectangle.svg</file>
+        <file>icon/undo.svg</file>
+        <file>icon/wand.svg</file>
+        <file>icon/file_open.svg</file>
+        <file>icon/clear.svg</file>
+        <file>icon/search.svg</file>
     </qresource>
 </RCC>

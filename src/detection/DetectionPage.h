@@ -34,6 +34,7 @@ private:
     QPushButton *rectBtn_;
     QPushButton *polyBtn_;
     QPushButton *autoBtn_;
+    QPushButton *handBtn_;
 
     std::vector<CardDetection> autoDets_;
     bool autoDetectMode_ = false;

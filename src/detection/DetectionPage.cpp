@@ -115,17 +115,29 @@ void DetectionPage::buildUi() {
     auto* bar = new QHBoxLayout;
     bar->setContentsMargins(8, 8, 8, 0);
     auto* openBtn = new QPushButton("Open image");
+    openBtn->setIcon(QIcon(":/icon/file_open.svg"));
     rectBtn_ = new QPushButton("Rectangle");
+    rectBtn_->setIcon(QIcon(":/icon/rectangle.svg"));
     polyBtn_ = new QPushButton("Polygon");
-    auto* undoBtn = new QPushButton("Undo (Ctrl+Z)");
+    polyBtn_->setIcon(QIcon(":/icon/polyline.svg"));
+    handBtn_ = new QPushButton("Hand");
+    handBtn_->setIcon(QIcon(":/icon/pan_tool.svg"));
+    auto *undoBtn = new QPushButton("Undo");
+    undoBtn->setIcon(QIcon(":/icon/undo.svg"));
     auto* clrBtn  = new QPushButton("Clear");
+    clrBtn->setIcon(QIcon(":/icon/clear.svg"));
     auto* detBtn  = new QPushButton("Detect");
-    autoBtn_  = new QPushButton("Auto Detect Card Tool");
+    detBtn->setIcon(QIcon(":/icon/search.svg"));
+    detBtn->setObjectName("actionAccent");
+    autoBtn_ = new QPushButton("Auto Detect");
+    autoBtn_->setIcon(QIcon(":/icon/wand.svg"));
 
     connect(autoBtn_, &QPushButton::clicked, this, [this](bool on){
         autoDetectMode_ = on;
         if (on) {
-            rectBtn_->setChecked(false); polyBtn_->setChecked(false);
+            rectBtn_->setChecked(false);
+            polyBtn_->setChecked(false);
+            handBtn_->setChecked(false);
             canvas_->setMode(ImageCanvas::ClickOnly);
         } else {
             // fell back to a drawing tool
@@ -134,9 +146,13 @@ void DetectionPage::buildUi() {
         }
     });
 
-    rectBtn_->setCheckable(true); polyBtn_->setCheckable(true);
-    rectBtn_->setChecked(true); autoBtn_->setCheckable(true);
-    for (auto* b : {openBtn, autoBtn_, rectBtn_, polyBtn_, undoBtn, clrBtn, detBtn}) bar->addWidget(b);
+    rectBtn_->setCheckable(true);
+    polyBtn_->setCheckable(true);
+    rectBtn_->setChecked(true);
+    autoBtn_->setCheckable(true);
+    handBtn_->setCheckable(true);
+    for (auto *b : {openBtn, autoBtn_, rectBtn_, polyBtn_, handBtn_, undoBtn, clrBtn, detBtn})
+        bar->addWidget(b);
     bar->addStretch();
     outer->addLayout(bar);
 
@@ -173,12 +189,24 @@ void DetectionPage::buildUi() {
     connect(rectBtn_, &QPushButton::clicked, this, [this] {
         canvas_->setMode(ImageCanvas::Rectangle);
         rectBtn_->setChecked(true); polyBtn_->setChecked(false);
-        autoDetectMode_ = false; autoBtn_->setChecked(false);
+        autoDetectMode_ = false;
+        autoBtn_->setChecked(false);
+        handBtn_->setChecked(false);
     });
     connect(polyBtn_, &QPushButton::clicked, this, [this] {
         canvas_->setMode(ImageCanvas::Polygon);
         polyBtn_->setChecked(true); rectBtn_->setChecked(false);
-        autoDetectMode_ = false; autoBtn_->setChecked(false);
+        autoDetectMode_ = false;
+        autoBtn_->setChecked(false);
+        handBtn_->setChecked(false);
+    });
+    connect(handBtn_, &QPushButton::clicked, this, [this] {
+        canvas_->setMode(ImageCanvas::Hand);
+        handBtn_->setChecked(true);
+        rectBtn_->setChecked(false);
+        autoDetectMode_ = false;
+        autoBtn_->setChecked(false);
+        polyBtn_->setChecked(false);
     });
     connect(undoBtn, &QPushButton::clicked, this, [this] { canvas_->undo(); });
     connect(clrBtn,  &QPushButton::clicked, this, [this] { canvas_->clearSelections(); });
@@ -237,6 +265,8 @@ void DetectionPage::forceRectangleTool() {
     if (rectBtn_) rectBtn_->setChecked(true);
     if (polyBtn_) polyBtn_->setChecked(false);
     if (autoBtn_) autoBtn_->setChecked(false);
+    if (handBtn_)
+        handBtn_->setChecked(false);
     autoDetectMode_ = false;
 }
 
