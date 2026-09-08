@@ -126,6 +126,7 @@ void DetectionPage::buildUi() {
     undoBtn->setIcon(QIcon(":/icon/undo.svg"));
     auto* clrBtn  = new QPushButton("Clear");
     clrBtn->setIcon(QIcon(":/icon/clear.svg"));
+    clrBtn->setObjectName("actionError");
     auto* detBtn  = new QPushButton("Detect");
     detBtn->setIcon(QIcon(":/icon/search.svg"));
     detBtn->setObjectName("actionAccent");
@@ -168,6 +169,12 @@ void DetectionPage::buildUi() {
     cropProvider_ = new CropImageProvider;      // engine takes ownership below
     candModel_->setDatabaseUtil(dbUtil_);
 
+    installedSearchProxy_ = new QSortFilterProxyModel(this);
+    installedSearchProxy_->setSourceModel(installedProxy_);
+    installedSearchProxy_->setFilterRole(IndexCatalog::NameRole);
+    installedSearchProxy_->setFilterCaseSensitivity(Qt::CaseInsensitive);
+    installedSearchProxy_->setDynamicSortFilter(true);
+
     auto* qmlPanel = new QQuickWidget;
     qmlPanel->engine()->addImageProvider("crop", cropProvider_);
     qmlPanel->engine()->addImageProvider("cardcache", new CardImageProvider(dbUtil_));
@@ -175,8 +182,8 @@ void DetectionPage::buildUi() {
     qmlPanel->rootContext()->setContextProperty("bridge",   bridge_);
     qmlPanel->rootContext()->setContextProperty("candModel", candModel_);
     qmlPanel->rootContext()->setContextProperty("selModel",  selModel_);
-    qmlPanel->rootContext()->setContextProperty("catalog",          catalog_);
-    qmlPanel->rootContext()->setContextProperty("installedIndexes", installedProxy_);
+    qmlPanel->rootContext()->setContextProperty("catalog", catalog_);
+    qmlPanel->rootContext()->setContextProperty("installedIndexes", installedSearchProxy_);
     qmlPanel->setResizeMode(QQuickWidget::SizeRootObjectToView);
     qmlPanel->setSource(QUrl("qrc:/qml/ResultsPanel.qml"));
     qmlPanel->setMinimumWidth(470);

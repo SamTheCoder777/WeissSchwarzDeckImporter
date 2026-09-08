@@ -30,6 +30,7 @@ private:
     UiBridge* bridge_;
     IndexCatalog* catalog_;
     QSortFilterProxyModel* installedProxy_;
+    QSortFilterProxyModel *installedSearchProxy_;
 
     QPushButton *rectBtn_;
     QPushButton *polyBtn_;

@@ -30,6 +30,7 @@ Rectangle {
                 anchors.fill: parent
                 anchors.margins: 10
                 spacing: 8
+
                 Label {
                     text: bridge.summaryText
                     color: root.text1
@@ -37,20 +38,100 @@ Rectangle {
                     font.bold: true
                     elide: Text.ElideRight
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 80
                 }
 
-                ComboBox {
-                    id: indexCombo
-                    Layout.fillWidth: true
-                    model: installedIndexes
-                    textRole: "name"
-                    valueRole: "idStr"
-                    enabled: count > 0
+                Button {
+                    id: indexSelector
+                    Layout.preferredWidth: 120
+                    Layout.maximumWidth: 120
+                    Layout.minimumWidth: 120
+                    implicitHeight: 30
+                    enabled: true
+                    onClicked: {
+                        indexPopup.opened ? indexPopup.close() : indexPopup.open();
+                    }
 
-                    currentIndex: indexOfValue(catalog.activeIndexId)
-                    displayText: count === 0 ? "No indexes installed" : currentIndex < 0 ? "Select an index..." : currentText
+                    contentItem: Text {
+                        text: {
+                            if (!catalog.activeIndexId)
+                                return "Select index…";
+                            return catalog.activeIndexName || catalog.activeIndexId;
+                        }
+                        color: root.text1
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
+                        verticalAlignment: Text.AlignVCenter
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                    background: Rectangle {
+                        radius: 7
+                        color: indexSelector.down ? "#111315" : indexSelector.hovered ? "#2c3033" : "#212427"
+                        border.width: 1
+                        border.color: indexSelector.hovered ? root.accent : "#F1F1F1"
+                    }
 
-                    onActivated: catalog.useById(currentValue)
+                    Popup {
+                        id: indexPopup
+                        y: indexSelector.height + 4
+                        x: indexSelector.width - width
+                        width: 260
+                        padding: 6
+                        focus: true
+
+                        onOpened: {
+                            searchField.text = "";
+                            searchField.forceActiveFocus();
+                        }
+                        onClosed: installedIndexes.setFilterFixedString("")
+
+                        background: Rectangle {
+                                radius: 8
+                                color: Qt.lighter(root.panel, 1.25)
+                                border.width: 1
+                                border.color: root.panel
+                            }
+
+                        contentItem: ColumnLayout {
+                            spacing: 6
+                            TextField {
+                                id: searchField
+                                Layout.fillWidth: true
+                                placeholderText: "Search…"
+                                placeholderTextColor: root.text2
+                                color: root.text1
+                                onTextChanged: installedIndexes.setFilterFixedString(text)
+                                background: Rectangle { color: Qt.lighter(root.panel, 1.25) }
+                            }
+                            ListView {
+                                id: idxList
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Math.min(contentHeight, 260)
+                                clip: true
+                                model: installedIndexes
+                                delegate: ItemDelegate {
+                                    width: idxList.width
+                                    contentItem: Text {
+                                        text: model.name
+                                        color: root.text1
+                                        font.pixelSize: 14
+                                        verticalAlignment: Text.AlignVCenter
+                                        elide: Text.ElideRight
+                                    }
+                                    highlighted: model.idStr === catalog.activeIndexId
+                                    onClicked: { catalog.useById(model.idStr); indexPopup.close() }
+                                    background: Rectangle {
+                                        radius: 5
+                                        color: parent.highlighted ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.20)
+                                             : parent.hovered ? Qt.lighter(root.panel, 1.5)
+                                             : "transparent"
+                                    }
+                                }
+                                ScrollBar.vertical: ScrollBar {}
+
+                            }
+                        }
+                    }
                 }
 
                 Button {
