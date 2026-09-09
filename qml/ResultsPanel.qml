@@ -68,7 +68,7 @@ Rectangle {
                         radius: 7
                         color: indexSelector.down ? "#111315" : indexSelector.hovered ? "#2c3033" : "#212427"
                         border.width: 1
-                        border.color: indexSelector.hovered ? root.accent : "#F1F1F1"
+                        border.color: indexSelector.hovered ? "#F1F1F1" : root.accent
                     }
 
                     Popup {
