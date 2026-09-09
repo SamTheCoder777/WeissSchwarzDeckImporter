@@ -63,8 +63,8 @@ static QJsonObject fetchCardObject(const QString& cardCode, bool& ok) {
         return {};
 
     QSqlQuery q(db);
-    q.prepare("SELECT data FROM cards WHERE cardcode = ?");
-    q.addBindValue(cardCode);
+    q.prepare("SELECT data FROM cards WHERE LOWER(cardcode) = ?");
+    q.addBindValue(cardCode.toLower());
     if (!q.exec()) { qDebug() << "DatabaseUtil query failed:" << q.lastError().text(); return {}; }
     if (!q.next()) return {};
     QJsonObject o = QJsonDocument::fromJson(q.value(0).toByteArray()).object();
