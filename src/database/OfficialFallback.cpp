@@ -51,10 +51,10 @@ QJsonObject OfficialFallback::reshapeOfficialItem(const QJsonObject& o) {
         QString v = o.value(f).toString();
         if (!v.isEmpty()) attrs.append(v);
     }
-    // ability lines from text split on <br/>
+    // ability lines from text split on <br>
     QJsonArray ability;
     const QString text = o.value("text").toString();
-    for (const QString& line : text.split("<br/>")) {
+    for (const QString &line : text.split("<br>")) {
         QString t = line.trimmed();
         if (!t.isEmpty()) ability.append(t);
     }
