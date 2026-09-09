@@ -22,5 +22,11 @@
         <file>icon/file_open.svg</file>
         <file>icon/clear.svg</file>
         <file>icon/search.svg</file>
+        <file>icon/add_diamond.svg</file>
+        <file>icon/cards_dl.svg</file>
+        <file>icon/gallery.svg</file>
+        <file>icon/indexes_dl.svg</file>
+        <file>icon/magnifying.svg</file>
+        <file>icon/settings.svg</file>
     </qresource>
 </RCC>

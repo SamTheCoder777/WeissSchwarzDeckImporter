@@ -118,6 +118,10 @@ void MainWindow::buildSidebar()
     sideBar->setFloatable(false);
     sideBar->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
     sideBar->setIconSize(QSize(26, 26));
+    sideBar->setStyleSheet("#SideBar QToolButton {"
+                           "    width: 100%;"
+                           "    padding: 6px 0px;"
+                           "}");
 
     QStyle *st = QApplication::style();
     auto *group = new QActionGroup(this);
@@ -126,18 +130,29 @@ void MainWindow::buildSidebar()
     auto addPage = [&](const QIcon &icon, const QString &text, int page) {
         QAction *a = new QAction(icon, text, this);
         a->setCheckable(true);
+        a->setToolTip("");
         group->addAction(a);
         sideBar->addAction(a);
         connect(a, &QAction::triggered, this, [this, page] { pages_->setCurrentIndex(page); });
         return a;
     };
 
-    QAction *aDetect = addPage(st->standardIcon(QStyle::SP_ComputerIcon), "Detection", 0);
-    addPage(st->standardIcon(QStyle::SP_DriveNetIcon), "Faiss Indexes", 2);
-    addPage(st->standardIcon(QStyle::SP_DriveNetIcon), "Cards Indexes", 4);
-    addPage(st->standardIcon(QStyle::SP_DriveCDIcon), "Gallery", 3);
-    addPage(st->standardIcon(QStyle::SP_CommandLink), "Faiss Index Generator", 5);
-    settingsAction_ = addPage(st->standardIcon(QStyle::SP_FileDialogDetailedView), "Settings", 1);
+    QWidget *topSpacer = new QWidget(this);
+    topSpacer->setMinimumHeight(15);
+    sideBar->addWidget(topSpacer);
+
+    QAction *aDetect = addPage(QIcon(":/icon/magnifying.svg"), "Detection", 0);
+    addPage(QIcon(":/icon/gallery.svg"), "Selected Gallery", 3);
+    sideBar->addWidget(topSpacer);
+    sideBar->addSeparator();
+    sideBar->addWidget(topSpacer);
+    addPage(QIcon(":/icon/indexes_dl.svg"), "Faiss Indexes", 2);
+    addPage(QIcon(":/icon/cards_dl.svg"), "Cards Indexes", 4);
+    addPage(QIcon(":/icon/add_diamond.svg"), "Faiss Index Generator", 5);
+    sideBar->addWidget(topSpacer);
+    sideBar->addSeparator();
+    sideBar->addWidget(topSpacer);
+    settingsAction_ = addPage(QIcon(":/icon/settings.svg"), "Settings", 1);
     aDetect->setChecked(true);
 
     connect(settingsAction_, &QAction::triggered, this, [this] {
