@@ -216,7 +216,16 @@ void DetectionPage::buildUi() {
         polyBtn_->setChecked(false);
     });
     connect(undoBtn, &QPushButton::clicked, this, [this] { canvas_->undo(); });
-    connect(clrBtn,  &QPushButton::clicked, this, [this] { canvas_->clearSelections(); });
+    connect(clrBtn, &QPushButton::clicked, this, [this] {
+        QMessageBox::StandardButton reply;
+        reply = QMessageBox::question(this,
+                                      "Clear All Selections",
+                                      "Are you sure? You cannot undo this action.",
+                                      QMessageBox::Yes | QMessageBox::No);
+        if (reply == QMessageBox::Yes) {
+            canvas_->clearSelections();
+        }
+    });
     connect(detBtn,  &QPushButton::clicked, this, &DetectionPage::runDetection);
 
     connect(canvas_, &ImageCanvas::selectionsChanged, this, [this] {
