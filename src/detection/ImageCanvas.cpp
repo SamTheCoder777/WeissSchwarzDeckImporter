@@ -31,6 +31,7 @@ void ImageCanvas::setImage(const QImage& img) {
     cachedScale_ = -1.0;
     sel_.clear();
     polyInProgress_.clear();
+    undoStack_.clear();
     highlight_ = -1;
     haveCursor_ = false;
     recomputeTransform();
@@ -48,20 +49,23 @@ void ImageCanvas::setMode(Mode m) {
 void ImageCanvas::clearSelections() {
     sel_.clear();
     polyInProgress_.clear();
+    undoStack_.clear();
     highlight_ = -1;
     update();
     emit selectionsChanged();
 }
 
-void ImageCanvas::undo() {
+void ImageCanvas::undo()
+{
     if (!polyInProgress_.isEmpty()) {       // remove the last placed point
         polyInProgress_.removeLast();
         update();
         return;
     }
-    if (!sel_.isEmpty()) {                  // otherwise drop the last selection
-        sel_.removeLast();
-        if (highlight_ >= sel_.size()) highlight_ = -1;
+    if (!undoStack_.isEmpty()) { // otherwise drop the last selection
+        sel_ = undoStack_.takeLast();
+        if (highlight_ >= sel_.size())
+            highlight_ = -1;
         update();
         emit selectionsChanged();
     }
@@ -71,6 +75,7 @@ void ImageCanvas::setHighlight(int index) { highlight_ = index; update(); }
 
 void ImageCanvas::addQuadSelection(const QPolygonF& quad) {
     if (quad.size() < 3) return;
+    undoSnapshot();
     Sel s;
     s.poly = quad;
     s.id = nextSelId_++;
@@ -125,6 +130,7 @@ bool ImageCanvas::hitTestVertex(const QPointF& widgetPt, int& selIdx, int& vertI
 
 void ImageCanvas::finishPolygon() {
     if (polyInProgress_.size() >= 3) {
+        undoSnapshot();
         Sel s;
         s.poly = polyInProgress_;
         s.id = nextSelId_++;
@@ -136,6 +142,13 @@ void ImageCanvas::finishPolygon() {
         polyInProgress_.clear();
         update();
     }
+}
+
+void ImageCanvas::undoSnapshot()
+{
+    undoStack_.push_back(sel_);
+    if (undoStack_.size() > 50)
+        undoStack_.removeFirst();
 }
 
 void ImageCanvas::paintEvent(QPaintEvent*) {
@@ -243,6 +256,7 @@ void ImageCanvas::mousePressEvent(QMouseEvent* e) {
 
         int si, vi;
         if (polyInProgress_.isEmpty() && hitTestVertex(e->position(), si, vi)) {
+            undoSnapshot();
             dragSel_ = si; dragVert_ = vi;
             return;
         }
@@ -286,8 +300,9 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* e) {
     if (!polyInProgress_.isEmpty() || dragging_) update();   // live preview
 }
 
-void ImageCanvas::mouseReleaseEvent(QMouseEvent* e) {
-    if (dragSel_ >= 0) {                              // finished moving a vertex
+void ImageCanvas::mouseReleaseEvent(QMouseEvent *e)
+{
+    if (dragSel_ >= 0) { // finished moving a vertex
         int moved = dragSel_;
         dragSel_ = dragVert_ = -1;
         emit selectionGeometryChanged(moved);
@@ -298,6 +313,7 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* e) {
         dragging_ = false;
         QRectF r = QRectF(dragStartImg_, dragCurImg_).normalized();
         if (r.width() > 4 && r.height() > 4) {
+            undoSnapshot();
             QPolygonF poly;
             poly << r.topLeft() << r.topRight() << r.bottomRight() << r.bottomLeft();
             Sel s;
@@ -338,10 +354,12 @@ void ImageCanvas::contextMenuEvent(QContextMenuEvent* e) {
         QAction* delSel  = menu.addAction(QString("Delete selection %1").arg(target + 1));
         QAction* a = menu.exec(e->globalPos());
         if (delVert && a == delVert) {
+            undoSnapshot();
             sel_[target].poly.remove(vi);
             emit selectionGeometryChanged(target);
             update();
         } else if (a == delSel) {
+            undoSnapshot();
             sel_.remove(target);
             if (highlight_ >= sel_.size()) highlight_ = -1;
             update();
