@@ -53,7 +53,7 @@ Rectangle {
         spacing: 18
 
         Label {
-            text: "Create index"
+            text: "Create Faiss Index"
             color: root.text1
             font.pixelSize: 21
             font.weight: Font.DemiBold

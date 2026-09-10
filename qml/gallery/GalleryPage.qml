@@ -183,7 +183,7 @@ Item {
                         anchors.leftMargin: 14
                         anchors.rightMargin: 14
                         Label {
-                            text: "Detected cards"
+                            text: "Detected Cards"
                             color: "#e6e6e6"
                             font.pixelSize: 15
                             font.bold: true
