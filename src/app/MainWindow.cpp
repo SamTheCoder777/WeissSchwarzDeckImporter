@@ -148,7 +148,7 @@ void MainWindow::buildSidebar()
     sideBar->addWidget(topSpacer);
     addPage(QIcon(":/icon/indexes_dl.svg"), "Faiss Indexes", 2);
     addPage(QIcon(":/icon/cards_dl.svg"), "Cards Indexes", 4);
-    addPage(QIcon(":/icon/add_diamond.svg"), "Faiss Index Generator", 5);
+    addPage(QIcon(":/icon/add_diamond.svg"), "Index Generator", 5);
     sideBar->addWidget(topSpacer);
     sideBar->addSeparator();
     sideBar->addWidget(topSpacer);
