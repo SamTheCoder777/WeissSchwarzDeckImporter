@@ -99,8 +99,8 @@ void SettingsPage::buildUi()
             if (!p.isEmpty()) edit->setText(p);
         });
     };
-    browseRow(onnxEdit_, "ONNX model", false);
-    browseRow(yoloEdit_, "YOLO detector", false);
+    browseRow(onnxEdit_, "Card Identifier", false);
+    browseRow(yoloEdit_, "Card Detector", false);
 
     bool modelPathLoaded = !Config::instance().getCurModelPath().isNull()
                         && !Config::instance().getCurModelPath().isEmpty();
@@ -130,6 +130,44 @@ void SettingsPage::buildUi()
     modelStatus_->setObjectName("statusLabel");
     modelStatus_->setWordWrap(true);
     modelOuter->addWidget(modelStatus_);
+
+    QHBoxLayout *HDlLinks = new QHBoxLayout();
+
+    QLabel *DownloadHint = new QLabel("Download:");
+    DownloadHint->setStyleSheet("font-weight: 500;");
+
+    auto makeLinkLabel = [](const QString &url, const QString &text) {
+        QLabel *label = new QLabel();
+        label->setTextFormat(Qt::RichText);
+        label->setText(QString("<a href='%1' style='color:#3daee9; text-decoration:none;'>%2</a>")
+                           .arg(url, text));
+        label->setOpenExternalLinks(true);
+        label->setStyleSheet("QLabel { padding: 0px; } "
+                             "QLabel:hover { text-decoration: underline; }");
+        return label;
+    };
+
+    QLabel *CardIdentifierDlHint = makeLinkLabel(Config::instance().CardIdentifierDl_,
+                                                 "Card Identifier");
+    QLabel *CardDetectorDlHint = makeLinkLabel(Config::instance().CardDetectorDl_, "Card Detector");
+
+    QFrame *sep = new QFrame();
+    sep->setFrameShape(QFrame::VLine);
+    sep->setFrameShadow(QFrame::Sunken);
+    sep->setFixedHeight(12);
+
+    HDlLinks->addWidget(DownloadHint);
+    HDlLinks->addWidget(CardIdentifierDlHint);
+    HDlLinks->addSpacing(6);
+    HDlLinks->addWidget(sep);
+    HDlLinks->addSpacing(6);
+    HDlLinks->addWidget(CardDetectorDlHint);
+    HDlLinks->addStretch(1);
+    HDlLinks->setSpacing(6);
+    HDlLinks->setContentsMargins(0, 0, 0, 0);
+    HDlLinks->setAlignment(Qt::AlignLeft);
+
+    modelOuter->addLayout(HDlLinks);
 
     outer->addWidget(modelGroup);
 

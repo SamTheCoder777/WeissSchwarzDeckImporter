@@ -41,6 +41,12 @@ public:
     QString getPreferredLocale() const { return preferredLocale_; }
     void    setPreferredLocale(const QString& loc);
 
+    // Models download link
+    const QString CardIdentifierDl_ = "https://huggingface.co/SamTheCoder777/Card_Identifier/"
+                                      "resolve/main/card_identifier.onnx?download=true";
+    const QString CardDetectorDl_ = "https://huggingface.co/SamTheCoder777/Card_Detector/resolve/"
+                                    "main/card_detector.onnx?download=true";
+
     // ----- Dataset config ------
 
     // seriest list
