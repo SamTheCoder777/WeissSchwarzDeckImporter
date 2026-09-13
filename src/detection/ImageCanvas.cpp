@@ -263,7 +263,7 @@ void ImageCanvas::mousePressEvent(QMouseEvent* e) {
 
         if (polyInProgress_.isEmpty()) {
             int hit = hitTestSelection(e->position());
-            if (hit >= 0) {
+            if (hit >= 0 && mode_ == Hand) {
                 highlight_ = hit;
                 update();
                 emit selectionClicked(hit);
