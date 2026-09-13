@@ -40,7 +40,7 @@ Rectangle {
                 RowLayout {
                     spacing: 10
                     Label {
-                        text: "Card sets"
+                        text: "Card Indexes"
                         color: root.text1; font.pixelSize: 21; font.weight: Font.DemiBold
                     }
                     Rectangle {
