@@ -111,7 +111,10 @@ void ModelService::load(
 
     QFuture<TcgCore *> fut = QtConcurrent::run([onnx, native_, imgSize_]() -> TcgCore * {
         try {
-            return new TcgCore(onnx.toStdString(), native_, imgSize_, true);
+            return new TcgCore(onnx.toStdString(),
+                               native_,
+                               imgSize_,
+                               Config::instance().getUseAcceleration());
         } catch (...) {
             return nullptr;
         }

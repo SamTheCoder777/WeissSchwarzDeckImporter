@@ -493,6 +493,28 @@ void SettingsPage::buildUi()
     // nativeCheck_->setChecked(true);
     // advForm->addRow("", nativeCheck_);
 
+    QCheckBox *accCheck = new QCheckBox("Use Hardware Acceleration", this);
+    accCheck->setChecked(Config::instance().getUseAcceleration());
+
+    QLabel *restartHint = new QLabel("Applies on next model load", this);
+    restartHint->setStyleSheet("color: #999; font-size: 11px;");
+    restartHint->setVisible(false);
+
+    bool prevState = Config::instance().getUseAcceleration();
+
+    connect(accCheck,
+            &QCheckBox::checkStateChanged,
+            this,
+            [restartHint, prevState](Qt::CheckState state) mutable {
+                bool newState = (state == Qt::Checked);
+                Config::instance().setUseAcceleration(newState);
+                restartHint->setVisible(newState != prevState);
+                prevState = newState;
+            });
+
+    advForm->addRow("", accCheck);
+    advForm->addRow("", restartHint);
+
     advWidget->setVisible(false);
     outer->addWidget(advWidget);
 

@@ -125,6 +125,10 @@ public:
     int getMissingPurgeInterval() const;
     void setMissingPurgeInterval(int interval);
 
+    // --- Hardware acceleration settings ---
+    bool getUseAcceleration() const { return useAcceleration_; }
+    void setUseAcceleration(bool use);
+
 private:
     Config();
     ~Config() = default;
@@ -165,6 +169,9 @@ private:
 
     // --- missing card purge settings ---
     int missingPurgeInterval_;
+
+    // --- Hardware acceleration settings ---
+    bool useAcceleration_ = true;
 };
 
 

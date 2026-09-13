@@ -21,61 +21,53 @@ Config::Config() {
 
 void Config::load() {
     settings_->beginGroup("Path");
-
     curModelPath_ = settings_->value("ModelPath").toString();
     curYoloModelPath_ = settings_->value("YoloModelPath").toString();
     curIndexId_ = settings_->value("IndexId").toString();
-
     settings_->endGroup();
 
 
     settings_->beginGroup("Dataset");
-
     cardListEtag_ = settings_->value("CardListEtag").value<QMap<QString, QString>>();
     jpSeriesListEtag_ = settings_->value("jpSeriesListEtag").toString();
-
     settings_->endGroup();
 
     settings_->beginGroup("Index");
-
     disableNameCheck_ = settings_->value("DisableNameCheck").toBool();
-
     settings_->endGroup();
 
     settings_->beginGroup("MissingCards");
-
     missingPurgeInterval_
         = settings_->value("MissingPurgeInterval", (int) MissingPurgeInterval::Never).toInt();
+    settings_->endGroup();
 
+    settings_->beginGroup("Acceleration");
+    useAcceleration_ = settings_->value("UseAcceleration", true).toBool();
     settings_->endGroup();
 }
 
 void Config::save() {
     settings_->beginGroup("Path");
-
     settings_->setValue("ModelPath", curModelPath_);
     settings_->setValue("YoloModelPath", curYoloModelPath_);
     settings_->setValue("IndexId", curIndexId_);
-
     settings_->endGroup();
 
     settings_->beginGroup("Dataset");
-
     settings_->setValue("CardListEtag", QVariant::fromValue(cardListEtag_));
     settings_->setValue("jpSeriesListEtag", jpSeriesListEtag_);
-
     settings_->endGroup();
 
     settings_->beginGroup("Index");
-
     settings_->setValue("DisableNameCheck", disableNameCheck_);
-
     settings_->endGroup();
 
     settings_->beginGroup("MissingCards");
-
     settings_->setValue("MissingPurgeInterval", missingPurgeInterval_);
+    settings_->endGroup();
 
+    settings_->beginGroup("Acceleration");
+    settings_->setValue("UseAcceleration", useAcceleration_);
     settings_->endGroup();
 
     settings_->sync();
@@ -169,5 +161,11 @@ int Config::getMissingPurgeInterval() const
 void Config::setMissingPurgeInterval(int interval)
 {
     missingPurgeInterval_ = interval;
+    save();
+}
+
+void Config::setUseAcceleration(bool use)
+{
+    useAcceleration_ = use;
     save();
 }
