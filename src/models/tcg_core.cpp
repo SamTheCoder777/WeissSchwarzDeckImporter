@@ -21,12 +21,18 @@ TcgCore::TcgCore(const std::string &onnx_path, bool native, int img_size, bool a
     , S_(img_size)
     , env_(ORT_LOGGING_LEVEL_WARNING, "tcg")
 {
-    so_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+    so_.SetGraphOptimizationLevel(acceleration ? GraphOptimizationLevel::ORT_ENABLE_BASIC
+                                               : GraphOptimizationLevel::ORT_ENABLE_ALL);
     so_.SetIntraOpNumThreads(std::max(1u, std::thread::hardware_concurrency() / 2));
+    so_.SetInterOpNumThreads(1);
+    so_.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+
+    cv::setNumThreads(std::max(1, static_cast<int>(std::thread::hardware_concurrency() / 2)));
 
     if (acceleration) {
 #if defined(_WIN32)
-    OrtSessionOptionsAppendExecutionProvider_DML(so_, 0);
+        so_.DisableMemPattern();
+        OrtSessionOptionsAppendExecutionProvider_DML(so_, 0);
 #elif defined(__APPLE__)
     // Disable due to bad performance
     // OrtSessionOptionsAppendExecutionProvider_CoreML(so_, 0);
