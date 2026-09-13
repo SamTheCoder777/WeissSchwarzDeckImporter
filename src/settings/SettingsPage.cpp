@@ -481,17 +481,17 @@ void SettingsPage::buildUi()
                                          "if available next time they're viewed.").arg(n));
     });
 
-    imgSizeSpin_ = new QSpinBox;
-    imgSizeSpin_->setRange(64, 1024);
-    imgSizeSpin_->setSingleStep(16);
-    imgSizeSpin_->setValue(336);
-    imgSizeSpin_->setFixedWidth(120);
-    imgSizeSpin_->setMinimumHeight(32);
-    advForm->addRow("Image size", imgSizeSpin_);
+    // imgSizeSpin_ = new QSpinBox;
+    // imgSizeSpin_->setRange(64, 1024);
+    // imgSizeSpin_->setSingleStep(16);
+    // imgSizeSpin_->setValue(336);
+    // imgSizeSpin_->setFixedWidth(120);
+    // imgSizeSpin_->setMinimumHeight(32);
+    // advForm->addRow("Image size", imgSizeSpin_);
 
-    nativeCheck_ = new QCheckBox("Native aspect ratio");
-    nativeCheck_->setChecked(true);
-    advForm->addRow("", nativeCheck_);
+    // nativeCheck_ = new QCheckBox("Native aspect ratio");
+    // nativeCheck_->setChecked(true);
+    // advForm->addRow("", nativeCheck_);
 
     advWidget->setVisible(false);
     outer->addWidget(advWidget);
