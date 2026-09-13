@@ -28,5 +28,7 @@
         <file>icon/indexes_dl.svg</file>
         <file>icon/magnifying.svg</file>
         <file>icon/settings.svg</file>
+        <file>icon/logo.svg</file>
+        <file>icon/logo.ico</file>
     </qresource>
 </RCC>

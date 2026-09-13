@@ -42,6 +42,8 @@ static QImage matToQImage(const cv::Mat &bgr)
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
+    setWindowIcon(QIcon(":/icon/logo.ico"));
+
     qDebug() << "Cache Location:"
              << QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
 
@@ -104,7 +106,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     buildSidebar();
     updateSettingsDot();
-    setWindowTitle("TCG Deck Builder");
+    setWindowTitle("WS Deck Importer");
     resize(1440, 900);
 }
 
