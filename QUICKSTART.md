@@ -58,13 +58,14 @@ Before importing a decklist, you need to download data for the specific set you'
 
    ![Searching cards by set code](docs/quickCardsSearch.png)
 
->   ![NOTE]
+>  [!NOTE]
 >  There could be multiple indexes of the same card set (same code). You should download all of them.   
 7. Download all relevant card data.
 
    ![Downloading card data](docs/quickCardsDownloaded.png)
 
-> **Tip:** Both the Faiss Index and Card Index data need to be downloaded for a set before it can be detected properly — missing either one can cause incomplete results later.
+> [!TIP]
+>  Both the Faiss Index and Card Index data need to be downloaded for a set before it can be detected properly — missing either one can cause incomplete results later.
 
 ---
 
@@ -75,21 +76,22 @@ Before importing a decklist, you need to download data for the specific set you'
    ![Detection page](docs/quickDetectMain.png)
 
 2. Click **Open Image** and select your saved decklist picture.
-   > [!IMPORTANT]
-   > You can also copy and paste the image (ctrl + c, ctrl + v)
+> [!TIP]
+> You can also copy and paste the image (ctrl + c, ctrl + v)
 
    ![Open Image button](docs/quickDetectImage.png)
 
 3. Select the cards using one of the following tools:
+> [!TIP]
+> Your selections don't need to look perfect — as long as it captures the majority of each card, detection should still work fine.
    - **Auto Detect Tool** — click each individual card.
-     > [!TIP]
-     > Your selections don't need to look perfect — as long as it captures the majority of each card, detection should still work fine.
    - **Manual tools** for cards the auto tool misses:
      - **Rectangle Tool** — click a corner and drag.
      - **Polygon Tool** — click each vertex of the card, then press **Enter**.
      - **Hand Tool** — going through each selection or moving vertex points.
 
-   > **Note:** You only need to select **one** copy of each unique card — no need to select duplicates of the same card.
+> [!IMPORTANT]
+>  You only need to select **one** copy of each unique card — no need to select duplicates of the same card.
 
    ![Selecting cards with auto/manual tools](docs/quickDetectSelected.png)
 
@@ -98,8 +100,8 @@ Before importing a decklist, you need to download data for the specific set you'
    ![Detect button](docs/quickDetectIdentified.png)
 
 5. On the results page, click the card image or press **Space** to preview the identification result up close before confirming.
-   > [!TIP]
-   > An exclamation point (`!`) means the card's data isn't yet available on the EncoreDecks API, so translations may be missing — or you may not have downloaded that card's data from the Card Index page yet.
+> [!NOTE]
+> An exclamation point (`!`) means the card's data isn't yet available on the EncoreDecks API, so translations may be missing — or you may not have downloaded that card's data from the Card Index page yet.
 
 6. Move through each cards with arrow keys or clicking the cards on the image view with the **Hand** tool
 
