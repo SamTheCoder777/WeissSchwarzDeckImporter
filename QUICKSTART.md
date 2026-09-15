@@ -23,8 +23,6 @@ Welcome! This guide walks you through setting up the app, preparing set/card dat
 5. Click **Load Models**.
 
 Once the models are loaded, setup is complete and you won't need to repeat these steps again.
-> [!IMPORTANT]
-> If you move the app folder, you may need to update the model paths again
 ---
 
 ## 2. Downloading Set & Card Data
