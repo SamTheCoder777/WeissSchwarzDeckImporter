@@ -233,15 +233,32 @@ void DetectionPage::buildUi() {
         sortSelectionsByPosition();
         pushStateToQml();
     });
-    connect(canvas_, &ImageCanvas::selectionClicked, this, &DetectionPage::showSelectionResults);
-    connect(canvas_, &ImageCanvas::selectionGeometryChanged, this, [this](int i) {
-        if (i >= 0 && i < sel_.size()) {
-            sel_[i].cands.clear();
-            sel_[i].confirmed = false;
-            sel_[i].cardId.clear();
-            canvas_->setSelectionState(i, false, QString());
-            if (i == currentSel_) showSelectionResults(i); else pushStateToQml();
-        }
+    connect(canvas_, &ImageCanvas::selectionClicked, this, [this](int canvasIdx) {
+        int id = canvas_->selectionId(canvasIdx);
+        for (int j = 0; j < sel_.size(); ++j)
+            if (sel_[j].id == id) {
+                showSelectionResults(j);
+                return;
+            }
+    });
+    connect(canvas_, &ImageCanvas::selectionGeometryChanged, this, [this](int canvasIdx) {
+        int id = canvas_->selectionId(canvasIdx);
+        int selIdx = -1;
+        for (int j = 0; j < sel_.size(); ++j)
+            if (sel_[j].id == id) {
+                selIdx = j;
+                break;
+            }
+        if (selIdx < 0)
+            return;
+        sel_[selIdx].cands.clear();
+        sel_[selIdx].confirmed = false;
+        sel_[selIdx].cardId.clear();
+        canvas_->setSelectionState(canvasIdx, false, QString());
+        if (selIdx == currentSel_)
+            showSelectionResults(selIdx);
+        else
+            pushStateToQml();
     });
 
     connect(bridge_, &UiBridge::selectCardRequested, this, &DetectionPage::showSelectionResults);
@@ -313,20 +330,24 @@ void DetectionPage::onCanvasClickedImagePoint(const QPointF& imgPt) {
     if (best < 0) return;
 
     QPolygonF poly;
-    for (const auto& p : autoDets_[best].polygon) poly << QPointF(p.x, p.y);
+    for (const auto &p : autoDets_[best].polygon)
+        poly << QPointF(p.x, p.y);
 
     for (int i = 0; i < canvas_->selectionCount(); ++i) {
         QPolygonF ex = canvas_->selection(i);
-        if (ex.containsPoint(QPointF(autoDets_[best].centroid.x,
-                                     autoDets_[best].centroid.y), Qt::OddEvenFill)) {
-            canvas_->setHighlight(i);
-            showSelectionResults(i);
+        if (ex.containsPoint(QPointF(autoDets_[best].centroid.x, autoDets_[best].centroid.y),
+                             Qt::OddEvenFill)) {
+            int id = canvas_->selectionId(i);
+            for (int j = 0; j < sel_.size(); ++j)
+                if (sel_[j].id == id) {
+                    showSelectionResults(j);
+                    break;
+                }
             return;
         }
     }
 
     canvas_->addQuadSelection(poly);
-    syncSelections();
     pushStateToQml();
 }
 
@@ -349,7 +370,6 @@ void DetectionPage::detectCards() {
         for (const auto& p : d.quad) poly << QPointF(p.x, p.y);
         canvas_->addQuadSelection(poly);
     }
-    syncSelections();
     pushStateToQml();
 }
 
@@ -395,6 +415,9 @@ void DetectionPage::syncSelections() {
 }
 
 void DetectionPage::sortSelectionsByPosition() {
+    if (detecting_)
+        return;
+
     int n = canvas_->selectionCount();
     if (n < 2 || sourceBgr_.empty()) return;
 
@@ -523,17 +546,25 @@ void DetectionPage::openImage() {
 
 cv::Mat DetectionPage::cropForSelection(int index) const {
     QPolygonF poly = canvas_->selection(index);
-    if (poly.isEmpty() || sourceBgr_.empty()) return {};
+    if (poly.isEmpty() || sourceBgr_.empty())
+        return {};
 
-    auto applyRotation = [this, index](cv::Mat& img) {
-        int deg = sel_[index].rotation;
-        deg = ((deg % 360) + 360) % 360;
+    int id = canvas_->selectionId(index);
+    int deg = 0;
+    for (int j = 0; j < sel_.size(); ++j)
+        if (sel_[j].id == id) {
+            deg = sel_[j].rotation;
+            break;
+        }
 
-        if (deg == 90)
+    auto applyRotation = [this, deg](cv::Mat &img) {
+        int realDeg = ((deg % 360) + 360) % 360;
+
+        if (realDeg == 90)
             cv::rotate(img, img, cv::ROTATE_90_CLOCKWISE);
-        else if (deg == 180)
+        else if (realDeg == 180)
             cv::rotate(img, img, cv::ROTATE_180);
-        else if (deg == 270)
+        else if (realDeg == 270)
             cv::rotate(img, img, cv::ROTATE_90_COUNTERCLOCKWISE);
     };
 
@@ -609,8 +640,11 @@ void DetectionPage::runDetection() {
     detecting_ = true;
 
     auto crops = std::make_shared<std::vector<cv::Mat>>();
-    for (int i = 0; i < sel_.size(); ++i)
+    auto ids = std::make_shared<std::vector<int>>();
+    for (int i = 0; i < sel_.size(); ++i) {
         crops->push_back(sel_[i].confirmed ? cv::Mat() : cropForSelection(i));
+        ids->push_back(sel_[i].id);
+    }
 
     QApplication::setOverrideCursor(Qt::WaitCursor);
     auto results = std::make_shared<std::vector<std::vector<Candidate>>>(sel_.size());
@@ -623,22 +657,27 @@ void DetectionPage::runDetection() {
         &detectWatcher_,
         &QFutureWatcher<void>::finished,
         this,
-        [this, results, errorMsg, models] {
+        [this, results, ids, errorMsg, models] {
             models->setBusy(false);
             QApplication::restoreOverrideCursor();
             detecting_ = false;
-
             if (!errorMsg->isEmpty()) {
                 QMessageBox::critical(this, "Search Error", *errorMsg);
                 return;
             }
 
-            for (int i = 0; i < sel_.size() && i < (int) results->size(); ++i)
-                if (!(*results)[i].empty())
-                    sel_[i].cands = (*results)[i];
-            if (!sel_.isEmpty()) {
-                showSelectionResults(0);
+            for (size_t k = 0; k < results->size() && k < ids->size(); ++k) {
+                if ((*results)[k].empty())
+                    continue;
+                int id = (*ids)[k];
+                for (int j = 0; j < sel_.size(); ++j)
+                    if (sel_[j].id == id) {
+                        sel_[j].cands = (*results)[k];
+                        break;
+                    }
             }
+            if (!sel_.isEmpty())
+                showSelectionResults(0);
             pushStateToQml();
         },
         Qt::SingleShotConnection);
@@ -657,16 +696,29 @@ void DetectionPage::runDetection() {
     detectWatcher_.setFuture(fut);
 }
 
-void DetectionPage::showSelectionResults(int index) {
-    if (index < 0 || index >= sel_.size()) return;
-    currentSel_ = index;
-    canvas_->setHighlight(index);
+void DetectionPage::showSelectionResults(int selIdx)
+{
+    if (selIdx < 0 || selIdx >= sel_.size())
+        return;
+    currentSel_ = selIdx;
 
-    cv::Mat crop = cropForSelection(index);
+    int id = sel_[selIdx].id;
+    int canvasIdx = -1;
+    for (int i = 0; i < canvas_->selectionCount(); ++i)
+        if (canvas_->selectionId(i) == id) {
+            canvasIdx = i;
+            break;
+        }
+    if (canvasIdx < 0)
+        return;
+
+    canvas_->setHighlight(canvasIdx);
+
+    cv::Mat crop = cropForSelection(canvasIdx);
     cropProvider_->setImage(crop.empty() ? QImage() : matToQImage(crop));
     bridge_->bumpCrop();
 
-    candModel_->setCandidates(sel_[index].cands, sel_[index].cardId);
+    candModel_->setCandidates(sel_[selIdx].cands, sel_[selIdx].cardId);
     pushStateToQml();
 }
 

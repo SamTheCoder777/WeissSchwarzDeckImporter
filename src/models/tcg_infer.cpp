@@ -7,12 +7,12 @@
 #include <unordered_map>
 
 std::vector<Candidate> TcgInfer::search(const cv::Mat &crop_bgr, int top_k) {
-  std::vector<float> q = core_.embed(crop_bgr);
+    std::vector<float> q = core_.embed(crop_bgr);
 
-  const faiss::Index *index = core_.index();
-  if (!index) {
-    throw std::runtime_error("[TcgInfer] FAISS index is null!");
-  }
+    const faiss::Index *index = core_.index();
+    if (!index) {
+        throw std::runtime_error("[TcgInfer] FAISS index is null!");
+    }
 
   const int rows_per_card = core_.rows_per_card();
 
@@ -32,20 +32,31 @@ std::vector<Candidate> TcgInfer::search(const cv::Mat &crop_bgr, int top_k) {
   std::vector<int64_t> idxs(n_rows);
   index->search(1, q.data(), n_rows, scores.data(), idxs.data());
 
+  std::vector<float> scores2(n_rows);
+  std::vector<int64_t> idxs2(n_rows);
+  index->search(1, q.data(), n_rows, scores2.data(), idxs2.data());
+
   std::unordered_map<int, float> best; // card slot -> max score
   for (int i = 0; i < n_rows; ++i) {
     int64_t r = idxs[i];
     if (r < 0)
       continue;
+    if (r < 0 || r >= (int64_t) row_to_card.size())
+        continue;
     int c = row_to_card[(size_t)r];
+    if (c < 0 || c >= (int) card_ids.size())
+        continue;
     auto it = best.find(c);
     if (it == best.end() || scores[i] > it->second)
       best[c] = scores[i];
   }
 
   std::vector<std::pair<int, float>> ranked(best.begin(), best.end());
-  std::sort(ranked.begin(), ranked.end(),
-            [](auto &a, auto &b) { return a.second > b.second; });
+  std::sort(ranked.begin(), ranked.end(), [](auto &a, auto &b) {
+      if (a.second != b.second)
+          return a.second > b.second;
+      return a.first < b.first;
+  });
   if ((int)ranked.size() > top_k)
     ranked.resize(top_k);
 

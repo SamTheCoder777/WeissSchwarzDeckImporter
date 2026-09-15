@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <omp.h>
 #include <thread>
 
 #if defined(_WIN32)
@@ -23,21 +24,25 @@ TcgCore::TcgCore(const std::string &onnx_path, bool native, int img_size, bool a
 {
     so_.SetGraphOptimizationLevel(acceleration ? GraphOptimizationLevel::ORT_ENABLE_BASIC
                                                : GraphOptimizationLevel::ORT_ENABLE_ALL);
-    so_.SetIntraOpNumThreads(std::max(1u, std::thread::hardware_concurrency() / 2));
+    so_.SetIntraOpNumThreads(std::max(1, static_cast<int>(std::thread::hardware_concurrency() / 2)));
     so_.SetInterOpNumThreads(1);
     so_.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+    so_.DisableMemPattern();
+    so_.DisableCpuMemArena();
 
     cv::setNumThreads(std::max(1, static_cast<int>(std::thread::hardware_concurrency() / 2)));
+    // omp threads for weird detection non-deterministic bug
+    omp_set_num_threads(1);
 
     if (acceleration) {
 #if defined(_WIN32)
-        so_.DisableMemPattern();
+        //so_.DisableMemPattern();
         OrtSessionOptionsAppendExecutionProvider_DML(so_, 0);
 #elif defined(__APPLE__)
     // Disable due to bad performance
     // OrtSessionOptionsAppendExecutionProvider_CoreML(so_, 0);
 #endif
-  }
+    }
 
 #ifdef _WIN32
   std::wstring wpath =

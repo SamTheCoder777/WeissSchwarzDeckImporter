@@ -70,12 +70,10 @@ QHash<int, QByteArray> SelectionModel::roleNames() const {
 
 void SelectionModel::setRows(const QVector<Row>& rows) {
     if (rows.size() != rows_.size()) {
-        // count changed -> a real structural change, reset is correct
         beginResetModel();
         rows_ = rows;
         endResetModel();
     } else {
-        // same count -> just update values, DON'T reset (preserves scroll)
         rows_ = rows;
         if (!rows_.isEmpty())
             emit dataChanged(index(0), index(rows_.size() - 1));
@@ -88,6 +86,6 @@ QVariant SelectionModel::dataAt(int row, const QString& roleName) const {
     const auto names = roleNames();
     for (auto it = names.constBegin(); it != names.constEnd(); ++it)
         if (it.value() == rn)
-            return data(index(row), it.key());   // reuse your existing data()
+            return data(index(row), it.key());
     return {};
 }
