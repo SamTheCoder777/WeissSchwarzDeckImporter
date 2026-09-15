@@ -96,7 +96,18 @@ void SettingsPage::buildUi()
         connect(btn, &QPushButton::clicked, this, [this, edit, dir] {
             QString p = dir ? QFileDialog::getExistingDirectory(this, "Select folder")
                             : QFileDialog::getOpenFileName(this, "Select file");
-            if (!p.isEmpty()) edit->setText(p);
+
+            if (p.isEmpty())
+                return;
+
+            QDir appDir(QCoreApplication::applicationDirPath());
+            QString canonicalPath = QDir(p).canonicalPath();
+
+            if (canonicalPath.startsWith(appDir.canonicalPath())) {
+                edit->setText(appDir.relativeFilePath(canonicalPath));
+            } else {
+                edit->setText(p);
+            }
         });
     };
     browseRow(onnxEdit_, "Card Identifier", false);
