@@ -29,7 +29,7 @@ jobs:
           arch: win64_msvc2022_64
           modules: 'qtimageformats'
           cache: true
-          use-official: true
+          aqtversion: '>=3.4.1
 
       - name: Set up MSVC
         uses: ilammy/msvc-dev-cmd@v1
