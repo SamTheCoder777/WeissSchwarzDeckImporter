@@ -49,7 +49,7 @@ CardImageResponse::CardImageResponse(const QString& cardCode, const QSize& reque
     QNetworkRequest req{QUrl(url)};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
-    req.setHeader(QNetworkRequest::UserAgentHeader, "TCGDeckBuilder/1.0");
+    req.setHeader(QNetworkRequest::UserAgentHeader, "WSDeckImporter/1.0");
     reply_ = sharedNam().get(req);
     cachePath_ = path;
     connect(reply_, &QNetworkReply::finished, this, &CardImageResponse::onFinished);

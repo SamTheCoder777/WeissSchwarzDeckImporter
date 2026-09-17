@@ -159,7 +159,12 @@ void CompareDialog::showCandidate(int i) {
     showLoading(true);
     const int requested = cur_;
     qDebug() << "[CompareDialog] api call to: " << url;
-    QNetworkReply* r = net_.get(QNetworkRequest(QUrl(url)));
+    QNetworkRequest req(url);
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::NoLessSafeRedirectPolicy);
+    req.setHeader(QNetworkRequest::UserAgentHeader, "WSDeckImporter/1.0");
+
+    QNetworkReply *r = net_.get(req);
     connect(r, &QNetworkReply::finished, this, [this, r, requested, cachePath]{
         r->deleteLater();
         if (requested != cur_) return;

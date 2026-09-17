@@ -157,6 +157,7 @@ void IndexCatalog::refresh()
     QNetworkRequest req{QUrl(Config::instance().getIndexManifestUrl())};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
+    req.setHeader(QNetworkRequest::UserAgentHeader, "WSDeckImporter/1.0");
     qDebug() << "[IndexCatalog] api call to " << Config::instance().getIndexManifestUrl();
     reply_ = nam_.get(req);
     connect(reply_, &QNetworkReply::finished, this, [this] {
@@ -294,6 +295,7 @@ void IndexCatalog::startNextFile()
     QNetworkRequest req{QUrl(fe.url)};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
+    req.setHeader(QNetworkRequest::UserAgentHeader, "WSDeckImporter/1.0");
     reply_ = nam_.get(req);
     emit stateChanged();
 

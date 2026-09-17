@@ -109,6 +109,7 @@ void SeriesRepository::checkForUpdates() {
     QNetworkRequest req{QUrl(Config::instance().getJpSeriesListUrl())};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
+    req.setHeader(QNetworkRequest::UserAgentHeader, "WSDeckImporter/1.0");
 
     QNetworkReply* head = nam_.head(req);
     connect(head, &QNetworkReply::finished, this, [this, head] {
