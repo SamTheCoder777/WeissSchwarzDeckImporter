@@ -293,13 +293,15 @@ void DetectionPage::buildUi() {
     connect(cmpSc, &QShortcut::activated, this, &DetectionPage::openCompareDialog);
 }
 
-void DetectionPage::forceRectangleTool() {
-    canvas_->setMode(ImageCanvas::Rectangle);
-    if (rectBtn_) rectBtn_->setChecked(true);
+void DetectionPage::forceHandTool()
+{
+    canvas_->setMode(ImageCanvas::Hand);
+    if (rectBtn_)
+        rectBtn_->setChecked(false);
     if (polyBtn_) polyBtn_->setChecked(false);
     if (autoBtn_) autoBtn_->setChecked(false);
     if (handBtn_)
-        handBtn_->setChecked(false);
+        handBtn_->setChecked(true);
     autoDetectMode_ = false;
 }
 
@@ -636,7 +638,7 @@ void DetectionPage::runDetection() {
     syncSelections();
     if (sel_.isEmpty()) { QMessageBox::information(this, "No selection", "Select at least one card."); return; }
 
-    forceRectangleTool();
+    forceHandTool();
     detecting_ = true;
 
     auto crops = std::make_shared<std::vector<cv::Mat>>();

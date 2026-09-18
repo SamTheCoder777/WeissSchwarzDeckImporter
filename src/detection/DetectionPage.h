@@ -67,7 +67,7 @@ private:
 
     void onModelLoaded(bool);
     void buildUi();
-    void forceRectangleTool();
+    void forceHandTool();
     void onCanvasClickedImagePoint(const QPointF &imgPt);
     void detectCards();
     void openCompareDialog();
