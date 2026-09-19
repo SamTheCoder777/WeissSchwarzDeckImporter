@@ -7,8 +7,7 @@
 **Turn a deck image from anywhere into an importable deck list.**
 
 ![License](https://img.shields.io/github/license/samthecoder777/WeissSchwarzDeckImporter)
-![Version](https://img.shields.io/github/v/release/samthecoder777/WeissSchwarzDeckImporter
-)
+![Version](https://img.shields.io/github/v/release/SamTheCoder777/WeissSchwarzDeckImporter)
 
 <br>
 
