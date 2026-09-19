@@ -23,7 +23,7 @@ Item {
         return m ? m[1] : d.color;
     }
     function isClimax(d) {
-        return d && String(d.cardKind).toUpperCase() === "CX";
+        return d && (String(d.cardKind).toUpperCase() === "CX" || String(d.cardType) === "4");
     }
     function levelOf(d) {
         if (!d || isClimax(d))
