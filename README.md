@@ -8,7 +8,7 @@
 
 [![Windows](https://custom-icon-badges.demolab.com/badge/Windows-0078D6?logo=windows11&logoColor=white)](#)
 [![Qt](https://img.shields.io/badge/Qt-2CDE85?logo=Qt&logoColor=fff)](#)
-![License](https://img.shields.io/github/license/SamTheCoder777/WeissSchwarzDeckImporter)
+[![License](https://img.shields.io/github/license/SamTheCoder777/WeissSchwarzDeckImporter)](#)
 [![Version](https://img.shields.io/github/v/release/SamTheCoder777/WeissSchwarzDeckImporter)](https://github.com/SamTheCoder777/WeissSchwarzDeckImporter/releases/latest)
 
 <br>
