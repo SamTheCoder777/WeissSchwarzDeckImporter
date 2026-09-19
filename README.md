@@ -189,8 +189,8 @@ Grab the latest build for your platform from the [**Releases**](https://github.c
 | Windows | Download zip and unzip. Run WSDeckImporter.exe |
 | macOS (Apple Silicon) | Not yet available (Soon) |
 
-> First launch walks you through a one-time setup: choosing the recognition model and
-> downloading a card library.
+> [!NOTE]
+> Start with the **[Quickstart guide](QUICKSTART.md)**
 
 ---
 
