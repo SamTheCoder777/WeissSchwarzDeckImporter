@@ -8,19 +8,21 @@ Welcome! This guide walks you through setting up the app, preparing set/card dat
 
 1. **Download** the latest release zip from the [Releases page](https://github.com/SamTheCoder777/WeissSchwarzDeckImporter/releases) and unzip it to a folder of your choice.
 
-2. **Download the two required models** (`.onnx` files) from the links below, and place both files directly inside the unzipped folder:
+2. Locate **`vc_redist.x64.exe`** on the unzipped folder and run it to download the required [Visual C++ runtime libraries](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170)
+
+3. **Download the two required models** (`.onnx` files) from the links below, and place both files directly inside the unzipped folder:
    - [Model 1 — Card Identifier](https://huggingface.co/SamTheCoder777/Card_Identifier/resolve/main/card_identifier.onnx?download=true)
    - [Model 2 — Card Detector](https://huggingface.co/SamTheCoder777/Card_Detector/resolve/main/card_detector.onnx?download=true)
 
-3. Locate **`WSDeckImporter.exe`** inside the unzipped folder and launch it.
+4. Locate **`WSDeckImporter.exe`** inside the unzipped folder and launch it.
 
    ![Launching WSDeckImporter.exe](docs/quickLaunch.png)
 
-4. Open **Settings**, then use the **Browse** buttons to link each model file to its corresponding field.
+5. Open **Settings**, then use the **Browse** buttons to link each model file to its corresponding field.
 
    ![Linking models in Settings](docs/quickModels.png)
 
-5. Click **Load Models**.
+6. Click **Load Models**.
 
 Once the models are loaded, setup is complete and you won't need to repeat these steps again.
 

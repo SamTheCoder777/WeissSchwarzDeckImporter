@@ -156,24 +156,20 @@ The app needs models to run. Both are hosted on Hugging Face. You will need to l
 <tr>
 <td width="50%">
 
-### [Card Identifier](https://huggingface.co/SamTheCoder777/Card_Identifier/resolve/main/)
+### [Card Identifier](https://huggingface.co/SamTheCoder777/Card_Identifier)
 
 The vision model that recognizes which card is in an image. Fine-tuned from **[DINOv3](https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m)**.
 
 **[Download on Hugging Face »](https://huggingface.co/SamTheCoder777/Card_Identifier/resolve/main/card_identifier.onnx?download=true)**
 
-<sub>Required. Load it in Settings before identifying cards.</sub>
-
 </td>
 <td width="50%">
 
-### [Card Detector](https://huggingface.co/SamTheCoder777/Card_Detector/resolve/main/)
+### [Card Detector](https://huggingface.co/SamTheCoder777/Card_Detector)
 
 The model that locates cards within an image, so they can be outlined automatically. Based on **[YOLOv8](https://huggingface.co/Ultralytics/YOLOv8)**.
 
 **[Download on Hugging Face »](https://huggingface.co/SamTheCoder777/Card_Detector/resolve/main/card_detector.onnx?download=true)**
-
-<sub>Optional. But needed for the Auto-detect tool.</sub>
 
 </td>
 </tr>
