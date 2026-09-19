@@ -203,6 +203,16 @@ Most decklist photos and screenshots posted on X should work without any issue. 
 </details>
 
 <details>
+<summary><b>I downloaded the card data but it still says the card data is missing from EncoreDecks!</b></summary>
+<br>
+If you tried to detect card without downloading the card data first, the program would have gotten the card data from the official weiss schwarz website and not encore decks<br><br>
+  
+You should go into settings > Advanced settings > Purge Fallbacks<br><br>
+  
+Then the next time you search that card, it should load from EncoreDecks properly.
+</details>
+
+<details>
 <summary><b>Does it work without internet?</b></summary>
 <br>
 Yes and no. If you have downloaded the faiss index, cards index, the cards will be correctly identified but cards images and some cards that were missing from the encore decks api would be shown as "no data" on the gallery.
