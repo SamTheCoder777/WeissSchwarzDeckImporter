@@ -30,5 +30,7 @@
         <file>icon/settings.svg</file>
         <file>icon/logo.svg</file>
         <file>icon/logo.ico</file>
+        <file>icon/langJp.svg</file>
+        <file>icon/langUs.svg</file>
     </qresource>
 </RCC>

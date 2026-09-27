@@ -64,6 +64,7 @@ private:
         double progress = 0.0;
         bool downloading = false;
         bool isCustom = false;
+        bool noEntry = false;
     };
 
     void setStatus(const QString& s) { qDebug() << "stateChanged! " + s; status_ = s; emit stateChanged(); }
@@ -77,6 +78,16 @@ private:
     int dlRowById();
     QJsonObject readInstalledJson() const;
     void pruneMissingCustomRows();
+    void onLocaleModeChanged();
+
+    QString dirForRow(const Row &r) const;
+    QString customJsonPath() const;
+    static QJsonObject readJsonFile(const QString &path);
+    static void writeJsonFile(const QString &path, const QJsonObject &o);
+    void migrateCustomEntries();
+
+    QString installedJsonPath() const;
+    void migrateInstalledJson();
 
     QNetworkAccessManager nam_;
     QNetworkReply* reply_ = nullptr;
@@ -93,4 +104,7 @@ private:
     QString dlDir_;
 
     QString activeId_;
+
+    quint64 refreshGen_ = 0;
+    bool pendingRefresh_ = false;
 };

@@ -265,7 +265,7 @@ Rectangle {
                             Label {
                                 text: desc + "   ·   v" + version + "   ·   " + sizeText
                                     + (installedVersion.length > 0 && delegateCard.hasUpdate
-                                       ? "   (you have v" + installedVersion + ")" : "")
+                                       ? "   (you have v " + installedVersion + ")" : "")
                                 color: root.text2; font.pixelSize: 11
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true

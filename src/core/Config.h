@@ -41,43 +41,93 @@ public:
     QString getPreferredLocale() const { return preferredLocale_; }
     void    setPreferredLocale(const QString& loc);
 
+    enum class DetectLocaleMode { EN, JP };
+    Q_ENUM(DetectLocaleMode)
+
+    DetectLocaleMode getCurDetectLocaleMode() const { return curDetectLocaleMode_; }
+    void setCurDetectLocaleMode(DetectLocaleMode newLocaleMode);
+
     // Models download link
     const QString CardIdentifierDl_ = "https://huggingface.co/SamTheCoder777/Card_Identifier/"
                                       "resolve/main/card_identifier.onnx?download=true";
     const QString CardDetectorDl_ = "https://huggingface.co/SamTheCoder777/Card_Detector/resolve/"
                                     "main/card_detector.onnx?download=true";
 
+    // Github repo
+    const QString releaseRepo_ = "SamTheCoder777/WeissSchwarzDeckImporter";
+
+    QString getDismissedReleaseTag() const { return dismissedReleaseTag_; }
+    void setDismissedReleaseTag(const QString &tag);
+
     // ----- Dataset config ------
 
     // seriest list
-    QString getJpSeriesListUrl() const {
-        return jpSerieslistUrl_.toString();
+    QString getSeriesListUrl(DetectLocaleMode m) const
+    {
+        return m == DetectLocaleMode::JP ? jpSerieslistUrl_.toString()
+                                         : enSerieslistUrl_.toString();
     }
-    QString getSeriesListDatabasePath() const { return serieslistDatabasePath_;}
+    QString getSeriesListUrl() const { return getSeriesListUrl(curDetectLocaleMode_); }
+
+    QString getSeriesListDatabasePath(DetectLocaleMode m) const
+    {
+        return m == DetectLocaleMode::JP ? serieslistDatabasePath_ : enSerieslistDatabasePath_;
+    }
+    QString getSeriesListDatabasePath() const
+    {
+        return getSeriesListDatabasePath(curDetectLocaleMode_);
+    }
 
     QString getJpSeriesListEtag() const { return jpSeriesListEtag_; }
     void setJpSeriestListEtag(const QString &etag);
+    QString getEnSeriesListEtag() const { return enSeriesListEtag_; }
+    void setEnSeriestListEtag(const QString &etag);
+
+    QString getSeriesListEtag(DetectLocaleMode m) const
+    {
+        return m == DetectLocaleMode::JP ? jpSeriesListEtag_ : enSeriesListEtag_;
+    }
+    void setSeriesListEtag(DetectLocaleMode m, const QString &etag);
 
     // card list
     QString getCardListUrl(QString &seriesId) const {
-        QUrl url(cardListBaseUrlStart_);
+        QUrl url(curDetectLocaleMode_ == DetectLocaleMode::JP ? cardListBaseUrlStart_
+                                                              : enCardListBaseUrlStart_);
         QString path = url.path();
         if (!path.endsWith('/')) path += '/';
         path += seriesId;
 
-        if (!cardListBaseUrlEnd_.isEmpty()) {
+        QUrl baseUrlEnd = curDetectLocaleMode_ == DetectLocaleMode::JP ? cardListBaseUrlEnd_
+                                                                       : enCardListBaseUrlEnd_;
+
+        if (!baseUrlEnd.isEmpty()) {
             if (!path.endsWith('/')) path += '/';
-            path += cardListBaseUrlEnd_.path();
+            path += baseUrlEnd.path();
         }
 
         url.setPath(path);
         return url.toString();
     }
-    QString getCardListDatabasePath() const { return cardListDatabasePath_;}
 
-    QString getCardListEtag(QString &id) const { return cardListEtag_[id]; }
+    QString getCardListDatabasePath() const
+    {
+        return curDetectLocaleMode_ == DetectLocaleMode::JP ? cardListDatabasePath_
+                                                            : enCardListDatabasePath_;
+    }
+
+    QString getCardListDatabasePath(DetectLocaleMode m) const
+    {
+        return m == DetectLocaleMode::JP ? cardListDatabasePath_ : enCardListDatabasePath_;
+    }
+
+    QString getCardListEtag(QString &id) const
+    {
+        return curDetectLocaleMode_ == DetectLocaleMode::JP ? cardListEtag_[id]
+                                                            : enCardListEtag_[id];
+    }
     void setCardListEtag(const QString &id, const QString &etag);
     void clearCardListEtags();
+    void clearCardListEtags(DetectLocaleMode m);
 
     // ---------------------------
 
@@ -94,7 +144,9 @@ public:
     }
     void setIndexInstallPath(const QString& p);
     QString getIndexManifestUrl() const {
-        return indexManifestUrl_.isEmpty() ? kDefaultManifestUrl : indexManifestUrl_;
+        return curDetectLocaleMode_ == DetectLocaleMode::JP
+                   ? (indexManifestUrl_.isEmpty() ? kDefaultManifestUrl : indexManifestUrl_)
+                   : (enIndexManifestUrl_.isEmpty() ? kEnDefaultManifestUrl : enIndexManifestUrl_);
     }
     void setIndexManifestUrl(const QString& u);
     // check if index name is valid
@@ -129,9 +181,13 @@ public:
     bool getUseAcceleration() const { return useAcceleration_; }
     void setUseAcceleration(bool use);
 
+signals:
+    void detectLocaleModeChanged();
+
 private:
     Config();
-    ~Config() = default;
+
+    QString dismissedReleaseTag_;
 
     const QUrl baseImgUrl_ = QUrl("https://www.encoredecks.com/images/");
 
@@ -142,6 +198,8 @@ private:
     QString curIndexId_;
 
     QString preferredLocale_ = "EN";
+
+    DetectLocaleMode curDetectLocaleMode_ = DetectLocaleMode::JP;
 
     // ----- Dataset config ------
 
@@ -156,6 +214,21 @@ private:
     const QUrl cardListBaseUrlEnd_ = QUrl("cards");
     const QString cardListDatabasePath_ = QDir(QCoreApplication::applicationDirPath()).filePath("cardList.db");
     QMap<QString, QString> cardListEtag_;
+
+    // EN Series List
+    const QUrl enSerieslistUrl_ = QUrl("https://www.encoredecks.com/api/serieslist/EN/");
+    QString enSeriesListEtag_;
+
+    const QString enSerieslistDatabasePath_ = QDir(QCoreApplication::applicationDirPath())
+                                                  .filePath("enSeriesList.db");
+
+    // EN Card List
+    const QUrl enCardListBaseUrlStart_ = QUrl("https://www.encoredecks.com/api/series");
+    const QUrl enCardListBaseUrlEnd_ = QUrl("cards");
+    const QString enCardListDatabasePath_ = QDir(QCoreApplication::applicationDirPath())
+                                                .filePath("enCardList.db");
+    QMap<QString, QString> enCardListEtag_;
+
     // ---------------------------
 
     bool native_ = true;
@@ -163,8 +236,11 @@ private:
 
     // --- index settings ---
     QString kDefaultManifestUrl = "https://huggingface.co/datasets/SamTheCoder777/ws-index/raw/main/manifest.json";
+    QString kEnDefaultManifestUrl
+        = "https://huggingface.co/datasets/SamTheCoder777/ws-index-en/raw/main/manifest.json";
     QString indexInstallPath_;
     QString indexManifestUrl_;
+    QString enIndexManifestUrl_;
     bool disableNameCheck_ = false;
 
     // --- missing card purge settings ---

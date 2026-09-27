@@ -7,31 +7,134 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QStandardPaths>
+#include <QTimer>
 #include <QUrl>
 
 #include "../core/Config.h"
+
+static bool isEnMode()
+{
+    return Config::instance().getCurDetectLocaleMode() == Config::DetectLocaleMode::EN;
+}
+static const QString kEnPrefix = QStringLiteral("EN_");
 
 IndexCatalog::IndexCatalog(QObject *parent)
     : QAbstractListModel(parent)
 {
     QDir().mkpath(installRoot());
+
+    connect(&Config::instance(),
+            &Config::detectLocaleModeChanged,
+            this,
+            &IndexCatalog::onLocaleModeChanged);
+}
+
+void IndexCatalog::onLocaleModeChanged()
+{
+    ++refreshGen_;
+    activeId_.clear();
+
+    beginResetModel();
+    rows_.clear();
+    endResetModel();
+    setStatus("Loading indexes…");
+
+    if (reply_) {
+        pendingRefresh_ = true;
+        reply_->abort();
+        return;
+    }
+    refresh();
+}
+
+QString IndexCatalog::installedJsonPath() const
+{
+    return installRoot() + (isEnMode() ? "/installed_en.json" : "/installed.json");
 }
 
 QJsonObject IndexCatalog::readInstalledJson() const
 {
+    QJsonObject o = readJsonFile(installedJsonPath());
+    const QJsonObject custom = readJsonFile(customJsonPath());
+    for (auto it = custom.begin(); it != custom.end(); ++it) {
+        QJsonObject e = it.value().toObject();
+        e.insert("custom", true);
+        o.insert(it.key(), e);
+    }
+    return o;
+}
+
+void IndexCatalog::migrateInstalledJson()
+{
+    if (!isEnMode() || QFile::exists(installedJsonPath()))
+        return;
     QFile f(installRoot() + "/installed.json");
     if (!f.open(QIODevice::ReadOnly))
-        return {};
-    return QJsonDocument::fromJson(f.readAll()).object();
+        return;
+    const QJsonObject legacy = QJsonDocument::fromJson(f.readAll()).object();
+
+    QJsonObject en;
+    for (auto it = legacy.begin(); it != legacy.end(); ++it)
+        if (QFile::exists(installRoot() + "/" + kEnPrefix + it.key() + "/index.faiss"))
+            en.insert(it.key(), it.value());
+    if (en.isEmpty())
+        return;
+
+    QFile out(installedJsonPath());
+    if (out.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        out.write(QJsonDocument(en).toJson(QJsonDocument::Indented));
 }
 
 QString IndexCatalog::installRoot() const
 {
     return Config::instance().getIndexInstallPath();
 }
+
 QString IndexCatalog::dirFor(const QString &id) const
 {
-    return installRoot() + "/" + id;
+    return installRoot() + "/" + (isEnMode() ? kEnPrefix + id : id);
+}
+
+QString IndexCatalog::customJsonPath() const
+{
+    return installRoot() + "/custom_indexes.json";
+}
+
+QJsonObject IndexCatalog::readJsonFile(const QString &path)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return {};
+    return QJsonDocument::fromJson(f.readAll()).object();
+}
+
+void IndexCatalog::writeJsonFile(const QString &path, const QJsonObject &o)
+{
+    QFile f(path);
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));
+}
+
+QString IndexCatalog::dirForRow(const Row &r) const
+{
+    return r.isCustom ? installRoot() + "/" + r.id : dirFor(r.id);
+}
+
+void IndexCatalog::migrateCustomEntries()
+{
+    if (QFile::exists(customJsonPath()))
+        return;
+    const QJsonObject jp = readJsonFile(installRoot() + "/installed.json");
+    QJsonObject custom;
+    for (auto it = jp.begin(); it != jp.end(); ++it) {
+        const QJsonValue v = it.value();
+        const bool isCustom = v.isObject() ? v.toObject().value("custom").toBool(false)
+                                           : (v.toString() == "local");
+        if (isCustom && QFile::exists(installRoot() + "/" + it.key() + "/index.faiss"))
+            custom.insert(it.key(), QJsonObject{{"version", "local"}});
+    }
+    QDir().mkpath(installRoot());
+    writeJsonFile(customJsonPath(), custom); // written even if empty, so this runs once
 }
 
 QVariant IndexCatalog::data(const QModelIndex &idx, int role) const
@@ -107,7 +210,7 @@ void IndexCatalog::loadInstalledState()
             storedCustom = (v == "local");
         }
 
-        if (!v.isEmpty() && QFile::exists(dirFor(r.id) + "/index.faiss")) {
+        if (!v.isEmpty() && QFile::exists(dirForRow(r) + "/index.faiss")) {
             r.installedVersion = v;
             r.isCustom = storedCustom;
         } else if (!r.isCustom) {
@@ -118,19 +221,30 @@ void IndexCatalog::loadInstalledState()
 
 void IndexCatalog::saveInstalledState()
 {
-    QJsonObject o;
-    for (const Row &r : rows_){
+    QJsonObject cloud;
+
+    QJsonObject custom = readJsonFile(customJsonPath());
+
+    for (const Row &r : rows_) {
+        if (r.isCustom) {
+            if (r.installedVersion.isEmpty())
+                custom.remove(r.id);
+            else
+                custom.insert(r.id, QJsonObject{{"version", r.installedVersion}});
+            continue;
+        }
         if (r.installedVersion.isEmpty())
             continue;
-        QJsonObject entry;
-        entry.insert("version", r.installedVersion);
-        entry.insert("custom", r.isCustom);
-        o.insert(r.id, entry);
+        cloud.insert(r.id, QJsonObject{{"version", r.installedVersion}, {"custom", false}});
     }
+
+    for (const QString &k : custom.keys())
+        if (!QFile::exists(installRoot() + "/" + k + "/index.faiss"))
+            custom.remove(k);
+
     QDir().mkpath(installRoot());
-    QFile f(installRoot() + "/installed.json");
-    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));
+    writeJsonFile(installedJsonPath(), cloud);
+    writeJsonFile(customJsonPath(), custom);
 }
 
 int IndexCatalog::dlRowById()
@@ -145,7 +259,12 @@ void IndexCatalog::refresh()
 {
     if (reply_)
         return;
+    pendingRefresh_ = false;
+    const quint64 gen = ++refreshGen_;
     setStatus("Checking for index updates…");
+
+    migrateCustomEntries();
+    migrateInstalledJson();
 
     beginResetModel();
     rows_.clear();
@@ -154,21 +273,38 @@ void IndexCatalog::refresh()
     pruneMissingCustomRows();
     endResetModel();
 
-    QNetworkRequest req{QUrl(Config::instance().getIndexManifestUrl())};
+    const QString url = Config::instance().getIndexManifestUrl();
+    qDebug() << "[IndexCatalog] refresh gen" << gen << "mode" << (isEnMode() ? "EN" : "JP")
+             << "manifest:" << url;
+
+    QNetworkRequest req{QUrl(url)};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
     req.setHeader(QNetworkRequest::UserAgentHeader, "WSDeckImporter/1.0");
-    qDebug() << "[IndexCatalog] api call to " << Config::instance().getIndexManifestUrl();
-    reply_ = nam_.get(req);
-    connect(reply_, &QNetworkReply::finished, this, [this] {
+
+    QNetworkReply *reply = nam_.get(req);
+    reply_ = reply;
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, gen] {
+        reply->deleteLater();
+        if (reply_ == reply)
+            reply_ = nullptr;
+
+        if (pendingRefresh_) {
+            pendingRefresh_ = false;
+            QTimer::singleShot(0, this, &IndexCatalog::refresh);
+            return;
+        }
+
+        if (gen != refreshGen_)
+            return;
+
         QByteArray body;
         QString err;
-        if (reply_->error() == QNetworkReply::NoError)
-            body = reply_->readAll();
+        if (reply->error() == QNetworkReply::NoError)
+            body = reply->readAll();
         else
-            err = reply_->errorString();
-        reply_->deleteLater();
-        reply_ = nullptr;
+            err = reply->errorString();
 
         if (!err.isEmpty()) {
             setStatus(QString("Offline · showing %1 local index(es)").arg(rows_.size()));
@@ -185,6 +321,12 @@ void IndexCatalog::refresh()
         }
 
         beginResetModel();
+
+        rows_.clear();
+        scanLocalIndexes();
+        loadInstalledState();
+
+        bool adopted = false;
         for (const QJsonValue &v : doc.object().value("indexes").toArray()) {
             QJsonObject o = v.toObject();
             const QString id = o.value("id").toString();
@@ -199,8 +341,14 @@ void IndexCatalog::refresh()
                 }
 
             if (target && target->isCustom) {
-                setStatus("Custom index '" + id + "' shadows a cloud index of the same name.");
-                continue;
+                if (target->noEntry) {
+                    target->isCustom = false;
+                    target->installedVersion = "unknown";
+                    adopted = true;
+                } else {
+                    setStatus("Custom index '" + id + "' shadows a cloud index of the same name.");
+                    continue;
+                }
             }
 
             if (!target) {
@@ -226,6 +374,8 @@ void IndexCatalog::refresh()
                 target->files.push_back(fe);
             }
         }
+        if (adopted)
+            saveInstalledState();
         loadInstalledState();
         pruneMissingCustomRows();
         endResetModel();
@@ -383,8 +533,13 @@ void IndexCatalog::finishDownload(bool ok, const QString &message)
     dlRow_ = -1;
     dlId_.clear();
     setStatus(message);
-    if (!ok)
+    if (!ok && !pendingRefresh_)
         emit errorOccurred(message);
+
+    if (pendingRefresh_) {
+        pendingRefresh_ = false;
+        QTimer::singleShot(0, this, &IndexCatalog::refresh);
+    }
 }
 
 void IndexCatalog::cancel()
@@ -398,7 +553,7 @@ void IndexCatalog::use(int row)
     if (row < 0 || row >= rows_.size())
         return;
 
-    const QString dir = dirFor(rows_[row].id);
+    const QString dir = dirForRow(rows_[row]);
 
     if (!QFile::exists(dir + "/index.faiss")) {
         setStatus("Index files not found in " + dir);
@@ -416,7 +571,7 @@ void IndexCatalog::removeIndex(int row)
 {
     if (row < 0 || row >= rows_.size())
         return;
-    QDir(dirFor(rows_[row].id)).removeRecursively();
+    QDir(dirForRow(rows_[row])).removeRecursively();
     rows_[row].installedVersion.clear();
     rows_[row].progress = 0.0;
     saveInstalledState();
@@ -437,7 +592,7 @@ void IndexCatalog::pruneMissingCustomRows()
         if (dlId_ == r.id)
             continue;
 
-        const bool folderGone = !QFile::exists(dirFor(r.id) + "/index.faiss");
+        const bool folderGone = !QFile::exists(dirForRow(r) + "/index.faiss");
         if (folderGone) {
             rows_.remove(i);
             changed = true;
@@ -449,13 +604,23 @@ void IndexCatalog::pruneMissingCustomRows()
 
 void IndexCatalog::scanLocalIndexes()
 {
+    const bool en = isEnMode();
     const QJsonObject installed = readInstalledJson();
+    const QJsonObject customs = readJsonFile(customJsonPath());
+    const QJsonObject jpFile = en ? readJsonFile(installRoot() + "/installed.json") : QJsonObject();
+
     QDir root(installRoot());
     QVector<Row> disk;
     const QStringList subdirs = root.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    for (const QString &id : subdirs) {
-        QDir d(root.filePath(id));
-        // treat a folder as an index if it has the core files
+    for (const QString &folder : subdirs) {
+        const bool enFolder = folder.startsWith(kEnPrefix);
+        if (enFolder && !en)
+            continue;
+        const QString id = enFolder ? folder.mid(kEnPrefix.size()) : folder;
+        if (id.isEmpty())
+            continue;
+
+        QDir d(root.filePath(folder));
         const bool looksLikeIndex = d.exists("index.faiss") || d.exists("id_map.json")
                                     || d.exists("row2card.npy");
         if (!looksLikeIndex)
@@ -467,11 +632,20 @@ void IndexCatalog::scanLocalIndexes()
         r.desc = "Local index";
         r.installedVersion = "local";
 
-        bool knownAsCatalog = false;
-        const QJsonValue entry = installed.value(id);
-        if (entry.isObject())
-            knownAsCatalog = !entry.toObject().value("custom").toBool(true);
-        r.isCustom = !knownAsCatalog;
+        if (!enFolder && en) {
+            const QJsonValue jp = jpFile.value(id);
+            const bool jpCloud = jp.isObject() && !jp.toObject().value("custom").toBool(true);
+            if (!customs.contains(id) && jpCloud)
+                continue;
+            r.isCustom = true;
+            r.noEntry = false;
+        } else {
+            const QJsonValue entry = installed.value(id);
+            r.noEntry = !entry.isObject() && !entry.isString();
+            const bool knownAsCatalog = entry.isObject()
+                                        && !entry.toObject().value("custom").toBool(true);
+            r.isCustom = !knownAsCatalog;
+        }
 
         for (const QFileInfo &fi : d.entryInfoList(QDir::Files))
             r.totalSize += fi.size();

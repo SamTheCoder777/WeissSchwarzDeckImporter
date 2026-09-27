@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(tcg_app LANGUAGES CXX)
+project(WSDeckImporter LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,7 +32,7 @@ find_package(faiss CONFIG REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickWidgets Network Concurrent Sql Svg QuickControls2)
 
-add_executable(tcg_app WIN32
+add_executable(WSDeckImporter WIN32
     main.cpp
     src/app/MainWindow.cpp   src/app/MainWindow.h
     src/detection/ImageCanvas.cpp  src/detection/ImageCanvas.h
@@ -64,8 +64,25 @@ add_executable(tcg_app WIN32
     src/models/tcg_util.h
     src/index/IndexGenerationPage.h src/index/IndexGenerationPage.cpp
 )
-target_include_directories(tcg_app PRIVATE ${OpenCV_INCLUDE_DIRS})
-target_link_libraries(tcg_app PRIVATE
+
+set(APP_VERSION "")
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --abbrev=0
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_TAG
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+    if(GIT_TAG)
+        set(APP_VERSION "${GIT_TAG}")
+    endif()
+endif()
+message(STATUS "App version: ${APP_VERSION}")
+target_compile_definitions(WSDeckImporter PRIVATE APP_VERSION="${APP_VERSION}")
+
+target_include_directories(WSDeckImporter PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(WSDeckImporter PRIVATE
     Qt6::Widgets
     Qt6::Quick
     Qt6::QuickWidgets
@@ -80,7 +97,7 @@ target_link_libraries(tcg_app PRIVATE
 )
 
 if (WIN32)
-    foreach(tgt tcg_app)
+    foreach(tgt WSDeckImporter)
         add_custom_command(TARGET ${tgt} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${ONNXRUNTIME_ROOT}/lib/onnxruntime.dll"
@@ -89,9 +106,9 @@ if (WIN32)
 
     find_program(WINDEPLOYQT windeployqt HINTS "${Qt6_DIR}/../../../bin")
     if (WINDEPLOYQT)
-        add_custom_command(TARGET tcg_app POST_BUILD
+        add_custom_command(TARGET WSDeckImporter POST_BUILD
             COMMAND "${WINDEPLOYQT}" --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/qml"
-                    "$<TARGET_FILE:tcg_app>")
+                    "$<TARGET_FILE:WSDeckImporter>")
     endif()
 endif()
 

@@ -167,9 +167,14 @@ QString ModelService::indexDirForId(const QString &id)
 {
     if (id.isEmpty())
         return {};
-    QString base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    QString dir = base + "/indexes/" + id;
-    return QDir(dir).exists() ? dir : QString();
+    const QString root = Config::instance().getIndexInstallPath();
+
+    QFile f(root + "/custom_indexes.json");
+    if (f.open(QIODevice::ReadOnly) && QJsonDocument::fromJson(f.readAll()).object().contains(id))
+        return root + "/" + id;
+
+    const bool en = Config::instance().getCurDetectLocaleMode() == Config::DetectLocaleMode::EN;
+    return root + "/" + (en ? "EN_" + id : id);
 }
 
 std::vector<Candidate> ModelService::search(const cv::Mat &cropBgr, int topK)

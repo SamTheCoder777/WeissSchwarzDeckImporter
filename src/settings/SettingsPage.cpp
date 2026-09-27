@@ -1,16 +1,30 @@
 #include "SettingsPage.h"
 #include "../core/Config.h"
 
+#include <QButtonGroup>
 #include <QComboBox>
 #include <QElapsedTimer>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QStyle>
 #include <QTimer>
+
+#include <QDesktopServices>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLocale>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QPropertyAnimation>
+#include <QUrl>
+#include <QVariantAnimation>
+#include <QVersionNumber>
 
 SettingsPage::SettingsPage(ModelService *models,
                            SeriesRepository *seriesRepository,
@@ -26,13 +40,42 @@ SettingsPage::SettingsPage(ModelService *models,
     buildUi();
 }
 
+static QVersionNumber versionFromTag(QString tag)
+{
+    tag = tag.trimmed();
+    if (tag.startsWith('v', Qt::CaseInsensitive))
+        tag.remove(0, 1);
+    return QVersionNumber::fromString(tag);
+}
+
 void SettingsPage::buildUi()
 {
     setObjectName("settingsPage");
 
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    auto* outer = new QVBoxLayout(this);
+    // The page itself only holds a scroll area; all settings go inside it.
+    auto *pageLayout = new QVBoxLayout(this);
+    pageLayout->setContentsMargins(0, 0, 0, 0);
+    pageLayout->setSpacing(0);
+
+    auto *scroll = new QScrollArea(this);
+    scroll->setObjectName("settingsScroll");
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scroll->setStyleSheet("QScrollArea#settingsScroll { background: transparent; }"
+                          "QScrollArea#settingsScroll > QWidget > QWidget#settingsContent"
+                          " { background: transparent; }");
+
+    auto *content = new QWidget(scroll);
+    content->setObjectName("settingsContent");
+    content->setMinimumWidth(620);
+    scroll->setWidget(content);
+    pageLayout->addWidget(scroll);
+
+    auto *outer = new QVBoxLayout(content);
     outer->setContentsMargins(28, 28, 28, 28);
     outer->setSpacing(20);
 
@@ -57,8 +100,181 @@ void SettingsPage::buildUi()
     headerRow->addStretch(1);
     outer->addLayout(headerRow);
 
+    // app update banner
+    updateBanner_ = new QFrame(this);
+    updateBanner_->setObjectName("updateBanner");
+    updateBanner_->setStyleSheet(
+        "QFrame#updateBanner { background: rgba(59,130,246,0.12);"
+        " border: 1px solid rgba(59,130,246,0.45); border-radius: 10px; }"
+        "QFrame#updateBanner QLabel { background: transparent; border: none; }");
+    updateBanner_->setVisible(false);
+
+    auto *bannerRow = new QHBoxLayout(updateBanner_);
+    bannerRow->setContentsMargins(16, 12, 12, 12);
+    bannerRow->setSpacing(12);
+
+    auto *bannerDot = new QLabel(updateBanner_);
+    bannerDot->setFixedSize(10, 10);
+    bannerDot->setStyleSheet("background:#ef4444; border-radius:5px;");
+
+    auto *bannerText = new QVBoxLayout;
+    bannerText->setSpacing(2);
+    updateTitle_ = new QLabel(updateBanner_);
+    updateTitle_->setStyleSheet("font-weight:600; color:#3b82f6;");
+    updateSubtitle_ = new QLabel(updateBanner_);
+    updateSubtitle_->setStyleSheet("font-size:12px; color:#9aa0a6;");
+    bannerText->addWidget(updateTitle_);
+    bannerText->addWidget(updateSubtitle_);
+
+    auto *btnViewRelease = new QPushButton("View release", updateBanner_);
+    btnViewRelease->setObjectName("actionPrimary");
+    btnViewRelease->setCursor(Qt::PointingHandCursor);
+    btnViewRelease->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btnViewRelease->setMinimumHeight(32);
+
+    auto *btnDismiss = new QPushButton("Dismiss", updateBanner_);
+    btnDismiss->setObjectName("actionGhost");
+    btnDismiss->setCursor(Qt::PointingHandCursor);
+    btnDismiss->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btnDismiss->setMinimumHeight(32);
+
+    bannerRow->addWidget(bannerDot, 0, Qt::AlignVCenter);
+    bannerRow->addLayout(bannerText, 1);
+    bannerRow->addWidget(btnViewRelease, 0, Qt::AlignVCenter);
+    bannerRow->addWidget(btnDismiss, 0, Qt::AlignVCenter);
+    outer->addWidget(updateBanner_);
+
+    connect(btnViewRelease, &QPushButton::clicked, this, [this] {
+        if (!updateUrl_.isEmpty())
+            QDesktopServices::openUrl(QUrl(updateUrl_));
+    });
+    connect(btnDismiss, &QPushButton::clicked, this, [this] {
+        Config::instance().setDismissedReleaseTag(latestTag_);
+        setAppUpdate(false);
+    });
+
+    // Check startup and every 6 hours
+    QTimer::singleShot(3000, this, &SettingsPage::checkForAppUpdate);
+    auto *updateTimer = new QTimer(this);
+    updateTimer->setInterval(6 * 60 * 60 * 1000);
+    connect(updateTimer, &QTimer::timeout, this, &SettingsPage::checkForAppUpdate);
+    updateTimer->start();
+
+    // Detect Language Setting
+    auto *langGroup = new QFrame(this);
+    langGroup->setObjectName("sectionCard");
+
+    auto *langOuter = new QVBoxLayout(langGroup);
+    langOuter->setContentsMargins(20, 20, 20, 20);
+    langOuter->setSpacing(16);
+
+    auto *langToggleFrame = new QFrame(this);
+    langToggleFrame->setObjectName("langToggle");
+    langToggleFrame->setFixedHeight(36);
+    langToggleFrame->setFixedWidth(140);
+
+    auto *langToggleLayout = new QHBoxLayout(langToggleFrame);
+    langToggleLayout->setContentsMargins(3, 3, 3, 3);
+    langToggleLayout->setSpacing(0);
+
+    auto *highlight = new QFrame(langToggleFrame);
+    highlight->setObjectName("langHighlight");
+    highlight->setGeometry(3, 3, 67, 30);
+    highlight->lower();
+
+    auto *jpButton = new QPushButton("JP", langToggleFrame);
+    auto *enButton = new QPushButton("EN", langToggleFrame);
+
+    jpButton->setCheckable(true);
+    enButton->setCheckable(true);
+
+    auto *langButtonGroup = new QButtonGroup(langToggleFrame);
+    langButtonGroup->setExclusive(true);
+    langButtonGroup->addButton(jpButton);
+    langButtonGroup->addButton(enButton);
+
+    bool isEnglish = Config::instance().getCurDetectLocaleMode() == Config::DetectLocaleMode::EN;
+    jpButton->setChecked(!isEnglish);
+    enButton->setChecked(isEnglish);
+
+    QRect jpGeometry(3, 3, 67, 30);
+    QRect enGeometry(70, 3, 67, 30);
+    highlight->setGeometry(isEnglish ? enGeometry : jpGeometry);
+
+    static const QColor jpColor(0x5b, 0x7f, 0xb5);
+    static const QColor enColor(0x22, 0xc5, 0x5e);
+    highlight->setStyleSheet(
+        QString("QFrame#langHighlight { background-color: %1; border-radius: 8px; }")
+            .arg((isEnglish ? enColor : jpColor).name()));
+
+    langToggleLayout->addWidget(jpButton);
+    langToggleLayout->addWidget(enButton);
+
+    langToggleFrame->setStyleSheet("QFrame#langToggle {"
+                                   "    background-color: #e2e8f0;"
+                                   "    border-radius: 10px;"
+                                   "}"
+                                   "QPushButton {"
+                                   "    border: none;"
+                                   "    border-radius: 8px;"
+                                   "    padding: 4px 16px;"
+                                   "    font-size: 13px;"
+                                   "    font-weight: 600;"
+                                   "    color: #3b82f6;"
+                                   "    background-color: transparent;"
+                                   "}"
+                                   "QPushButton:checked {"
+                                   "    color: #ffffff;"
+                                   "}"
+                                   "QPushButton:hover:!checked {"
+                                   "    color: #334155;"
+                                   "}");
+
+    highlight->setStyleSheet(
+        "QFrame#langHighlight { background-color: #3b82f6; border-radius: 8px; }");
+
+    auto *slideAnim = new QPropertyAnimation(highlight, "geometry", langToggleFrame);
+    slideAnim->setDuration(220);
+    slideAnim->setEasingCurve(QEasingCurve::OutCubic);
+
+    QObject::connect(enButton, &QPushButton::toggled, [=](bool isChecked) {
+        Config::instance().setCurDetectLocaleMode(isChecked ? Config::DetectLocaleMode::EN
+                                                            : Config::DetectLocaleMode::JP);
+
+        slideAnim->stop();
+        slideAnim->setStartValue(highlight->geometry());
+        slideAnim->setEndValue(isChecked ? enGeometry : jpGeometry);
+        slideAnim->start();
+
+        auto *colorAnim = new QVariantAnimation(langToggleFrame);
+        colorAnim->setDuration(220);
+        colorAnim->setStartValue(isChecked ? jpColor : enColor);
+        colorAnim->setEndValue(isChecked ? enColor : jpColor);
+        QObject::connect(
+            colorAnim,
+            &QVariantAnimation::valueChanged,
+            highlight,
+            [highlight](const QVariant &value) {
+                QColor c = value.value<QColor>();
+                highlight->setStyleSheet(
+                    QString("QFrame#langHighlight { background-color: %1; border-radius: 8px; }")
+                        .arg(c.name()));
+            });
+        colorAnim->start(QAbstractAnimation::DeleteWhenStopped);
+    });
+
+    auto *langTitle = new QLabel("Set Detect Language", langGroup);
+    langOuter->addWidget(langTitle);
+
+    auto *langRow = new QHBoxLayout;
+    langRow->addWidget(langToggleFrame, 7);
+    langRow->addStretch(3);
+
+    langOuter->addLayout(langRow);
+    outer->addWidget(langGroup);
+
     // model paths section
-    auto* modelGroup = new QFrame(this);
+    auto *modelGroup = new QFrame(this);
     modelGroup->setObjectName("sectionCard");
 
     auto* modelOuter = new QVBoxLayout(modelGroup);
@@ -280,17 +496,15 @@ void SettingsPage::buildUi()
     datasetHeading->setObjectName("sectionHeading");
     groupLayout->addWidget(datasetHeading);
 
-    btnSeriesDownload_ = new QPushButton("Download SerliesList", datasetGroup);
-    btnSeriesDownload_->setObjectName("actionPrimary");
-    btnSeriesDownload_->setCursor(Qt::PointingHandCursor);
-    btnSeriesDownload_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    btnSeriesDownload_->setMinimumHeight(36);
+    auto *datasetDesc = new QLabel("Series lists are stored separately for each card language. "
+                                   "Detection uses the one matching Detect Language.",
+                                   datasetGroup);
+    datasetDesc->setWordWrap(true);
+    datasetDesc->setStyleSheet("color:#9aa0a6; font-size:12px;");
+    groupLayout->addWidget(datasetDesc);
 
-    auto* datasetBtnRow = new QHBoxLayout();
-    datasetBtnRow->setContentsMargins(0, 0, 0, 0);
-    datasetBtnRow->addWidget(btnSeriesDownload_);
-    datasetBtnRow->addStretch(1);
-    groupLayout->addLayout(datasetBtnRow);
+    groupLayout->addWidget(buildDatasetRow(Region::JP, datasetGroup));
+    groupLayout->addWidget(buildDatasetRow(Region::EN, datasetGroup));
 
     pbDataset_ = new QProgressBar(datasetGroup);
     pbDataset_->setRange(0, 100);
@@ -308,57 +522,62 @@ void SettingsPage::buildUi()
 
     outer->addWidget(datasetGroup);
 
-    connect(btnSeriesDownload_, &QPushButton::clicked, this, [this]{
-        if (seriesRepository_->isBusy()) return;
-        pbDataset_->setVisible(true);
-        seriesRepository_->refreshSeriesList();
-    });
-
-    connect(seriesRepository_, &SeriesRepository::statusChanged, this, [this](const QString& s){
+    connect(seriesRepository_, &SeriesRepository::statusChanged, this, [this](const QString &s) {
         lblDatasetStatus_->setVisible(!s.isEmpty());
         lblDatasetStatus_->setText(s);
     });
 
-    connect(seriesRepository_, &SeriesRepository::updateAvailable, this,
-            [this](SeriesRepository::UpdateStatus status){
-                switch (status) {
-                case SeriesRepository::UpdateStatus::UpdateAvailable:
-                    btnSeriesDownload_->setText("Update Series List Now");
-                    btnSeriesDownload_->setIcon(QIcon());
-                    btnSeriesDownload_->setObjectName("actionAccent");
-                    break;
-                case SeriesRepository::UpdateStatus::UpToDate:
-                    btnSeriesDownload_->setText("Redownload Series List");
-                    btnSeriesDownload_->setIcon(QIcon());
-                    btnSeriesDownload_->setObjectName("actionPrimary");
-                    break;
-                case SeriesRepository::UpdateStatus::Error:
-                    btnSeriesDownload_->setText("Download Series List");
-                    btnSeriesDownload_->setIcon(QIcon(":/icon/error.svg"));
-                    btnSeriesDownload_->setObjectName("actionError");
-                    break;
-                }
-                btnSeriesDownload_->style()->unpolish(btnSeriesDownload_);
-                btnSeriesDownload_->style()->polish(btnSeriesDownload_);
+    connect(seriesRepository_,
+            &SeriesRepository::updateAvailable,
+            this,
+            [this](Config::DetectLocaleMode region, SeriesRepository::UpdateStatus status) {
+                setDatasetRowState(region, status);
             });
 
-    connect(seriesRepository_, &SeriesRepository::seriesProgress, this,
-            [this](qint64 got, qint64 total){
-                double recMB = got / (1024.0*1024.0);
+    connect(seriesRepository_, &SeriesRepository::busyChanged, this, [this] {
+        const bool busy = seriesRepository_->isBusy();
+        for (auto &r : datasetRows_)
+            r.downloadBtn->setEnabled(!busy);
+        if (!busy)
+            pbDataset_->setVisible(false);
+    });
+
+    connect(seriesRepository_,
+            &SeriesRepository::seriesProgress,
+            this,
+            [this](Config::DetectLocaleMode region, qint64 got, qint64 total) {
+                const QString what = regionTitle(region) + " series list";
+                const double recMB = got / (1024.0 * 1024.0);
                 pbDataset_->setVisible(true);
                 lblDatasetStatus_->setVisible(true);
                 if (total > 0) {
                     pbDataset_->setRange(0, 100);
-                    int percent = static_cast<int>((got * 100) / total);
+                    const int percent = static_cast<int>((got * 100) / total);
                     pbDataset_->setValue(percent);
-                    double totalMB = total / (1024.0*1024.0);
-                    lblDatasetStatus_->setText(QString("Downloading: %1 MB / %2 MB (%3%)")
-                                                   .arg(recMB,0,'f',1).arg(totalMB,0,'f',1).arg(percent));
+                    lblDatasetStatus_->setText(QString("Downloading %1: %2 MB / %3 MB (%4%)")
+                                                   .arg(what)
+                                                   .arg(recMB, 0, 'f', 1)
+                                                   .arg(total / (1024.0 * 1024.0), 0, 'f', 1)
+                                                   .arg(percent));
                 } else if (got > 0) {
                     pbDataset_->setRange(0, 0);
-                    lblDatasetStatus_->setText(QString("Downloading: %1 MB...").arg(recMB,0,'f',1));
+                    lblDatasetStatus_->setText(
+                        QString("Downloading %1: %2 MB…").arg(what).arg(recMB, 0, 'f', 1));
                 }
             });
+
+    connect(&Config::instance(),
+            &Config::detectLocaleModeChanged,
+            this,
+            &SettingsPage::updateActiveRegionBadges);
+
+    setDatasetRowChecking(Region::JP);
+    setDatasetRowChecking(Region::EN);
+    updateActiveRegionBadges();
+    QTimer::singleShot(0, this, [this] {
+        seriesRepository_->checkForUpdates(Region::JP);
+        seriesRepository_->checkForUpdates(Region::EN);
+    });
 
     // Missing card cache settings
     auto *missingGroup = new QFrame(this);
@@ -447,50 +666,84 @@ void SettingsPage::buildUi()
     advForm->setSpacing(12);
     advForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
 
-    btnSeriesDatasetReset_ = new QPushButton("Reset SeriesList", advWidget);
-    btnSeriesDatasetReset_->setObjectName("actionError");
-    btnSeriesDatasetReset_->setCursor(Qt::PointingHandCursor);
-    btnSeriesDatasetReset_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    btnSeriesDatasetReset_->setMinimumHeight(36);
+    auto *maintTitle = new QLabel("Data reset", advWidget);
+    maintTitle->setStyleSheet("font-weight:600;");
+    advForm->addRow(maintTitle);
 
-    btnCardDatasetReset_ = new QPushButton("Reset CardList", advWidget);
-    btnCardDatasetReset_->setObjectName("actionError");
-    btnCardDatasetReset_->setCursor(Qt::PointingHandCursor);
-    btnCardDatasetReset_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    btnCardDatasetReset_->setMinimumHeight(36);
+    auto *maintGrid = new QGridLayout;
+    maintGrid->setContentsMargins(0, 0, 0, 0);
+    maintGrid->setHorizontalSpacing(10);
+    maintGrid->setVerticalSpacing(8);
 
-    btnPurgeFallback_ = new QPushButton("Purge Fallbacks", advWidget);
-    btnPurgeFallback_->setObjectName("actionError");
-    btnPurgeFallback_->setCursor(Qt::PointingHandCursor);
-    btnPurgeFallback_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    btnPurgeFallback_->setMinimumHeight(36);
+    const QStringList headers = {"Series list", "Card data", "Official fallbacks"};
+    for (int c = 0; c < headers.size(); ++c) {
+        auto *h = new QLabel(headers[c], advWidget);
+        h->setStyleSheet("color:#9aa0a6; font-size:12px;");
+        maintGrid->addWidget(h, 0, c + 1);
+    }
 
-    auto* resetDatasetBtnRow = new QHBoxLayout();
-    resetDatasetBtnRow->setContentsMargins(0, 0, 0, 0);
-    resetDatasetBtnRow->addWidget(btnSeriesDatasetReset_);
-    resetDatasetBtnRow->addWidget(btnCardDatasetReset_);
-    resetDatasetBtnRow->addWidget(btnPurgeFallback_);
-    resetDatasetBtnRow->addStretch(1);
+    auto makeDangerBtn = [advWidget](const QString &text) {
+        auto *b = new QPushButton(text, advWidget);
+        b->setObjectName("actionError");
+        b->setCursor(Qt::PointingHandCursor);
+        b->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        b->setMinimumHeight(32);
+        b->setMinimumWidth(110);
+        return b;
+    };
 
-    advForm->addRow(resetDatasetBtnRow);
+    int gridRow = 1;
+    for (Region region : {Region::JP, Region::EN}) {
+        const QString lang = regionTitle(region);
 
-    connect(btnSeriesDatasetReset_, &QPushButton::clicked, this, [this]{
-        seriesRepository_->resetSeries();
-    });
+        auto *label = new QLabel(lang, advWidget);
+        maintGrid->addWidget(label, gridRow, 0);
 
-    connect(btnCardDatasetReset_, &QPushButton::clicked, this, [this]{
-        seriesRepository_->resetCards();
-    });
+        auto *btnSeries = makeDangerBtn("Reset");
+        auto *btnCards = makeDangerBtn("Reset");
+        auto *btnFallback = makeDangerBtn("Purge");
+        maintGrid->addWidget(btnSeries, gridRow, 1);
+        maintGrid->addWidget(btnCards, gridRow, 2);
+        maintGrid->addWidget(btnFallback, gridRow, 3);
 
-    connect(btnPurgeFallback_, &QPushButton::clicked, this, [this]{
-        seriesRepository_->purgeFallbackCards();
-    });
+        connect(btnSeries, &QPushButton::clicked, this, [this, region, lang] {
+            if (confirmDestructive("Reset " + lang + " series list",
+                                   "This deletes the downloaded " + lang
+                                       + " series list. "
+                                         "You can download it again from Dataset Maintenance."))
+                seriesRepository_->resetSeries(region);
+        });
+        connect(btnCards, &QPushButton::clicked, this, [this, region, lang] {
+            if (confirmDestructive("Reset " + lang + " card data",
+                                   "This deletes all downloaded " + lang
+                                       + " card lists, "
+                                         "including cards fetched from the EncoreDecks."))
+                seriesRepository_->resetCards(region);
+        });
+        connect(btnFallback, &QPushButton::clicked, this, [this, region, lang] {
+            if (confirmDestructive("Purge " + lang + " fallback cards",
+                                   "This removes " + lang
+                                       + " cards that were fetched from the official "
+                                         "site. They'll be fetched again when next viewed."))
+                seriesRepository_->purgeFallbackCards(region);
+        });
+        ++gridRow;
+    }
+    maintGrid->setColumnStretch(4, 1);
+    advForm->addRow(maintGrid);
 
-    connect(seriesRepository_, &SeriesRepository::fallbackCardsPurged, this, [this](int n){
-        QMessageBox::information(this, "Purge complete",
-                                 QString("Removed %1 fallback card(s). They will re-fetch from EncoreDecks "
-                                         "if available next time they're viewed.").arg(n));
-    });
+    connect(seriesRepository_,
+            &SeriesRepository::fallbackCardsPurged,
+            this,
+            [this](Config::DetectLocaleMode region, int n) {
+                QMessageBox::information(
+                    this,
+                    "Purge complete",
+                    QString("Removed %1 %2 fallback card(s). They will be re-fetched "
+                            "from EncoreDecks or the official site next time they're viewed.")
+                        .arg(n)
+                        .arg(regionTitle(region)));
+            });
 
     // imgSizeSpin_ = new QSpinBox;
     // imgSizeSpin_->setRange(64, 1024);
@@ -529,10 +782,201 @@ void SettingsPage::buildUi()
     advWidget->setVisible(false);
     outer->addWidget(advWidget);
 
-    connect(advToggle, &QPushButton::toggled, this, [advToggle, advWidget](bool on){
-        advWidget->setVisible(on);
-        advToggle->setText(on ? "▾ Advanced settings" : "▸ Advanced settings");
-    });
+    connect(advToggle,
+            &QPushButton::toggled,
+            this,
+            [advToggle, advWidget, content, outer, scroll](bool on) {
+                content->setUpdatesEnabled(false);
+                advWidget->setVisible(on);
+                outer->activate();
+                content->setUpdatesEnabled(true);
+
+                if (on)
+                    QTimer::singleShot(0, scroll, [scroll, advWidget] {
+                        scroll->ensureWidgetVisible(advWidget, 0, 20);
+                    });
+
+                advToggle->setText(on ? "▾ Advanced settings" : "▸ Advanced settings");
+            });
 
     outer->addStretch(1);
+}
+
+QWidget *SettingsPage::buildDatasetRow(Region region, QWidget *parent)
+{
+    auto *row = new QFrame(parent);
+    row->setObjectName("datasetRow");
+    row->setStyleSheet("QFrame#datasetRow { border: 1px solid rgba(127,127,127,0.25);"
+                       " border-radius: 8px; }");
+
+    auto *h = new QHBoxLayout(row);
+    h->setContentsMargins(14, 10, 14, 10);
+    h->setSpacing(12);
+
+    auto *badge = new QLabel(regionCode(region), row);
+    badge->setFixedSize(34, 22);
+    badge->setAlignment(Qt::AlignCenter);
+    badge->setStyleSheet(QString("background:%1; color:white; border-radius:6px;"
+                                 " font-weight:600; font-size:11px; border:none;")
+                             .arg(region == Region::JP ? "#5b7fb5" : "#22c55e"));
+
+    auto *textCol = new QVBoxLayout;
+    textCol->setSpacing(2);
+    auto *name = new QLabel(row);
+    name->setTextFormat(Qt::RichText);
+    name->setStyleSheet("font-weight:600; border:none;");
+    auto *state = new QLabel(row);
+    state->setStyleSheet("font-size:12px; border:none;");
+    textCol->addWidget(name);
+    textCol->addWidget(state);
+
+    auto *btn = new QPushButton("Download", row);
+    btn->setObjectName("actionPrimary");
+    btn->setCursor(Qt::PointingHandCursor);
+    btn->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btn->setMinimumHeight(34);
+    btn->setMinimumWidth(130);
+
+    h->addWidget(badge, 0, Qt::AlignVCenter);
+    h->addLayout(textCol, 1);
+    h->addWidget(btn, 0, Qt::AlignVCenter);
+
+    DatasetRow &r = datasetRows_[rowIndex(region)];
+    r.name = name;
+    r.state = state;
+    r.downloadBtn = btn;
+
+    connect(btn, &QPushButton::clicked, this, [this, region] {
+        if (seriesRepository_->isBusy())
+            return;
+        pbDataset_->setRange(0, 100);
+        pbDataset_->setValue(0);
+        pbDataset_->setVisible(true);
+        seriesRepository_->refreshSeriesList(region);
+    });
+
+    return row;
+}
+
+void SettingsPage::setDatasetRowState(Region region, SeriesRepository::UpdateStatus status)
+{
+    DatasetRow &r = datasetRows_[rowIndex(region)];
+
+    QString text, color, btnText, btnObject;
+    QIcon icon;
+    switch (status) {
+    case SeriesRepository::UpdateStatus::UpdateAvailable:
+        text = "Update available";
+        color = "#f59e0b";
+        btnText = "Update now";
+        btnObject = "actionAccent";
+        break;
+    case SeriesRepository::UpdateStatus::UpToDate:
+        text = "Up to date";
+        color = "#22c55e";
+        btnText = "Redownload";
+        btnObject = "actionGhost";
+        break;
+    case SeriesRepository::UpdateStatus::Error:
+        text = "Download needed";
+        color = "#ef4444";
+        btnText = "Download";
+        btnObject = "actionError";
+        icon = QIcon(":/icon/error.svg");
+        break;
+    }
+
+    r.state->setText(text);
+    r.state->setStyleSheet(QString("font-size:12px; border:none; color:%1;").arg(color));
+    r.downloadBtn->setText(btnText);
+    r.downloadBtn->setIcon(icon);
+    r.downloadBtn->setObjectName(btnObject);
+    r.downloadBtn->style()->unpolish(r.downloadBtn);
+    r.downloadBtn->style()->polish(r.downloadBtn);
+}
+
+void SettingsPage::setDatasetRowChecking(Region region)
+{
+    DatasetRow &r = datasetRows_[rowIndex(region)];
+    r.state->setText("Checking…");
+    r.state->setStyleSheet("font-size:12px; border:none; color:#9aa0a6;");
+}
+
+void SettingsPage::updateActiveRegionBadges()
+{
+    const Region active = Config::instance().getCurDetectLocaleMode();
+    for (Region region : {Region::JP, Region::EN}) {
+        QString html = regionTitle(region) + " series list";
+        if (region == active)
+            html += "&nbsp;&nbsp;<span style='color:#9aa0a6; font-weight:400;'>· in use</span>";
+        datasetRows_[rowIndex(region)].name->setText(html);
+    }
+}
+
+bool SettingsPage::confirmDestructive(const QString &title, const QString &text)
+{
+    QMessageBox box(QMessageBox::Warning, title, text, QMessageBox::Cancel | QMessageBox::Yes, this);
+    box.button(QMessageBox::Yes)->setText("Continue");
+    box.setDefaultButton(QMessageBox::Cancel);
+    return box.exec() == QMessageBox::Yes;
+}
+
+void SettingsPage::checkForAppUpdate()
+{
+    const QVersionNumber current = versionFromTag(QStringLiteral(APP_VERSION));
+    if (current.isNull())
+        return;
+
+    QNetworkRequest req(QUrl("https://api.github.com/repos/" + Config::instance().releaseRepo_
+                             + "/releases/latest"));
+    req.setRawHeader("Accept", "application/vnd.github+json");
+    req.setHeader(QNetworkRequest::UserAgentHeader, QByteArray("WSDeckImporter/") + APP_VERSION);
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::NoLessSafeRedirectPolicy);
+    req.setTransferTimeout(15000);
+
+    QNetworkReply *reply = updateNam_.get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, current] {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            qDebug() << "[AppUpdate] check failed:" << reply->errorString();
+            return;
+        }
+
+        const QJsonObject o = QJsonDocument::fromJson(reply->readAll()).object();
+        const QString tag = o.value("tag_name").toString();
+        const QString url = o.value("html_url").toString();
+        const QDateTime published = QDateTime::fromString(o.value("published_at").toString(),
+                                                          Qt::ISODate);
+        if (tag.isEmpty() || url.isEmpty())
+            return;
+
+        latestTag_ = tag;
+        updateUrl_ = url;
+
+        const bool newer = versionFromTag(tag) > current;
+        const bool dismissed = Config::instance().getDismissedReleaseTag() == tag;
+        qDebug() << "[AppUpdate] current" << APP_VERSION << "latest" << tag
+                 << (newer ? "(newer)" : "(up to date)");
+
+        setAppUpdate(newer && !dismissed, tag, published);
+    });
+}
+
+void SettingsPage::setAppUpdate(bool available, const QString &tag, const QDateTime &published)
+{
+    if (available) {
+        updateTitle_->setText(QString("Version %1 is available").arg(tag));
+        QString sub = QString("You have %1").arg(QStringLiteral(APP_VERSION));
+        if (published.isValid())
+            sub += "  ·  Released "
+                   + QLocale().toString(published.toLocalTime().date(), QLocale::ShortFormat);
+        updateSubtitle_->setText(sub);
+    }
+    updateBanner_->setVisible(available);
+
+    if (available != appUpdateAvailable_) {
+        appUpdateAvailable_ = available;
+        emit appUpdateStateChanged(available);
+    }
 }

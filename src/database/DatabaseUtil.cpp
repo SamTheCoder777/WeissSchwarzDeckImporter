@@ -3,16 +3,16 @@
 #include "../core/Config.h"
 #include "../database/OfficialFallback.h"
 
-#include <QNetworkRequest>
+#include <QDateTime>
 #include <QNetworkReply>
-#include <QThread>
+#include <QNetworkRequest>
 
-#include <QSqlQuery>
-#include <QSqlError>
+#include <QDebug>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonArray>
-#include <QDebug>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QThread>
 
 static qint64 intervalToSeconds(int interval)
@@ -32,31 +32,35 @@ static qint64 intervalToSeconds(int interval)
     return 0;
 }
 
-static const char* kCardConn = "cardlist_catalog_connection";
+static bool isEnMode()
+{
+    return Config::instance().getCurDetectLocaleMode() == Config::DetectLocaleMode::EN;
+}
 
 static QSqlDatabase getCardDb()
 {
+    const QString path = Config::instance().getCardListDatabasePath();
     const QString conn = QStringLiteral("cardlist_conn_%1")
                              .arg((quintptr) QThread::currentThreadId());
-    QSqlDatabase db;
-    if (QSqlDatabase::contains(conn)) {
-        db = QSqlDatabase::database(conn);
-    } else {
-        db = QSqlDatabase::addDatabase("QSQLITE", conn);
-        db.setDatabaseName(Config::instance().getCardListDatabasePath());
+
+    QSqlDatabase db = QSqlDatabase::contains(conn) ? QSqlDatabase::database(conn, false)
+                                                   : QSqlDatabase::addDatabase("QSQLITE", conn);
+
+    if (db.databaseName() != path) {
+        if (db.isOpen())
+            db.close();
+        db.setDatabaseName(path);
     }
     if (!db.isOpen() && !db.open()) {
-        qDebug() << "DatabaseUtil - cardList.db open failed";
+        qDebug() << "DatabaseUtil -" << path << "open failed:" << db.lastError().text();
         return QSqlDatabase();
     }
     return db;
 }
 
-static QJsonObject fetchCardObject(const QString& cardCode, bool& ok) {
+static QJsonObject fetchCardObject(const QString &cardCode, bool &ok)
+{
     ok = false;
-
-    const QString conn = QStringLiteral("cardlist_conn_%1")
-                             .arg((quintptr)QThread::currentThreadId());
 
     QSqlDatabase db = getCardDb();
     if (!db.isValid())
@@ -65,78 +69,91 @@ static QJsonObject fetchCardObject(const QString& cardCode, bool& ok) {
     QSqlQuery q(db);
     q.prepare("SELECT data FROM cards WHERE LOWER(cardcode) = ?");
     q.addBindValue(cardCode.toLower());
-    if (!q.exec()) { qDebug() << "DatabaseUtil query failed:" << q.lastError().text(); return {}; }
-    if (!q.next()) return {};
+    if (!q.exec()) {
+        qDebug() << "DatabaseUtil query failed:" << q.lastError().text();
+        return {};
+    }
+    if (!q.next())
+        return {};
     QJsonObject o = QJsonDocument::fromJson(q.value(0).toByteArray()).object();
     ok = true;
     return o;
 }
 
-void DatabaseUtil::setLocale(const QString& loc) {
+static QJsonObject parseJpOfficial(const QByteArray &body, const QString &cardCode)
+{
+    const QJsonArray items = QJsonDocument::fromJson(body).object().value("items").toArray();
+    if (items.isEmpty())
+        return {};
+    QJsonObject item = items.first().toObject();
+    for (const QJsonValue &v : items) {
+        if (v.toObject().value("card_number").toString() == cardCode) {
+            item = v.toObject();
+            break;
+        }
+    }
+    return OfficialFallback::reshapeOfficialItem(item);
+}
+
+void DatabaseUtil::setLocale(const QString &loc)
+{
     QString v = (loc.compare("JP", Qt::CaseInsensitive) == 0) ? "JP" : "EN";
-    if (v == locale_) return;
+    if (v == locale_)
+        return;
     locale_ = v;
     Config::instance().setPreferredLocale(v);
     emit localeChanged();
 }
 
-QString DatabaseUtil::imageUrlFor(const QString &cardCode) const {
+QString DatabaseUtil::imageUrlFor(const QString &cardCode) const
+{
     bool ok = false;
-    QJsonObject o = fetchCardObject(cardCode, ok);
-    if (ok) {
-        const bool isOfficial = o.value("_source").toString() == "official";
-        const QString path = o.value("imagepath").toString();
-        if (!path.isEmpty()) {
-            QString url = isOfficial
-                              ? OfficialFallback::imageBaseUrl() + path
-                              : Config::instance().getImgUrl(path);
-            return url;
-        }
-    }
-
-    return QString();
+    const QJsonObject o = fetchCardObject(cardCode, ok);
+    return ok ? OfficialFallback::resolveImageUrl(o) : QString();
 }
 
-QVariantMap DatabaseUtil::cardDataFor(const QString &cardCode) const {
+QVariantMap DatabaseUtil::cardDataFor(const QString &cardCode) const
+{
     QVariantMap card;
     bool ok = false;
     QJsonObject o = fetchCardObject(cardCode, ok);
 
-    if (!ok) return card;
+    if (!ok)
+        return card;
 
-    card["cardId"]      = o.value("cardcode").toString();
-    card["cardCode"]    = o.value("cardcode").toString();
-    card["setName"]     = o.value("set").toString();
-    card["rarity"]      = o.value("rarity").toString();
-    card["color"]       = o.value("colour").toString();
-    card["cardKind"]    = o.value("cardtype").toString();
-    card["cardType"]    = o.value("cardtype").toString();
+    card["cardId"] = o.value("cardcode").toString();
+    card["cardCode"] = o.value("cardcode").toString();
+    card["setName"] = o.value("set").toString();
+    card["rarity"] = o.value("rarity").toString();
+    card["color"] = o.value("colour").toString();
+    card["cardKind"] = o.value("cardtype").toString();
+    card["cardType"] = o.value("cardtype").toString();
 
-    auto numOrEmpty = [&](const char* k)->QString{
+    auto numOrEmpty = [&](const char *k) -> QString {
         QJsonValue v = o.value(k);
         return v.isDouble() ? QString::number(v.toInt()) : v.toString();
     };
-    card["power"]       = numOrEmpty("power");
-    card["soul"]        = numOrEmpty("soul");
-    card["level"]       = numOrEmpty("level");
-    card["cost"]        = numOrEmpty("cost");
+    card["power"] = numOrEmpty("power");
+    card["soul"] = numOrEmpty("soul");
+    card["level"] = numOrEmpty("level");
+    card["cost"] = numOrEmpty("cost");
 
     QStringList trig;
-    for (const QJsonValue& t : o.value("trigger").toArray()) trig << t.toString();
+    for (const QJsonValue &t : o.value("trigger").toArray())
+        trig << t.toString();
     card["cardTrigger"] = trig.join(", ");
 
-    card["picture"]     = Config::instance().getImgUrl(o.value("imagepath").toString());
+    card["picture"] = OfficialFallback::resolveImageUrl(o);
 
-    auto blockKeyFor = [](const QString& userLoc)->QString{
+    auto blockKeyFor = [](const QString &userLoc) -> QString {
         return (userLoc == "JP") ? "NP" : "EN";
     };
-    auto localeBlock = [&](const QString& userLoc)->QJsonObject{
+    auto localeBlock = [&](const QString &userLoc) -> QJsonObject {
         QJsonObject localeRoot = o.value("locale").toObject();
         return localeRoot.value(blockKeyFor(userLoc)).toObject();
     };
-    auto blockHasContent = [](const QJsonObject& b){
-        return !b.value("name").toString().isEmpty()
-        || !b.value("ability").toArray().isEmpty();
+    auto blockHasContent = [](const QJsonObject &b) {
+        return !b.value("name").toString().isEmpty() || !b.value("ability").toArray().isEmpty();
     };
 
     QJsonObject selBlk = localeBlock(locale_);
@@ -158,13 +175,13 @@ QVariantMap DatabaseUtil::cardDataFor(const QString &cardCode) const {
 
     if (!anyAvailable) {
         card["cardName"] = "";
-        card["text"]     = "";
-        card["flavor"]   = "";
+        card["text"] = "";
+        card["flavor"] = "";
         card["feature1"] = "";
         card["feature2"] = "";
         card["features"] = "";
-        card["source"]   = o.value("_source").toString().isEmpty()
-                             ? "encoredecks" : o.value("_source").toString();
+        card["source"] = o.value("_source").toString().isEmpty() ? "encoredecks"
+                                                                 : o.value("_source").toString();
         return card;
     }
 
@@ -172,40 +189,46 @@ QVariantMap DatabaseUtil::cardDataFor(const QString &cardCode) const {
     card["cardName"] = name;
 
     QStringList lines;
-    for (const QJsonValue& a : blk.value("ability").toArray()) lines << a.toString();
+    for (const QJsonValue &a : blk.value("ability").toArray())
+        lines << a.toString();
     card["text"] = lines.join("\n\n");
 
     card["flavor"] = blk.value("flavor").toString();
 
     QStringList attrs;
-    for (const QJsonValue& a : blk.value("attributes").toArray()) attrs << a.toString();
+    for (const QJsonValue &a : blk.value("attributes").toArray())
+        attrs << a.toString();
     card["feature1"] = attrs.value(0);
     card["feature2"] = attrs.value(1);
     card["features"] = attrs.join(" / ");
 
-    card["source"] = o.value("_source").toString().isEmpty()
-                         ? "encoredecks" : o.value("_source").toString();
+    card["source"] = o.value("_source").toString().isEmpty() ? "encoredecks"
+                                                             : o.value("_source").toString();
 
     return card;
 }
 
-bool DatabaseUtil::cardInDb(const QString& cardCode) const {
+bool DatabaseUtil::cardInDb(const QString &cardCode) const
+{
     bool ok = false;
     fetchCardObject(cardCode, ok);
     return ok;
 }
 
-void DatabaseUtil::ensureCardData(const QString& cardCode) {
-
+void DatabaseUtil::ensureCardData(const QString &cardCode)
+{
     {
         bool ok = false;
         QJsonObject existing = fetchCardObject(cardCode, ok);
         if (ok) {
             QJsonObject loc = existing.value("locale").toObject();
-            const bool hasName =
-                !loc.value("NP").toObject().value("name").toString().isEmpty() ||
-                !loc.value("EN").toObject().value("name").toString().isEmpty();
-            if (hasName) { emit cardReady(cardCode); return; }
+            const bool hasName = !loc.value("NP").toObject().value("name").toString().isEmpty()
+                                 || !loc.value("EN").toObject().value("name").toString().isEmpty();
+            if (hasName) {
+                QMetaObject::invokeMethod(
+                    this, [this, cardCode] { emit cardReady(cardCode); }, Qt::QueuedConnection);
+                return;
+            }
         }
     }
 
@@ -216,27 +239,46 @@ void DatabaseUtil::ensureCardData(const QString& cardCode) {
 
     auto it = fetchState_.find(cardCode);
     if (it != fetchState_.end()) {
-        if (it->permanent) {emit cardFetchFailed(cardCode, "No card data available"); return;}
-        if (QDateTime::currentMSecsSinceEpoch() < it->nextRetryMs){
+        if (it->permanent) {
+            emit cardFetchFailed(cardCode, "No card data available");
+            return;
+        }
+        if (QDateTime::currentMSecsSinceEpoch() < it->nextRetryMs) {
             emit cardFetchFailed(cardCode, "Rate limited — try again later");
             return;
         }
     }
 
-    const QUrl url(OfficialFallback::dataUrlFromCardcode(cardCode));
-    qDebug() << "[DatabaseUtil] api call to: " << url;
+    const bool en = isEnMode();
+    const QUrl url(en ? OfficialFallback::enPageUrlFromCardcode(cardCode)
+                      : OfficialFallback::dataUrlFromCardcode(cardCode));
+    qDebug() << "[DatabaseUtil] official fallback (" << (en ? "EN" : "JP") << "):" << url;
+
     QNetworkRequest req(url);
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
     req.setHeader(QNetworkRequest::UserAgentHeader, "TCGDeckBuilder/1.0");
-    QNetworkReply* reply = nam_.get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, cardCode] {
+    QNetworkReply *reply = nam_.get(req);
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, cardCode, en] {
         reply->deleteLater();
+
+        if (en != isEnMode()) {
+            emit cardFetchFailed(cardCode, "Set language changed — try again");
+            return;
+        }
 
         const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 
+        if (http == 404) {
+            fetchState_[cardCode].permanent = true;
+            emit cardFetchFailed(cardCode, "No card data available");
+            markMissing(cardCode, "No card data available");
+            return;
+        }
+
         if (reply->error() != QNetworkReply::NoError) {
-            auto& st = fetchState_[cardCode];
+            auto &st = fetchState_[cardCode];
             st.failures++;
 
             if (st.failures >= kMaxRetries) {
@@ -249,33 +291,38 @@ void DatabaseUtil::ensureCardData(const QString& cardCode) {
             qint64 base = (http == 429) ? 60000 : 5000;
             qint64 backoff = base * (1 << qMin(st.failures - 1, 4));
             st.nextRetryMs = QDateTime::currentMSecsSinceEpoch() + backoff;
-            qDebug() << "fetch failed" << cardCode << "http" << http
-                     << "retry in" << backoff << "ms";
+            qDebug() << "fetch failed" << cardCode << "http" << http << "retry in" << backoff
+                     << "ms";
 
             const QString reason = (http == 429) ? "Rate limited — try again later"
-                                                : "Network error";
+                                                 : "Network error";
             emit cardFetchFailed(cardCode, reason);
             return;
         }
-        QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-        QJsonArray items = doc.object().value("items").toArray();
-        if (items.isEmpty()) {
+
+        const QByteArray body = reply->readAll();
+        const QJsonObject shaped = en ? OfficialFallback::reshapeEnOfficialHtml(body, cardCode)
+                                      : parseJpOfficial(body, cardCode);
+
+        if (shaped.isEmpty()) {
             fetchState_[cardCode].permanent = true;
-            qDebug() << "official: no items for" << cardCode;
+            qDebug() << "official" << (en ? "EN" : "JP") << ": no card for" << cardCode;
             emit cardFetchFailed(cardCode, "No card data available");
             markMissing(cardCode, "No card data available");
             return;
         }
-        QJsonObject item = items.first().toObject();
-        for (const QJsonValue& v : items) {
-            if (v.toObject().value("card_number").toString() == cardCode) {
-                item = v.toObject(); break;
-            }
-        }
-        QJsonObject shaped = OfficialFallback::reshapeOfficialItem(item);
+
         storeOfficialCard(cardCode, shaped);
         fetchState_.remove(cardCode);
         emit cardReady(cardCode);
+
+        if (en) {
+            QString safe = cardCode;
+            safe.replace('/', '_');
+            QFile dump(QDir::tempPath() + "/ws_en_" + safe + ".html");
+            if (dump.open(QIODevice::WriteOnly))
+                dump.write(body);
+        }
     });
 }
 
@@ -372,24 +419,19 @@ void DatabaseUtil::cleanupExpiredMissing()
     q.exec();
 }
 
-void DatabaseUtil::storeOfficialCard(const QString& cardCode, const QJsonObject& shaped) {
-    const QString conn = QStringLiteral("cardlist_conn_%1")
-                             .arg((quintptr)QThread::currentThreadId());
-    QSqlDatabase db = QSqlDatabase::contains(conn)
-                          ? QSqlDatabase::database(conn)
-                          : QSqlDatabase::addDatabase("QSQLITE", conn);
-    if (!db.isOpen()) {
-        db.setDatabaseName(Config::instance().getCardListDatabasePath());
-        db.open();
-    }
+void DatabaseUtil::storeOfficialCard(const QString &cardCode, const QJsonObject &shaped)
+{
+    QSqlDatabase db = getCardDb();
+    if (!db.isValid())
+        return;
+
     QSqlQuery ins(db);
     ins.prepare("INSERT OR REPLACE INTO cards (series_id, card_id, cardcode, data) "
                 "VALUES (?,?,?,?)");
     ins.addBindValue("__official__");
     ins.addBindValue(cardCode);
     ins.addBindValue(cardCode);
-    ins.addBindValue(QString::fromUtf8(
-        QJsonDocument(shaped).toJson(QJsonDocument::Compact)));
+    ins.addBindValue(QString::fromUtf8(QJsonDocument(shaped).toJson(QJsonDocument::Compact)));
     if (!ins.exec())
         qDebug() << "storeOfficialCard failed:" << ins.lastError().text();
 }
