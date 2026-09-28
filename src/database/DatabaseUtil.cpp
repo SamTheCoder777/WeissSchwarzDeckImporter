@@ -419,6 +419,64 @@ void DatabaseUtil::cleanupExpiredMissing()
     q.exec();
 }
 
+QVariantList DatabaseUtil::searchCards(const QString &query, int limit) const
+{
+    QVariantList out;
+    const QString q = query.trimmed();
+    if (q.size() < 2)
+        return out;
+
+    QSqlDatabase db = getCardDb();
+    if (!db.isValid())
+        return out;
+
+    QString esc = q;
+    esc.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    const QString prefix = esc + "%";
+    const QString contains = "%" + esc + "%";
+
+    QSqlQuery s(db);
+    s.prepare("SELECT cardcode, data FROM cards "
+              "WHERE cardcode LIKE ? ESCAPE '\\' "
+              "   OR json_extract(data, '$.locale.EN.name') LIKE ? ESCAPE '\\' "
+              "   OR json_extract(data, '$.locale.NP.name') LIKE ? ESCAPE '\\' "
+              "GROUP BY cardcode "
+              "ORDER BY (cardcode LIKE ? ESCAPE '\\') DESC, cardcode "
+              "LIMIT ?");
+    s.addBindValue(prefix);
+    s.addBindValue(contains);
+    s.addBindValue(contains);
+    s.addBindValue(prefix);
+    s.addBindValue(limit);
+
+    if (!s.exec()) {
+        qDebug() << "searchCards (json) failed, code-only fallback:" << s.lastError().text();
+        s = QSqlQuery(db);
+        s.prepare("SELECT cardcode, data FROM cards WHERE cardcode LIKE ? ESCAPE '\\' "
+                  "GROUP BY cardcode ORDER BY cardcode LIMIT ?");
+        s.addBindValue(prefix);
+        s.addBindValue(limit);
+        if (!s.exec())
+            return out;
+    }
+
+    while (s.next()) {
+        const QJsonObject o = QJsonDocument::fromJson(s.value(1).toByteArray()).object();
+        const QJsonObject loc = o.value("locale").toObject();
+        QString name = loc.value(locale_ == "JP" ? "NP" : "EN").toObject().value("name").toString();
+        if (name.isEmpty())
+            name = loc.value(locale_ == "JP" ? "EN" : "NP").toObject().value("name").toString();
+
+        QVariantMap row;
+        row["cardCode"] = s.value(0).toString();
+        row["name"] = name;
+        row["rarity"] = o.value("rarity").toString();
+        row["source"] = o.value("_source").toString();
+        out << row;
+    }
+    return out;
+}
+
 void DatabaseUtil::storeOfficialCard(const QString &cardCode, const QJsonObject &shaped)
 {
     QSqlDatabase db = getCardDb();

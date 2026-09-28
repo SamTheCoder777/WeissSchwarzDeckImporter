@@ -1,4 +1,3 @@
-// UiBridge.h — the QML <-> C++ boundary. QML calls these; MainWindow reacts.
 #pragma once
 
 #include <QObject>
@@ -17,15 +16,14 @@ class UiBridge : public QObject {
 public:
     using QObject::QObject;
 
-    // ── called FROM QML ────────────────────────────────────────────────────
     Q_INVOKABLE void selectCard(int index)      { emit selectCardRequested(index); }
     Q_INVOKABLE void confirm(int candIndex)     { emit confirmRequested(candIndex); }
+    Q_INVOKABLE void confirmCode(const QString &code) { emit confirmCodeRequested(code.trimmed()); }
     Q_INVOKABLE void setQuantity(int qty)       { emit quantityRequested(qty); }
     Q_INVOKABLE void exportDeck()               { emit exportRequested(); }
     Q_INVOKABLE void runDetection()             { emit detectRequested(); }
     Q_INVOKABLE void openCompare() { emit openCompareRequested(); }
 
-    // ── state pushed FROM C++ ──────────────────────────────────────────────
     QString summaryText()   const { return summary_; }
     QString confirmedText() const { return confirmed_; }
     bool    isConfirmed()   const { return isConfirmed_; }
@@ -48,6 +46,7 @@ signals:
     void selectCardRequested(int index);
     void rotateCardRequested(int index, int rot);
     void confirmRequested(int candIndex);
+    void confirmCodeRequested(const QString &code);
     void quantityRequested(int qty);
     void exportRequested();
     void detectRequested();

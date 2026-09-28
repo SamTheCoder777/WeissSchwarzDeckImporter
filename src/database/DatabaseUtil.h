@@ -24,6 +24,8 @@ public:
 
     Q_INVOKABLE void toggleLocale() { setLocale(locale_ == "EN" ? "JP" : "EN"); }
 
+    Q_INVOKABLE QVariantList searchCards(const QString &query, int limit = 40) const;
+
 signals:
     void localeChanged();
     void cardReady(const QString& cardCode);

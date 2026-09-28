@@ -16,7 +16,15 @@ QVariant CandidateModel::data(const QModelIndex& idx, int role) const {
     case ScoreRole:       return r.score;
     case MasterUrlRole:   return r.masterUrl;
     case IsConfirmedRole: return r.confirmed;
-    case RankRole:        return idx.row() + 1;
+    case RankRole: {
+        if (r.manual)
+            return 0;
+        int manualBefore = 0;
+        for (int i = 0; i < idx.row(); ++i)
+            if (rows_[i].manual)
+                ++manualBefore;
+        return idx.row() + 1 - manualBefore;
+    }
     }
     return {};
 }
@@ -36,6 +44,7 @@ void CandidateModel::setCandidates(const std::vector<Candidate>& c, const std::s
         r.score     = x.score;
         r.masterUrl = dbUtil_->imageUrlFor(r.cardId);
         r.confirmed = (!confirmedId.empty() && confirmedId == x.card_id);
+        r.manual = x.score < 0;
         rows_.push_back(r);
     }
     endResetModel();
@@ -58,7 +67,8 @@ QVariant SelectionModel::data(const QModelIndex& idx, int role) const {
     case ConfirmedRole: return r.confirmed;
     case QtyRole:       return r.qty;
     case NumberRole:    return idx.row() + 1;
-    case CardIdRole: return r.cardId;
+    case CardIdRole:
+        return r.cardId;
     }
     return {};
 }

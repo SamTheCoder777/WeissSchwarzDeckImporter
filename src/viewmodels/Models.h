@@ -1,4 +1,3 @@
-// Models.h — QAbstractListModels that feed the QML panel, plus the crop image provider.
 #pragma once
 
 #include <QAbstractListModel>
@@ -10,7 +9,6 @@
 #include "../database/DatabaseUtil.h"
 #include "../models/tcg_infer.h"
 
-// ── top-15 candidates for the currently selected card ───────────────────────
 class CandidateModel : public QAbstractListModel {
     Q_OBJECT
 public:
@@ -30,7 +28,13 @@ public:
     void setDatabaseUtil(DatabaseUtil* dbUtil) {dbUtil_ = dbUtil;}
 
 private:
-    struct Row { QString cardId, deckCode, masterUrl; double score = 0; bool confirmed = false; };
+    struct Row
+    {
+        QString cardId, deckCode, masterUrl;
+        double score = 0;
+        bool confirmed = false;
+        bool manual = false;
+    };
     QVector<Row> rows_;
     QSqlDatabase db_;
 
@@ -39,7 +43,6 @@ private:
     QString imageUrlFor(QString cardId);
 };
 
-// ── the list of card selections on the image ────────────────────────────────
 class SelectionModel : public QAbstractListModel {
     Q_OBJECT
 public:
@@ -49,7 +52,13 @@ public:
     enum Roles { LabelRole = Qt::UserRole + 1, ConfirmedRole, QtyRole, NumberRole, CardIdRole };
     using QAbstractListModel::QAbstractListModel;
 
-    struct Row { QString label; bool confirmed = false; int qty = 1; QString cardId;};
+    struct Row
+    {
+        QString label;
+        bool confirmed = false;
+        int qty = 1;
+        QString cardId;
+    };
 
     int rowCount(const QModelIndex& = {}) const override { return rows_.size(); }
     QVariant data(const QModelIndex& idx, int role) const override;
