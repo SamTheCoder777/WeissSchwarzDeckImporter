@@ -264,6 +264,7 @@ void DetectionPage::buildUi() {
     connect(bridge_, &UiBridge::selectCardRequested, this, &DetectionPage::showSelectionResults);
     connect(bridge_, &UiBridge::rotateCardRequested, this, &DetectionPage::rotateSelectionImage);
     connect(bridge_, &UiBridge::confirmRequested,    this, &DetectionPage::confirmCandidate);
+    connect(bridge_, &UiBridge::confirmCodeRequested, this, &DetectionPage::confirmCandidateCode);
     connect(bridge_, &UiBridge::exportRequested,     this, &DetectionPage::exportDeck);
     connect(bridge_, &UiBridge::detectRequested,     this, &DetectionPage::runDetection);
     connect(bridge_, &UiBridge::quantityRequested,   this, [this](int q) {
@@ -736,6 +737,16 @@ void DetectionPage::confirmCandidate(int candIndex) {
     auto& s = sel_[currentSel_];
     if (candIndex < 0 || candIndex >= (int)s.cands.size()) return;
 
+    if (s.confirmed && s.cardId == s.cands[candIndex].card_id) {
+        s.confirmed = false;
+        s.cardId.clear();
+
+        canvas_->setSelectionState(currentSel_, false, QString());
+        candModel_->setConfirmedId("");
+        pushStateToQml();
+        return;
+    }
+
     s.confirmed = true;
     s.cardId    = s.cands[candIndex].card_id;
 
@@ -743,6 +754,33 @@ void DetectionPage::confirmCandidate(int candIndex) {
                                QString("%1 x%2").arg(QString::fromStdString(s.cardId)).arg(s.qty));
     candModel_->setConfirmedId(s.cardId);
     pushStateToQml();
+}
+
+void DetectionPage::confirmCandidateCode(const QString &code)
+{
+    if (code.isEmpty() || currentSel_ < 0 || currentSel_ >= sel_.size())
+        return;
+    auto &s = sel_[currentSel_];
+
+    for (int i = 0; i < (int) s.cands.size(); ++i) {
+        if (QString::fromStdString(s.cands[i].card_id).compare(code, Qt::CaseInsensitive) == 0) {
+            confirmCandidate(i);
+            return;
+        }
+    }
+
+    s.cands.erase(std::remove_if(s.cands.begin(),
+                                 s.cands.end(),
+                                 [](const Candidate &c) { return c.score < 0; }),
+                  s.cands.end());
+
+    Candidate manual{};
+    manual.card_id = code.toStdString();
+    manual.score = -1.0f;
+    s.cands.insert(s.cands.begin(), manual);
+
+    candModel_->setCandidates(s.cands, s.cardId);
+    confirmCandidate(0);
 }
 
 void DetectionPage::exportDeck() {

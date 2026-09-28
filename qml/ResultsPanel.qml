@@ -15,6 +15,14 @@ Rectangle {
     readonly property color text1: "#e8eaed"
     readonly property color text2: "#9aa0a6"
 
+    function baseCode(code) {
+        var m = /^(.+?-[A-Za-z]*\d+)/.exec(code || "");
+        return m ? m[1] : (code || "");
+    }
+    function looksLikeCode(t) {
+        return /^[A-Za-z0-9]+\/[A-Za-z0-9]+-[A-Za-z0-9]+$/.test(t);
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 12
@@ -86,11 +94,11 @@ Rectangle {
                         onClosed: installedIndexes.setFilterFixedString("")
 
                         background: Rectangle {
-                                radius: 8
-                                color: Qt.lighter(root.panel, 1.25)
-                                border.width: 1
-                                border.color: root.panel
-                            }
+                            radius: 8
+                            color: Qt.lighter(root.panel, 1.25)
+                            border.width: 1
+                            border.color: root.panel
+                        }
 
                         contentItem: ColumnLayout {
                             spacing: 6
@@ -101,7 +109,9 @@ Rectangle {
                                 placeholderTextColor: root.text2
                                 color: root.text1
                                 onTextChanged: installedIndexes.setFilterFixedString(text)
-                                background: Rectangle { color: Qt.lighter(root.panel, 1.25) }
+                                background: Rectangle {
+                                    color: Qt.lighter(root.panel, 1.25)
+                                }
                             }
                             ListView {
                                 id: idxList
@@ -119,16 +129,16 @@ Rectangle {
                                         elide: Text.ElideRight
                                     }
                                     highlighted: model.idStr === catalog.activeIndexId
-                                    onClicked: { catalog.useById(model.idStr); indexPopup.close() }
+                                    onClicked: {
+                                        catalog.useById(model.idStr);
+                                        indexPopup.close();
+                                    }
                                     background: Rectangle {
                                         radius: 5
-                                        color: parent.highlighted ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.20)
-                                             : parent.hovered ? Qt.lighter(root.panel, 1.5)
-                                             : "transparent"
+                                        color: parent.highlighted ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.20) : parent.hovered ? Qt.lighter(root.panel, 1.5) : "transparent"
                                     }
                                 }
                                 ScrollBar.vertical: ScrollBar {}
-
                             }
                         }
                     }
@@ -416,10 +426,10 @@ Rectangle {
             }
         }
 
-        // ── candidates: THE stretchy section (gets all remaining space) ────
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: false
+            spacing: 8
             Label {
                 text: "Top matches — pick the correct card"
                 color: root.text2
@@ -430,6 +440,31 @@ Rectangle {
                 text: candView.count + " results"
                 color: root.text2
                 font.pixelSize: 11
+            }
+            Button {
+                id: searchBtn
+                text: "Search / enter code"
+                enabled: bridge.currentIndex >= 0
+                implicitHeight: 24
+                implicitWidth: contentItem.implicitWidth + 16
+                onClicked: {
+                    var top = candView.count > 0 ? candView.itemAtIndex(0) : null;
+                    cardSearchPopup.openFor(top ? top.code : "");
+                }
+                background: Rectangle {
+                    radius: 6
+                    opacity: searchBtn.enabled ? 1 : 0.4
+                    color: searchBtn.down ? "#111315" : searchBtn.hovered ? "#2c3033" : "transparent"
+                    border.width: 1
+                    border.color: searchBtn.hovered ? root.accent : "#3a3f46"
+                }
+                contentItem: Text {
+                    text: searchBtn.text
+                    color: root.text1
+                    font.pixelSize: 11
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
         }
         Rectangle {
@@ -587,7 +622,7 @@ Rectangle {
                                     color: rank <= 3 ? root.accent : "#3a3f46"
                                     Label {
                                         anchors.centerIn: parent
-                                        text: rank
+                                        text: rank > 0 ? rank : "✎"
                                         color: "white"
                                         font.pixelSize: 10
                                         font.bold: true
@@ -633,6 +668,7 @@ Rectangle {
                             }
                             RowLayout {
                                 spacing: 8
+                                visible: score >= 0
                                 Rectangle {
                                     width: 96
                                     height: 6
@@ -681,6 +717,203 @@ Rectangle {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    Popup {
+        id: cardSearchPopup
+        parent: root
+        x: 12
+        y: 60
+        width: root.width - 24
+        height: Math.min(root.height - 72, 480)
+        modal: true
+        focus: true
+        padding: 12
+
+        property var results: []
+
+        function openFor(code) {
+            cardSearchField.text = root.baseCode(code);
+            open();
+        }
+        function runSearch() {
+            results = cardDatabase.searchCards(cardSearchField.text, 40);
+        }
+        function pick(code) {
+            bridge.confirmCode(code);
+            close();
+        }
+
+        onOpened: {
+            cardSearchField.forceActiveFocus();
+            cardSearchField.selectAll();
+            runSearch();
+        }
+
+        background: Rectangle {
+            radius: 10
+            color: Qt.lighter(root.panel, 1.15)
+            border.width: 1
+            border.color: "#3a3f46"
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 8
+
+            Label {
+                text: "Find a card"
+                color: root.text1
+                font.pixelSize: 13
+                font.bold: true
+            }
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: "Search your card data by code or name. To use a card that isn't in "
+                    + "your data, type its exact code."
+                color: root.text2
+                font.pixelSize: 11
+            }
+
+            TextField {
+                id: cardSearchField
+                Layout.fillWidth: true
+                placeholderText: "e.g. RWBY/WX03-077"
+                placeholderTextColor: root.text2
+                color: root.text1
+                background: Rectangle {
+                    radius: 7
+                    color: root.panel
+                    border.width: 1
+                    border.color: cardSearchField.activeFocus ? root.accent : "#3a3f46"
+                }
+                onTextChanged: searchDebounce.restart()
+                onAccepted: {
+                    var t = text.trim().toUpperCase();
+                    if (root.looksLikeCode(t))
+                        cardSearchPopup.pick(t);
+                }
+                Timer {
+                    id: searchDebounce
+                    interval: 200
+                    onTriggered: cardSearchPopup.runSearch()
+                }
+            }
+
+            Rectangle {
+                id: exactRow
+                readonly property string typed: cardSearchField.text.trim().toUpperCase()
+                readonly property bool inResults: {
+                    for (var i = 0; i < cardSearchPopup.results.length; ++i)
+                        if (cardSearchPopup.results[i].cardCode.toUpperCase() === typed)
+                            return true;
+                    return false;
+                }
+                visible: root.looksLikeCode(typed) && !inResults
+                Layout.fillWidth: true
+                Layout.preferredHeight: 46
+                radius: 8
+                color: exactArea.containsMouse ? "#2c3033" : root.panel
+                border.width: 1
+                border.color: root.accent
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 1
+                    Label {
+                        text: "Use \u201C" + exactRow.typed + "\u201D"
+                        color: root.accent
+                        font.pixelSize: 12
+                        font.bold: true
+                    }
+                    Label {
+                        text: "Not in your data. It will be fetched from the official site."
+                        color: root.text2
+                        font.pixelSize: 10
+                    }
+                }
+                MouseArea {
+                    id: exactArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: cardSearchPopup.pick(exactRow.typed)
+                }
+            }
+
+            ListView {
+                id: searchList
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 4
+                model: cardSearchPopup.results
+                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                delegate: Rectangle {
+                    width: searchList.width
+                    height: 58
+                    radius: 7
+                    color: rowArea.containsMouse ? "#2c3033" : "#2b2f35"
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 6
+                        spacing: 10
+                        Rectangle {
+                            Layout.preferredWidth: 34
+                            Layout.fillHeight: true
+                            radius: 4
+                            color: "#0e1013"
+                            clip: true
+                            Image {
+                                anchors.fill: parent
+                                anchors.margins: 1
+                                fillMode: Image.PreserveAspectFit
+                                asynchronous: true
+                                source: "image://cardcache/" + encodeURIComponent(modelData.cardCode)
+                            }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Label {
+                                text: modelData.cardCode
+                                color: root.text1
+                                font.pixelSize: 12
+                                font.bold: true
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            Label {
+                                text: (modelData.name || "—")
+                                      + (modelData.rarity ? "  ·  " + modelData.rarity : "")
+                                color: root.text2
+                                font.pixelSize: 11
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+                    MouseArea {
+                        id: rowArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: cardSearchPopup.pick(modelData.cardCode)
+                    }
+                }
+            }
+
+            Label {
+                visible: searchList.count === 0 && !exactRow.visible
+                text: cardSearchField.text.trim().length < 2 ? "Type at least 2 characters."
+                                                             : "No matching cards in your data."
+                color: root.text2
+                font.pixelSize: 11
+                Layout.alignment: Qt.AlignHCenter
             }
         }
     }

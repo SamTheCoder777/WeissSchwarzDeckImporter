@@ -80,6 +80,7 @@ private:
     void showSelectionResults(int index);
     void rotateSelectionImage(int index, int rot);
     void confirmCandidate(int candIndex);
+    void confirmCandidateCode(const QString &code);
     void exportDeck();
     QImage handlePasteImage();
 };
