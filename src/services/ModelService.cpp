@@ -183,6 +183,14 @@ std::vector<Candidate> ModelService::search(const cv::Mat &cropBgr, int topK)
     return tcgInfer_->search(cropBgr, topK);
 }
 
+std::vector<Candidate> ModelService::searchFiltered(const cv::Mat &cropBgr,
+                                                    int topK,
+                                                    const std::vector<std::string> &allowedCodes)
+{
+    std::lock_guard<std::mutex> lock(onnxMutex_);
+    return tcgInfer_->searchFiltered(cropBgr, topK, allowedCodes);
+}
+
 void ModelService::buildIndex(const QString &imageDir, const QString &saveDir, int batchSize)
 {
     if (busy_) {

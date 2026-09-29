@@ -9,38 +9,55 @@
 #include "../database/DatabaseUtil.h"
 #include "../models/tcg_infer.h"
 
-class CandidateModel : public QAbstractListModel {
+class CandidateModel : public QAbstractListModel
+{
     Q_OBJECT
+    Q_PROPERTY(int totalCount READ totalCount NOTIFY visibleChanged)
+    Q_PROPERTY(bool canLoadMore READ canLoadMore NOTIFY visibleChanged)
 public:
-    enum Roles { CardIdRole = Qt::UserRole + 1, DeckCodeRole, ScoreRole,
-                 MasterUrlRole, IsConfirmedRole, RankRole };
+    enum Roles {
+        CardIdRole = Qt::UserRole + 1,
+        DeckCodeRole,
+        ScoreRole,
+        MasterUrlRole,
+        IsConfirmedRole,
+        RankRole
+    };
+    static constexpr int kPageSize = 15;
     using QAbstractListModel::QAbstractListModel;
 
-    int rowCount(const QModelIndex& = {}) const override { return rows_.size(); }
-    QVariant data(const QModelIndex& idx, int role) const override;
+    int rowCount(const QModelIndex & = {}) const override { return visible_; }
+    QVariant data(const QModelIndex &idx, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    void setCandidates(const std::vector<Candidate>& c, const std::string& confirmedId);
-    void setConfirmedId(const std::string& id);
+    int totalCount() const { return rows_.size(); }
+    bool canLoadMore() const { return visible_ < rows_.size(); }
+    Q_INVOKABLE void loadMore();
+
+    void setCandidates(const std::vector<Candidate> &c, const std::string &confirmedId);
+    void setConfirmedId(const std::string &id);
     void clear();
 
-    void setCardDatabase(QSqlDatabase& db) { db_ = db; }
-    void setDatabaseUtil(DatabaseUtil* dbUtil) {dbUtil_ = dbUtil;}
+    void setCardDatabase(QSqlDatabase &db) { db_ = db; }
+    void setDatabaseUtil(DatabaseUtil *dbUtil) { dbUtil_ = dbUtil; }
+
+signals:
+    void visibleChanged();
 
 private:
     struct Row
     {
-        QString cardId, deckCode, masterUrl;
+        QString cardId, deckCode;
         double score = 0;
         bool confirmed = false;
         bool manual = false;
+        mutable QString masterUrl;
+        mutable bool urlResolved = false;
     };
     QVector<Row> rows_;
+    int visible_ = 0;
     QSqlDatabase db_;
-
-    DatabaseUtil* dbUtil_ = nullptr;
-
-    QString imageUrlFor(QString cardId);
+    DatabaseUtil *dbUtil_ = nullptr;
 };
 
 class SelectionModel : public QAbstractListModel {

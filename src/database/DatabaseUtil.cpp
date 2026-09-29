@@ -37,6 +37,87 @@ static bool isEnMode()
     return Config::instance().getCurDetectLocaleMode() == Config::DetectLocaleMode::EN;
 }
 
+static QString likeContains(QString s)
+{
+    s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    return "%" + s + "%";
+}
+
+static bool buildAdvancedWhere(const QVariantMap &f, QString &where, QVariantList &binds)
+{
+    QStringList conds;
+    auto str = [&](const char *k) { return f.value(k).toString().trimmed(); };
+
+    auto bothLocales = [&](const char *field, const QString &v) {
+        conds << QString("(json_extract(data,'$.locale.EN.%1') LIKE ? ESCAPE '\\' "
+                         "OR json_extract(data,'$.locale.NP.%1') LIKE ? ESCAPE '\\')")
+                     .arg(field);
+        binds << likeContains(v) << likeContains(v);
+    };
+    if (const QString v = str("name"); !v.isEmpty())
+        bothLocales("name", v);
+    if (const QString v = str("text"); !v.isEmpty())
+        bothLocales("ability", v);
+    if (const QString v = str("trait"); !v.isEmpty()) {
+        conds << "(EXISTS (SELECT 1 FROM json_each(json_extract(data,'$.locale.EN.attributes')) "
+                 "         WHERE value = ? COLLATE NOCASE) "
+                 " OR EXISTS (SELECT 1 FROM json_each(json_extract(data,'$.locale.NP.attributes')) "
+                 "         WHERE value = ? COLLATE NOCASE))";
+        binds << v << v;
+    }
+
+    if (const QString v = str("code"); !v.isEmpty()) {
+        conds << "cardcode LIKE ? ESCAPE '\\'";
+        binds << likeContains(v);
+    }
+    if (const QString v = str("rarity"); !v.isEmpty()) {
+        conds << "UPPER(json_extract(data,'$.rarity')) = ?";
+        binds << v.toUpper();
+    }
+    if (const QString v = str("trigger"); !v.isEmpty()) {
+        if (v.compare("none", Qt::CaseInsensitive) == 0) {
+            conds << "COALESCE(json_array_length(json_extract(data,'$.trigger')), 0) = 0";
+        } else {
+            conds << "UPPER(json_extract(data,'$.trigger')) LIKE ? ESCAPE '\\'";
+            binds << likeContains(v.toUpper());
+        }
+    }
+    if (const QString v = str("cardType"); !v.isEmpty()) {
+        conds << "json_extract(data,'$.cardtype') = ?";
+        binds << v;
+    }
+
+    const QStringList colors = f.value("colors").toStringList();
+    if (!colors.isEmpty()) {
+        QStringList marks;
+        for (const QString &c : colors) {
+            marks << "?";
+            binds << c.toUpper();
+        }
+        conds << QString("UPPER(json_extract(data,'$.colour')) IN (%1)").arg(marks.join(','));
+    }
+
+    auto range = [&](const char *stat, const char *key, const char *op) {
+        bool ok = false;
+        const int n = f.value(key).toString().trimmed().toInt(&ok);
+        if (!ok)
+            return;
+        conds << QString("CAST(json_extract(data,'$.%1') AS INTEGER) %2 ?").arg(stat, op);
+        binds << n;
+    };
+    range("level", "levelMin", ">=");
+    range("level", "levelMax", "<=");
+    range("cost", "costMin", ">=");
+    range("cost", "costMax", "<=");
+    range("power", "powerMin", ">=");
+    range("power", "powerMax", "<=");
+    range("soul", "soulMin", ">=");
+    range("soul", "soulMax", "<=");
+
+    where = conds.join(" AND ");
+    return !conds.isEmpty();
+}
+
 static QSqlDatabase getCardDb()
 {
     const QString path = Config::instance().getCardListDatabasePath();
@@ -492,4 +573,85 @@ void DatabaseUtil::storeOfficialCard(const QString &cardCode, const QJsonObject 
     ins.addBindValue(QString::fromUtf8(QJsonDocument(shaped).toJson(QJsonDocument::Compact)));
     if (!ins.exec())
         qDebug() << "storeOfficialCard failed:" << ins.lastError().text();
+}
+
+int DatabaseUtil::countAdvanced(const QVariantMap &filters) const
+{
+    QString where;
+    QVariantList binds;
+    if (!buildAdvancedWhere(filters, where, binds))
+        return 0;
+    QSqlDatabase db = getCardDb();
+    if (!db.isValid())
+        return 0;
+
+    QSqlQuery q(db);
+    q.prepare("SELECT COUNT(DISTINCT cardcode) FROM cards WHERE " + where);
+    for (const QVariant &b : binds)
+        q.addBindValue(b);
+    if (!q.exec() || !q.next()) {
+        qDebug() << "countAdvanced failed:" << q.lastError().text();
+        return 0;
+    }
+    return q.value(0).toInt();
+}
+
+QStringList DatabaseUtil::advancedSearchCodes(const QVariantMap &filters) const
+{
+    QStringList out;
+    QString where;
+    QVariantList binds;
+    if (!buildAdvancedWhere(filters, where, binds))
+        return out;
+    QSqlDatabase db = getCardDb();
+    if (!db.isValid())
+        return out;
+
+    QSqlQuery q(db);
+    q.prepare("SELECT DISTINCT cardcode FROM cards WHERE " + where);
+    for (const QVariant &b : binds)
+        q.addBindValue(b);
+    if (!q.exec()) {
+        qDebug() << "advancedSearchCodes failed:" << q.lastError().text();
+        return out;
+    }
+    while (q.next())
+        out << q.value(0).toString();
+    return out;
+}
+
+static QStringList distinctValues(const QString &sql)
+{
+    QStringList out;
+    QSqlDatabase db = getCardDb();
+    if (!db.isValid())
+        return out;
+    QSqlQuery q(db);
+    if (!q.exec(sql)) {
+        qDebug() << "distinctValues failed:" << q.lastError().text();
+        return out;
+    }
+    while (q.next()) {
+        const QString v = q.value(0).toString().trimmed();
+        if (!v.isEmpty() && v != "-")
+            out << v;
+    }
+    return out;
+}
+
+QStringList DatabaseUtil::distinctTraits() const
+{
+    return distinctValues("SELECT j.value FROM cards, "
+                          "json_each(json_extract(cards.data,'$.locale.EN.attributes')) AS j "
+                          "UNION "
+                          "SELECT j.value FROM cards, "
+                          "json_each(json_extract(cards.data,'$.locale.NP.attributes')) AS j "
+                          "ORDER BY 1 COLLATE NOCASE");
+}
+
+QStringList DatabaseUtil::distinctTriggers() const
+{
+    return distinctValues("SELECT DISTINCT UPPER(j.value) FROM cards, "
+                          "json_each(json_extract(cards.data,'$.trigger')) AS j "
+                          "ORDER BY 1");
 }

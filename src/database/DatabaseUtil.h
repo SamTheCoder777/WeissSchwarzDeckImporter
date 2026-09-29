@@ -26,6 +26,12 @@ public:
 
     Q_INVOKABLE QVariantList searchCards(const QString &query, int limit = 40) const;
 
+    Q_INVOKABLE int countAdvanced(const QVariantMap &filters) const;
+    Q_INVOKABLE QStringList advancedSearchCodes(const QVariantMap &filters) const;
+
+    Q_INVOKABLE QStringList distinctTraits() const;
+    Q_INVOKABLE QStringList distinctTriggers() const;
+
 signals:
     void localeChanged();
     void cardReady(const QString& cardCode);

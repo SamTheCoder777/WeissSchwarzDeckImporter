@@ -15,6 +15,147 @@ Rectangle {
     readonly property color text1: "#e8eaed"
     readonly property color text2: "#9aa0a6"
 
+    component FilterCombo: ComboBox {
+        id: fc
+        Layout.fillWidth: true
+        implicitHeight: 32
+        font.pixelSize: 12
+
+        background: Rectangle {
+            radius: 6
+            color: "#24272c"
+            border.width: 1
+            border.color: (fc.activeFocus || fc.popup.visible) ? "#4aa3ff" : "#3a3f46"
+        }
+        contentItem: TextField {
+            leftPadding: 10
+            rightPadding: 24
+            text: fc.editable ? fc.editText : fc.displayText
+            enabled: fc.editable
+            selectByMouse: true
+            color: "#e8eaed"
+            font: fc.font
+            verticalAlignment: Text.AlignVCenter
+            background: null
+        }
+        indicator: Text {
+            x: fc.width - width - 10
+            anchors.verticalCenter: parent.verticalCenter
+            text: "▾"
+            color: "#9aa0a6"
+            font.pixelSize: 12
+        }
+        delegate: ItemDelegate {
+            required property var modelData
+            required property int index
+            width: fc.width - 8
+            highlighted: fc.highlightedIndex === index
+            contentItem: Text {
+                text: modelData
+                color: "#e8eaed"
+                font.pixelSize: 12
+                elide: Text.ElideRight
+                verticalAlignment: Text.AlignVCenter
+            }
+            background: Rectangle {
+                radius: 4
+                color: highlighted ? "#2c3033" : "transparent"
+            }
+        }
+        popup: Popup {
+            y: fc.height + 2
+            width: fc.width
+            padding: 4
+            implicitHeight: Math.min(contentItem.implicitHeight + 8, 260)
+            contentItem: ListView {
+                clip: true
+                implicitHeight: contentHeight
+                model: fc.popup.visible ? fc.delegateModel : null
+                currentIndex: fc.highlightedIndex
+                ScrollIndicator.vertical: ScrollIndicator {}
+            }
+            background: Rectangle {
+                radius: 6
+                color: "#24272c"
+                border.width: 1
+                border.color: "#3a3f46"
+            }
+        }
+    }
+
+    component SmallButton: Button {
+        id: sb
+        property bool primary: false
+        implicitHeight: 26
+        implicitWidth: sbText.implicitWidth + 18
+        background: Rectangle {
+            radius: 6
+            opacity: sb.enabled ? 1 : 0.4
+            color: sb.primary ? (sb.down ? Qt.darker("#4aa3ff", 1.3) : sb.hovered ? Qt.lighter("#4aa3ff", 1.1) : "#4aa3ff") : (sb.down ? "#111315" : sb.hovered ? "#2c3033" : "transparent")
+            border.width: sb.primary ? 0 : 1
+            border.color: sb.hovered ? "#4aa3ff" : "#3a3f46"
+        }
+        contentItem: Text {
+            id: sbText
+            text: sb.text
+            color: sb.primary ? "white" : "#e8eaed"
+            font.pixelSize: 11
+            font.bold: sb.primary
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+    }
+
+    component FilterField: TextField {
+        id: ff
+        Layout.fillWidth: true
+        color: "#e8eaed"
+        placeholderTextColor: "#9aa0a6"
+        font.pixelSize: 12
+        selectByMouse: true
+        background: Rectangle {
+            radius: 6
+            color: "#24272c"
+            border.width: 1
+            border.color: ff.activeFocus ? "#4aa3ff" : "#3a3f46"
+        }
+    }
+
+    component RangeRow: RowLayout {
+        id: rr
+        property string label
+        property alias minText: minF.text
+        property alias maxText: maxF.text
+        signal edited
+        spacing: 6
+        Label {
+            text: rr.label
+            color: "#9aa0a6"
+            font.pixelSize: 12
+            Layout.preferredWidth: 40
+        }
+        FilterField {
+            id: minF
+            placeholderText: "min"
+            validator: IntValidator {
+                bottom: 0
+            }
+            onTextChanged: rr.edited()
+        }
+        Label {
+            text: "–"
+            color: "#9aa0a6"
+        }
+        FilterField {
+            id: maxF
+            placeholderText: "max"
+            validator: IntValidator {
+                bottom: 0
+            }
+            onTextChanged: rr.edited()
+        }
+    }
+
     function baseCode(code) {
         var m = /^(.+?-[A-Za-z]*\d+)/.exec(code || "");
         return m ? m[1] : (code || "");
@@ -429,41 +570,59 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: false
-            spacing: 8
+            spacing: 6
             Label {
-                text: "Top matches — pick the correct card"
+                text: "Top matches"
                 color: root.text2
                 font.pixelSize: 11
+                elide: Text.ElideRight
                 Layout.fillWidth: true
             }
             Label {
-                text: candView.count + " results"
+                text: candModel.totalCount > candView.count ? candView.count + " of " + candModel.totalCount : candView.count + " results"
                 color: root.text2
                 font.pixelSize: 11
             }
-            Button {
+            SmallButton {
                 id: searchBtn
-                text: "Search / enter code"
+                text: "Find card"
                 enabled: bridge.currentIndex >= 0
-                implicitHeight: 24
-                implicitWidth: contentItem.implicitWidth + 16
                 onClicked: {
                     var top = candView.count > 0 ? candView.itemAtIndex(0) : null;
                     cardSearchPopup.openFor(top ? top.code : "");
                 }
-                background: Rectangle {
-                    radius: 6
-                    opacity: searchBtn.enabled ? 1 : 0.4
-                    color: searchBtn.down ? "#111315" : searchBtn.hovered ? "#2c3033" : "transparent"
-                    border.width: 1
-                    border.color: searchBtn.hovered ? root.accent : "#3a3f46"
-                }
-                contentItem: Text {
-                    text: searchBtn.text
+            }
+            SmallButton {
+                text: "Advanced search"
+                enabled: bridge.currentIndex >= 0
+                onClicked: advSearchPopup.open()
+            }
+        }
+
+        Rectangle {
+            visible: bridge.filterSummary !== ""
+            Layout.fillWidth: true
+            Layout.fillHeight: false
+            Layout.preferredHeight: 32
+            radius: 7
+            color: Qt.rgba(0.29, 0.64, 1, 0.14)
+            border.width: 1
+            border.color: Qt.rgba(0.29, 0.64, 1, 0.45)
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                anchors.rightMargin: 4
+                spacing: 6
+                Label {
+                    text: "Filtered: " + bridge.filterSummary
                     color: root.text1
                     font.pixelSize: 11
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+                SmallButton {
+                    text: "Clear"
+                    onClicked: bridge.clearFilter()
                 }
             }
         }
@@ -503,6 +662,16 @@ Rectangle {
 
                 ScrollBar.vertical: ScrollBar {
                     policy: ScrollBar.AsNeeded
+                }
+                footer: Item {
+                    width: candView.width
+                    height: candModel.canLoadMore ? 54 : 0
+                    visible: candModel.canLoadMore
+                    SmallButton {
+                        anchors.centerIn: parent
+                        text: "Load " + Math.min(15, candModel.totalCount - candView.count) + " more" + "  (" + (candModel.totalCount - candView.count) + " left)"
+                        onClicked: candModel.loadMore()
+                    }
                 }
                 delegate: Rectangle {
                     id: delegateRoot
@@ -771,8 +940,7 @@ Rectangle {
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: "Search your card data by code or name. To use a card that isn't in "
-                    + "your data, type its exact code."
+                text: "Search your card data by code or name. To use a card that isn't in " + "your data, type its exact code."
                 color: root.text2
                 font.pixelSize: 11
             }
@@ -850,7 +1018,9 @@ Rectangle {
                 clip: true
                 spacing: 4
                 model: cardSearchPopup.results
-                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                }
 
                 delegate: Rectangle {
                     width: searchList.width
@@ -888,8 +1058,7 @@ Rectangle {
                                 Layout.fillWidth: true
                             }
                             Label {
-                                text: (modelData.name || "—")
-                                      + (modelData.rarity ? "  ·  " + modelData.rarity : "")
+                                text: (modelData.name || "—") + (modelData.rarity ? "  ·  " + modelData.rarity : "")
                                 color: root.text2
                                 font.pixelSize: 11
                                 elide: Text.ElideRight
@@ -909,11 +1078,471 @@ Rectangle {
 
             Label {
                 visible: searchList.count === 0 && !exactRow.visible
-                text: cardSearchField.text.trim().length < 2 ? "Type at least 2 characters."
-                                                             : "No matching cards in your data."
+                text: cardSearchField.text.trim().length < 2 ? "Type at least 2 characters." : "No matching cards in your data."
                 color: root.text2
                 font.pixelSize: 11
                 Layout.alignment: Qt.AlignHCenter
+            }
+        }
+    }
+    Popup {
+        id: advSearchPopup
+        parent: root
+        x: 12
+        y: 60
+        width: root.width - 24
+        height: Math.min(root.height - 72, 640)
+        modal: true
+        focus: true
+        padding: 14
+
+        property int matchCount: 0
+        property var colors: []
+        property string cardType: ""
+        property var traitModel: ["Any"]
+        property var triggerModel: ["Any", "None"]
+
+        function traitValue() {
+            var t = fTrait.editText.trim();
+            return (t === "" || t === "Any") ? "" : t;
+        }
+        function triggerValue() {
+            if (fTrigger.currentIndex <= 0)
+                return "";
+            if (fTrigger.currentIndex === 1)
+                return "none";
+            return fTrigger.currentText;
+        }
+        // Reload the lists from the card data, keeping the current choices.
+        function reloadLists() {
+            var trait = fTrait.editText, trig = fTrigger.currentText;
+            traitModel = ["Any"].concat(cardDatabase.distinctTraits());
+            triggerModel = ["Any", "None"].concat(cardDatabase.distinctTriggers());
+            var ti = fTrait.find(trait);
+            if (ti >= 0)
+                fTrait.currentIndex = ti;
+            else
+                fTrait.editText = trait;
+            fTrigger.currentIndex = Math.max(0, fTrigger.find(trig));
+        }
+
+        readonly property var colorChoices: [
+            {
+                code: "YELLOW",
+                swatch: "#e8c547"
+            },
+            {
+                code: "GREEN",
+                swatch: "#3ecf7a"
+            },
+            {
+                code: "RED",
+                swatch: "#e5484d"
+            },
+            {
+                code: "BLUE",
+                swatch: "#4aa3ff"
+            },
+            {
+                code: "PURPLE",
+                swatch: "#a371f7"
+            }
+        ]
+        readonly property var typeChoices: [
+            {
+                code: "",
+                label: "Any"
+            },
+            {
+                code: "CH",
+                label: "Character"
+            },
+            {
+                code: "EV",
+                label: "Event"
+            },
+            {
+                code: "CX",
+                label: "Climax"
+            }
+        ]
+
+        function filters() {
+            return {
+                name: fName.text,
+                code: fCode.text,
+                text: fText.text,
+                trait: traitValue(),
+                rarity: fRarity.text,
+                trigger: triggerValue(),
+                cardType: cardType,
+                colors: colors,
+                levelMin: fLevel.minText,
+                levelMax: fLevel.maxText,
+                costMin: fCost.minText,
+                costMax: fCost.maxText,
+                powerMin: fPower.minText,
+                powerMax: fPower.maxText,
+                soulMin: fSoul.minText,
+                soulMax: fSoul.maxText
+            };
+        }
+        function hasFilter() {
+            var f = filters();
+            for (var k in f) {
+                var v = f[k];
+                if (Array.isArray(v) ? v.length > 0 : String(v).trim() !== "")
+                    return true;
+            }
+            return false;
+        }
+        function rangeText(name, lo, hi) {
+            if (lo && hi)
+                return name + " " + lo + "–" + hi;
+            if (lo)
+                return name + " ≥ " + lo;
+            if (hi)
+                return name + " ≤ " + hi;
+            return "";
+        }
+        function summary() {
+            var p = [];
+            if (fName.text.trim())
+                p.push("\u201C" + fName.text.trim() + "\u201D");
+            if (fCode.text.trim())
+                p.push(fCode.text.trim().toUpperCase());
+            if (cardType)
+                p.push(typeChoices.find(t => t.code === cardType).label);
+            if (colors.length)
+                p.push(colors.map(c => c.charAt(0) + c.slice(1).toLowerCase()).join("/"));
+            [rangeText("Lv", fLevel.minText, fLevel.maxText), rangeText("Cost", fCost.minText, fCost.maxText), rangeText("Power", fPower.minText, fPower.maxText), rangeText("Soul", fSoul.minText, fSoul.maxText)].forEach(s => {
+                if (s)
+                    p.push(s);
+            });
+            if (fRarity.text.trim())
+                p.push(fRarity.text.trim().toUpperCase());
+            if (triggerValue())
+                p.push("Trigger " + (triggerValue() === "none" ? "none" : triggerValue()));
+            if (traitValue())
+                p.push("Trait " + traitValue());
+            if (fText.text.trim())
+                p.push("Text \u201C" + fText.text.trim() + "\u201D");
+            return p.join(" · ");
+        }
+        function recount() {
+            matchCount = hasFilter() ? cardDatabase.countAdvanced(filters()) : 0;
+        }
+        function scheduleRecount() {
+            advDebounce.restart();
+        }
+        function toggleColor(c) {
+            var a = colors.slice();
+            var i = a.indexOf(c);
+            if (i >= 0)
+                a.splice(i, 1);
+            else
+                a.push(c);
+            colors = a;
+            scheduleRecount();
+        }
+        function resetAll() {
+            fName.text = "";
+            fCode.text = "";
+            fRarity.text = "";
+            fTrigger.currentIndex = 0;
+            fTrait.currentIndex = 0;
+            fText.text = "";
+            fLevel.minText = "";
+            fLevel.maxText = "";
+            fCost.minText = "";
+            fCost.maxText = "";
+            fPower.minText = "";
+            fPower.maxText = "";
+            fSoul.minText = "";
+            fSoul.maxText = "";
+            colors = [];
+            cardType = "";
+            recount();
+        }
+
+        onOpened: {
+            reloadLists();
+            recount();
+        }
+        Timer {
+            id: advDebounce
+            interval: 250
+            onTriggered: advSearchPopup.recount()
+        }
+
+        background: Rectangle {
+            radius: 10
+            color: Qt.lighter(root.panel, 1.15)
+            border.width: 1
+            border.color: "#3a3f46"
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 10
+
+            Label {
+                text: "Advanced search"
+                color: root.text1
+                font.pixelSize: 13
+                font.bold: true
+            }
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: "Only cards matching these filters are compared with this crop. " + "Leave a field empty to ignore it."
+                color: root.text2
+                font.pixelSize: 11
+            }
+
+            ScrollView {
+                id: advScroll
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                contentWidth: availableWidth
+
+                ColumnLayout {
+                    width: advScroll.availableWidth
+                    spacing: 8
+
+                    Label {
+                        text: "Name"
+                        color: root.text2
+                        font.pixelSize: 11
+                    }
+                    FilterField {
+                        id: fName
+                        placeholderText: "Card name contains…"
+                        onTextChanged: advSearchPopup.scheduleRecount()
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+                            Label {
+                                text: "Card code"
+                                color: root.text2
+                                font.pixelSize: 11
+                            }
+                            FilterField {
+                                id: fCode
+                                placeholderText: "e.g. WX03 or NIK/S135"
+                                onTextChanged: advSearchPopup.scheduleRecount()
+                            }
+                        }
+                        ColumnLayout {
+                            Layout.preferredWidth: 110
+                            spacing: 4
+                            Label {
+                                text: "Rarity"
+                                color: root.text2
+                                font.pixelSize: 11
+                            }
+                            FilterField {
+                                id: fRarity
+                                placeholderText: "e.g. SP"
+                                onTextChanged: advSearchPopup.scheduleRecount()
+                            }
+                        }
+                    }
+
+                    Label {
+                        text: "Card type"
+                        color: root.text2
+                        font.pixelSize: 11
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        Repeater {
+                            model: advSearchPopup.typeChoices
+                            delegate: Rectangle {
+                                id: typeChip
+                                required property var modelData
+                                readonly property bool on: advSearchPopup.cardType === modelData.code
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 28
+                                radius: 6
+                                color: on ? Qt.rgba(0.29, 0.64, 1, 0.25) : root.panel
+                                border.width: 1
+                                border.color: on ? root.accent : "#3a3f46"
+                                Label {
+                                    anchors.centerIn: parent
+                                    text: typeChip.modelData.label
+                                    color: typeChip.on ? root.text1 : root.text2
+                                    font.pixelSize: 11
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        advSearchPopup.cardType = typeChip.modelData.code;
+                                        advSearchPopup.scheduleRecount();
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Label {
+                        text: "Colour"
+                        color: root.text2
+                        font.pixelSize: 11
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        Repeater {
+                            model: advSearchPopup.colorChoices
+                            delegate: Rectangle {
+                                id: colorChip
+                                required property var modelData
+                                readonly property bool on: advSearchPopup.colors.indexOf(modelData.code) >= 0
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 28
+                                radius: 6
+                                color: on ? Qt.rgba(1, 1, 1, 0.08) : root.panel
+                                border.width: 1
+                                border.color: on ? colorChip.modelData.swatch : "#3a3f46"
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 5
+                                    Rectangle {
+                                        width: 9
+                                        height: 9
+                                        radius: 4.5
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: colorChip.modelData.swatch
+                                    }
+                                    Label {
+                                        text: colorChip.modelData.code.charAt(0) + colorChip.modelData.code.slice(1).toLowerCase()
+                                        color: colorChip.on ? root.text1 : root.text2
+                                        font.pixelSize: 11
+                                    }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: advSearchPopup.toggleColor(colorChip.modelData.code)
+                                }
+                            }
+                        }
+                    }
+
+                    Label {
+                        text: "Stats"
+                        color: root.text2
+                        font.pixelSize: 11
+                    }
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 2
+                        columnSpacing: 12
+                        rowSpacing: 6
+                        RangeRow {
+                            id: fLevel
+                            label: "Level"
+                            Layout.fillWidth: true
+                            onEdited: advSearchPopup.scheduleRecount()
+                        }
+                        RangeRow {
+                            id: fCost
+                            label: "Cost"
+                            Layout.fillWidth: true
+                            onEdited: advSearchPopup.scheduleRecount()
+                        }
+                        RangeRow {
+                            id: fPower
+                            label: "Power"
+                            Layout.fillWidth: true
+                            onEdited: advSearchPopup.scheduleRecount()
+                        }
+                        RangeRow {
+                            id: fSoul
+                            label: "Soul"
+                            Layout.fillWidth: true
+                            onEdited: advSearchPopup.scheduleRecount()
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 2
+                            spacing: 4
+                            Label {
+                                text: "Trait"
+                                color: root.text2
+                                font.pixelSize: 11
+                            }
+                            FilterCombo {
+                                id: fTrait
+                                editable: true
+                                model: advSearchPopup.traitModel
+                                onEditTextChanged: advSearchPopup.scheduleRecount()
+                                onActivated: advSearchPopup.scheduleRecount()
+                            }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 1
+                            spacing: 4
+                            Label {
+                                text: "Trigger"
+                                color: root.text2
+                                font.pixelSize: 11
+                            }
+                            FilterCombo {
+                                id: fTrigger
+                                model: advSearchPopup.triggerModel
+                                onActivated: advSearchPopup.scheduleRecount()
+                            }
+                        }
+                    }
+
+                    Label {
+                        text: "Ability text"
+                        color: root.text2
+                        font.pixelSize: 11
+                    }
+                    FilterField {
+                        id: fText
+                        placeholderText: "Ability text contains…"
+                        onTextChanged: advSearchPopup.scheduleRecount()
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                SmallButton {
+                    text: "Reset"
+                    onClicked: advSearchPopup.resetAll()
+                }
+                SmallButton {
+                    text: "Cancel"
+                    onClicked: advSearchPopup.close()
+                }
+                SmallButton {
+                    primary: true
+                    text: "Search"
+                    enabled: bridge.currentIndex >= 0 && advSearchPopup.matchCount > 0
+                    onClicked: {
+                        bridge.searchFiltered(advSearchPopup.filters(), advSearchPopup.summary());
+                        advSearchPopup.close();
+                    }
+                }
             }
         }
     }

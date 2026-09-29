@@ -30,6 +30,8 @@ public:
     const faiss::Index *index() const { return index_.get(); }
     std::vector<int> row_to_card() const { return row_to_card_; }
     std::vector<std::string> card_ids() const { return card_ids_; }
+    std::unordered_map<std::string, int> slot_of() const { return slot_of_; }
+    std::vector<std::vector<int64_t>> card_to_rows() const { return card_to_rows_; }
     int out_dim() const { return out_dim_; }
     int rows_per_card() const { return rows_per_card_; }
 
@@ -60,6 +62,8 @@ private:
   std::unique_ptr<faiss::Index> index_;
   std::vector<int> row_to_card_;
   std::vector<std::string> card_ids_;
+  std::unordered_map<std::string, int> slot_of_;
+  std::vector<std::vector<int64_t>> card_to_rows_;
   int out_dim_ = 256;
   int rows_per_card_ = 26;
 };

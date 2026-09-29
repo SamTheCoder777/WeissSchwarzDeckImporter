@@ -241,4 +241,19 @@ void TcgCore::load_index(std::string index_dir) {
   row_to_card_ = TcgUtil::read_npy_int(index_dir + "/row2card.npy");
   card_ids_ = TcgUtil::read_json_string_array(index_dir + "/id_map.json");
   out_dim_ = index_->d;
+
+  const auto &card_ids = card_ids_;
+  const auto &row_to_card = row_to_card_;
+
+  slot_of_.clear();
+  slot_of_.reserve(card_ids.size());
+  for (size_t i = 0; i < card_ids.size(); ++i)
+      slot_of_[card_ids[i]] = (int) i;
+
+  card_to_rows_.assign(card_ids.size(), {});
+  for (size_t r = 0; r < row_to_card.size(); ++r) {
+      int c = row_to_card[r];
+      if (c >= 0 && c < (int) card_ids.size())
+          card_to_rows_[c].push_back((int64_t) r);
+  }
 }

@@ -24,6 +24,17 @@ static QImage matToQImage(const cv::Mat& bgr) {
                   QImage::Format_RGB888).copy();
 }
 
+int DetectionPage::canvasIndexFor(int selIdx) const
+{
+    if (selIdx < 0 || selIdx >= sel_.size())
+        return -1;
+    const int id = sel_[selIdx].id;
+    for (int i = 0; i < canvas_->selectionCount(); ++i)
+        if (canvas_->selectionId(i) == id)
+            return i;
+    return -1;
+}
+
 cv::Mat qImageToBgrMat(const QImage &imgIn)
 {
     QImage img = imgIn.convertToFormat(QImage::Format_RGB888);
@@ -276,6 +287,8 @@ void DetectionPage::buildUi() {
         }
     });
     connect(bridge_, &UiBridge::openCompareRequested, this, &DetectionPage::openCompareDialog);
+    connect(bridge_, &UiBridge::searchFilteredRequested, this, &DetectionPage::runFilteredSearch);
+    connect(bridge_, &UiBridge::clearFilterRequested, this, &DetectionPage::clearFilteredSearch);
 
     // arrows cycle cards; space opens compare
     auto* nextSc = new QShortcut(QKeySequence(Qt::Key_Right), this);
@@ -513,6 +526,9 @@ void DetectionPage::pushStateToQml() {
                       currentSel_,
                       rotation,
                       models_->tcgCore() != nullptr);
+    bridge_->setFilterSummary(currentSel_ >= 0 && currentSel_ < sel_.size()
+                                  ? sel_[currentSel_].filterSummary
+                                  : QString());
 }
 
 void DetectionPage::openImage() {
@@ -639,6 +655,18 @@ void DetectionPage::runDetection() {
     syncSelections();
     if (sel_.isEmpty()) { QMessageBox::information(this, "No selection", "Select at least one card."); return; }
 
+    // Reset all selections' data
+    for (int i = 0; i < sel_.size(); ++i) {
+        auto &s = sel_[i];
+        s.cands.clear();
+        s.cardId.clear();
+        s.confirmed = false;
+        s.filterSummary.clear();
+        canvas_->setSelectionState(i, false, QString());
+    }
+    candModel_->clear();
+    pushStateToQml();
+
     forceHandTool();
     detecting_ = true;
 
@@ -691,7 +719,7 @@ void DetectionPage::runDetection() {
         try {
             for (size_t i = 0; i < crops->size(); ++i)
                 if (!(*crops)[i].empty())
-                    (*results)[i] = models->search((*crops)[i], 15);
+                    (*results)[i] = models->search((*crops)[i], 500);
         } catch (const std::exception &e) {
             *errorMsg = e.what();
         }
@@ -810,4 +838,62 @@ void DetectionPage::exportDeck() {
     f.close();
     QMessageBox::information(this, "Exported",
                              QString("Wrote %1 cards to:\n%2").arg(lines.size()).arg(p));
+}
+
+void DetectionPage::runFilteredSearch(const QVariantMap &filters, const QString &summary)
+{
+    //qDebug() << "[Filter] requested:" << summary << "sel" << currentSel_ << filters;
+
+    if (currentSel_ < 0 || currentSel_ >= sel_.size()) {
+        return;
+    }
+
+    const QStringList codes = dbUtil_->advancedSearchCodes(filters);
+    const QSet<QString> allowedSet(codes.begin(), codes.end());
+    if (codes.isEmpty())
+        return;
+
+    std::vector<std::string> allowed;
+    allowed.reserve(codes.size());
+    for (const QString &c : codes)
+        allowed.push_back(c.toStdString());
+
+    const cv::Mat crop = cropForSelection(canvasIndexFor(currentSel_));
+
+    std::vector<Candidate> cands;
+    try {
+        cands = models_->searchFiltered(crop, 500, allowed);
+    } catch (const std::exception &e) {
+        return;
+    }
+
+    auto &s = sel_[currentSel_];
+    s.cands = std::move(cands);
+    s.filterSummary = summary;
+    candModel_->setCandidates(s.cands, s.cardId);
+    pushStateToQml();
+}
+
+void DetectionPage::clearFilteredSearch()
+{
+    if (currentSel_ < 0 || currentSel_ >= sel_.size())
+        return;
+    sel_[currentSel_].filterSummary.clear();
+    redetectSelection(currentSel_);
+}
+
+void DetectionPage::redetectSelection(int i)
+{
+    if (i < 0 || i >= sel_.size())
+        return;
+
+    const cv::Mat crop = cropForSelection(canvasIndexFor(i));
+    std::vector<Candidate> cands = models_->search(crop, 500);
+
+    auto &s = sel_[i];
+    s.cands = std::move(cands);
+    s.filterSummary.clear();
+    if (i == currentSel_)
+        candModel_->setCandidates(s.cands, s.cardId);
+    pushStateToQml();
 }

@@ -2,17 +2,19 @@
 
 #include <QObject>
 #include <QString>
+#include <QVariantMap>
 
 class UiBridge : public QObject {
     Q_OBJECT
-    Q_PROPERTY(QString summaryText   READ summaryText   NOTIFY stateChanged)
+    Q_PROPERTY(QString summaryText READ summaryText NOTIFY stateChanged)
     Q_PROPERTY(QString confirmedText READ confirmedText NOTIFY stateChanged)
-    Q_PROPERTY(bool    isConfirmed   READ isConfirmed   NOTIFY stateChanged)
-    Q_PROPERTY(int     quantity      READ quantity      NOTIFY stateChanged)
-    Q_PROPERTY(int     currentIndex  READ currentIndex  NOTIFY stateChanged)
-    Q_PROPERTY(int     cropRev       READ cropRev       NOTIFY stateChanged)
-    Q_PROPERTY(bool    modelLoaded   READ modelLoaded   NOTIFY stateChanged)
+    Q_PROPERTY(bool isConfirmed READ isConfirmed NOTIFY stateChanged)
+    Q_PROPERTY(int quantity READ quantity NOTIFY stateChanged)
+    Q_PROPERTY(int currentIndex READ currentIndex NOTIFY stateChanged)
+    Q_PROPERTY(int cropRev READ cropRev NOTIFY stateChanged)
+    Q_PROPERTY(bool modelLoaded READ modelLoaded NOTIFY stateChanged)
     Q_PROPERTY(int rotation READ rotation NOTIFY stateChanged)
+    Q_PROPERTY(QString filterSummary READ filterSummary NOTIFY stateChanged)
 public:
     using QObject::QObject;
 
@@ -23,15 +25,28 @@ public:
     Q_INVOKABLE void exportDeck()               { emit exportRequested(); }
     Q_INVOKABLE void runDetection()             { emit detectRequested(); }
     Q_INVOKABLE void openCompare() { emit openCompareRequested(); }
+    Q_INVOKABLE void searchFiltered(const QVariantMap &filters, const QString &summary)
+    {
+        emit searchFilteredRequested(filters, summary);
+    }
+    Q_INVOKABLE void clearFilter() { emit clearFilterRequested(); }
 
-    QString summaryText()   const { return summary_; }
+    QString summaryText() const { return summary_; }
     QString confirmedText() const { return confirmed_; }
-    bool    isConfirmed()   const { return isConfirmed_; }
-    int     quantity()      const { return qty_; }
-    int     currentIndex()  const { return current_; }
-    int     rotation() const { return rotation_; }
-    int     cropRev()       const { return cropRev_; }
-    bool    modelLoaded()   const { return modelLoaded_; }
+    bool isConfirmed() const { return isConfirmed_; }
+    int quantity() const { return qty_; }
+    int currentIndex() const { return current_; }
+    int rotation() const { return rotation_; }
+    int cropRev() const { return cropRev_; }
+    bool modelLoaded() const { return modelLoaded_; }
+    QString filterSummary() const { return filterSummary_; }
+    void setFilterSummary(const QString &s)
+    {
+        if (s == filterSummary_)
+            return;
+        filterSummary_ = s;
+        emit stateChanged();
+    }
 
     void setState(const QString& summary, const QString& confirmedText,
                   bool isConfirmed, int qty, int current, int rotation, bool modelLoaded) {
@@ -51,9 +66,12 @@ signals:
     void exportRequested();
     void detectRequested();
     void openCompareRequested();
+    void searchFilteredRequested(const QVariantMap &filters, const QString &summary);
+    void clearFilterRequested();
 
 private:
     QString summary_ = "0 selected · 0 confirmed";
+    QString filterSummary_;
     QString confirmed_ = "Not confirmed";
     bool isConfirmed_ = false, modelLoaded_ = false;
     int qty_ = 1, current_ = -1, cropRev_ = 0, rotation_ = 0;
