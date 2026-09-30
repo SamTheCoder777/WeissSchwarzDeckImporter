@@ -19,9 +19,11 @@
 
 <img src="docs/intro.png" width="860" alt="Weiss Schwarz Deck Importer — identifying a deck from an image">
 
+<img src="docs/intro2.png" width="860" alt="Weiss Schwarz Deck Importer — identifying a deck from an image">
+
 </div>
 
->  [deck image](https://x.com/BEOVClMCqEOkcrn/status/2104118258626683089)
+[deck image](https://x.com/BEOVClMCqEOkcrn/status/2104118258626683089)
 
 > [!IMPORTANT]
 > **First time?** Start with the **[Quickstart guide](QUICKSTART.md)**
