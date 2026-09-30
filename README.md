@@ -33,6 +33,8 @@ Drop that image into the app and it identifies every card for you so you can rea
 It runs as a native desktop app on Windows, works offline once set up, and
 pulls in card details and artwork automatically from [encoredecks](https://www.encoredecks.com/) api or [official cards list](https://ws-tcg.com/cardlist/).
 
+Currently supports **English** and **Japanese** sets
+
 ---
 
 ## Features
@@ -145,8 +147,6 @@ Point the generator at a folder of card images, and it creates a ready-to-use li
 </td>
 </tr>
 </table>
-
-> **Language support:** Japanese sets are supported today. English sets are coming soon.
 
 ---
 ## Required models
