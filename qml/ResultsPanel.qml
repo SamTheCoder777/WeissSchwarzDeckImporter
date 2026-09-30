@@ -1612,6 +1612,14 @@ Rectangle {
                 }
             }
 
+            Label {
+                Layout.fillWidth: true
+                text: !advSearchPopup.hasFilter() ? "Set at least one filter" : (advSearchPopup.matchCount === 0 || advSearchPopup.inIndexCount === 0) ? "No results. Try loosening the filters." : ""
+                color: root.warnColor
+                font.pixelSize: 11
+                elide: Text.ElideRight
+            }
+
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 6
