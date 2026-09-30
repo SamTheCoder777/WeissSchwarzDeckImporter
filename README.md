@@ -21,6 +21,8 @@
 
 </div>
 
+>  [deck image](https://x.com/BEOVClMCqEOkcrn/status/2104118258626683089)
+
 > [!IMPORTANT]
 > **First time?** Start with the **[Quickstart guide](QUICKSTART.md)**
 ---
