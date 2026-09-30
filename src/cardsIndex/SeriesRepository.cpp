@@ -112,6 +112,7 @@ void SeriesRepository::ensureCardSchema(Region region)
            "  PRIMARY KEY (series_id, card_id))");
     q.exec("CREATE INDEX IF NOT EXISTS idx_cards_cardcode ON cards(cardcode)");
     q.exec("CREATE INDEX IF NOT EXISTS idx_cards_series ON cards(series_id)");
+    q.exec("CREATE INDEX IF NOT EXISTS idx_cards_cardcode_lower ON cards(LOWER(cardcode))");
 }
 
 QVector<SeriesRepository::SeriesRow> SeriesRepository::loadSeries() {

@@ -125,10 +125,17 @@ void SelectionModel::setRows(const QVector<Row>& rows) {
         beginResetModel();
         rows_ = rows;
         endResetModel();
-    } else {
-        rows_ = rows;
-        if (!rows_.isEmpty())
-            emit dataChanged(index(0), index(rows_.size() - 1));
+        return;
+    }
+
+    for (int i = 0; i < rows.size(); ++i) {
+        const Row &a = rows_[i];
+        const Row &b = rows[i];
+        if (a.label == b.label && a.confirmed == b.confirmed && a.qty == b.qty
+            && a.cardId == b.cardId)
+            continue;
+        rows_[i] = b;
+        emit dataChanged(index(i), index(i));
     }
 }
 
