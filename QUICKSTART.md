@@ -25,7 +25,7 @@ Welcome! This guide walks you through setting up the app, preparing set/card dat
 6. Click **Load Models**.
 
 Once the models are loaded, setup is complete and you won't need to repeat these steps again.
-> ![NOTE]
+> [!NOTE]
 > You will get an error saying "The selected index is missing...". This is normal because we have not downloaded an index yet.
 
 ---
