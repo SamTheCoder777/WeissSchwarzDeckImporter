@@ -98,6 +98,8 @@ Before importing a decklist, you need to download data for the specific set you'
      - **Polygon Tool** — click each vertex of the card, then press **Enter**.
      - **Hand Tool** — going through each selection or moving vertex points.
 
+   - **Scroll** to zoom. Hold the **scroll wheel (middle click)** and drag to pan.
+
 > [!IMPORTANT]
 >  You only need to select **one** copy of each unique card — no need to select duplicates of the same card.
 
