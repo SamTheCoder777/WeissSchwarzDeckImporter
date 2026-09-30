@@ -72,7 +72,9 @@ Rectangle {
                 implicitHeight: contentHeight
                 model: fc.popup.visible ? fc.delegateModel : null
                 currentIndex: fc.highlightedIndex
-                ScrollIndicator.vertical: ScrollIndicator {}
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AlwaysOn
+                }
             }
             background: Rectangle {
                 radius: 6
