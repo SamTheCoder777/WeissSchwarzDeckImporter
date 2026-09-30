@@ -657,14 +657,22 @@ void DetectionPage::runDetection() {
     syncSelections();
     if (sel_.isEmpty()) { QMessageBox::information(this, "No selection", "Select at least one card."); return; }
 
-    // Reset all selections' data
+    bool anyToDetect = false;
     for (int i = 0; i < sel_.size(); ++i) {
         auto &s = sel_[i];
+        if (s.confirmed)
+            continue;
         s.cands.clear();
         s.cardId.clear();
-        s.confirmed = false;
         s.filterSummary.clear();
         canvas_->setSelectionState(i, false, QString());
+        anyToDetect = true;
+    }
+    if (!anyToDetect) {
+        QMessageBox::information(this,
+                                 "Nothing to detect",
+                                 "All selected cards are already confirmed.");
+        return;
     }
     candModel_->clear();
     pushStateToQml();
