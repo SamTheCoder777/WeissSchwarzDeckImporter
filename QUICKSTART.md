@@ -30,6 +30,11 @@ Once the models are loaded, setup is complete and you won't need to repeat these
 
 ---
 
+## [Only if detecting ENGLISH set] Language set up
+
+1. Go into **Settings** page and select **EN**
+   ![Language Setup](docs/setDetectLanguage.png)
+
 ## 2. Downloading Set & Card Data
 
 Before importing a decklist, you need to download data for the specific set you're working with.
@@ -105,6 +110,11 @@ Before importing a decklist, you need to download data for the specific set you'
 5. On the results page, click the card image or press **Space** to preview the identification result up close before confirming.
 > [!NOTE]
 > An exclamation point (`!`) means the card's data isn't yet available on the EncoreDecks API, so translations may be missing — or you may not have downloaded that card's data from the Card Index page yet.
+
+> [!TIP]
+> Since v1.0.0, I have added a **Find card** and **Advanced search** button
+> - **Find card**: use if the card you are searching is a special art (eg. SP, SEC) and encoredecks does not have data for that version of card. Search for the base version instead.
+> - **Advanced search**: if the detector is not able to successfully detect the card, plug in any known info (eg. stock, level, power, etc) to significantly lower the count of candidates.
 
 6. Move through each cards with arrow keys or clicking the cards on the image view with the **Hand** tool
 
