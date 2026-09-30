@@ -98,6 +98,27 @@ void SettingsPage::buildUi()
 
     headerRow->addLayout(titleCol);
     headerRow->addStretch(1);
+
+    // Version pill
+    const QString ver = QStringLiteral(APP_VERSION);
+    const QString releasesUrl = "https://github.com/" + Config::instance().releaseRepo_
+                                + "/releases";
+    auto *versionLabel = new QLabel(this);
+    versionLabel->setTextFormat(Qt::RichText);
+    versionLabel->setText(
+        ver.isEmpty()
+            ? QStringLiteral("Development build")
+            : QString(
+                  "<a href=\"%1\" style=\"color:#9aa0a6; text-decoration:none;\">Version %2</a>")
+                  .arg(releasesUrl, ver.toHtmlEscaped()));
+    versionLabel->setOpenExternalLinks(true);
+    versionLabel->setToolTip(ver.isEmpty() ? QString() : "View release notes on GitHub");
+    versionLabel->setCursor(ver.isEmpty() ? Qt::ArrowCursor : Qt::PointingHandCursor);
+    versionLabel->setStyleSheet("QLabel { color:#9aa0a6; font-size:12px; padding:4px 12px;"
+                                " border:1px solid rgba(127,127,127,0.3); border-radius:11px; }"
+                                "QLabel:hover { border-color: rgba(74,163,255,0.7); }");
+    headerRow->addWidget(versionLabel, 0, Qt::AlignVCenter);
+
     outer->addLayout(headerRow);
 
     // app update banner
