@@ -56,6 +56,7 @@ public:
     Q_INVOKABLE
     void buildIndex(const QString &imageDir, const QString &saveDir, const int batchSize);
     Q_INVOKABLE void cancelIndexBuild();
+    QStringList indexSetCodes();
 signals:
     void loaded(bool ok, const QString &message);
     void loading(bool finished);

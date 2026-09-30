@@ -30,6 +30,11 @@ public:
         emit searchFilteredRequested(filters, summary);
     }
     Q_INVOKABLE void clearFilter() { emit clearFilterRequested(); }
+    Q_INVOKABLE QStringList indexSetCodes() const
+    {
+        return setCodesProvider_ ? setCodesProvider_() : QStringList();
+    }
+    void setSetCodesProvider(std::function<QStringList()> fn) { setCodesProvider_ = std::move(fn); }
 
     QString summaryText() const { return summary_; }
     QString confirmedText() const { return confirmed_; }
@@ -75,4 +80,5 @@ private:
     QString confirmed_ = "Not confirmed";
     bool isConfirmed_ = false, modelLoaded_ = false;
     int qty_ = 1, current_ = -1, cropRev_ = 0, rotation_ = 0;
+    std::function<QStringList()> setCodesProvider_;
 };

@@ -11,6 +11,24 @@ static QString indexDirForId(const QString &id)
     return Config::instance().getIndexInstallPath() + "/" + id;
 }
 
+QStringList ModelService::indexSetCodes()
+{
+    std::unique_lock<std::mutex> lock(onnxMutex_, std::try_to_lock);
+    if (!lock.owns_lock() || !tcgCore_)
+        return {};
+
+    QSet<QString> sets;
+    for (const std::string &id : tcgCore_->card_ids()) {
+        const QString code = QString::fromStdString(id);
+        const int slash = code.indexOf('/');
+        if (slash > 0)
+            sets.insert(code.left(slash).toUpper());
+    }
+    QStringList out(sets.begin(), sets.end());
+    out.sort();
+    return out;
+}
+
 ModelService::ModelService(QObject *parent)
     : QObject(parent)
 {

@@ -630,8 +630,8 @@ Rectangle {
         }
         Rectangle {
             Layout.fillWidth: true
-            Layout.fillHeight: true              // <- only this expands
-            Layout.minimumHeight: 220            // <- and it can never collapse
+            Layout.fillHeight: true
+            Layout.minimumHeight: 220
             radius: 10
             color: root.panel
             clip: true
@@ -1103,10 +1103,10 @@ Rectangle {
         property string cardType: ""
         property var traitModel: ["Any"]
         property var triggerModel: ["Any", "None"]
+        property var traitList: []
 
         function traitValue() {
-            var t = fTrait.editText.trim();
-            return (t === "" || t === "Any") ? "" : t;
+            return fTrait.text.trim();
         }
         function triggerValue() {
             if (fTrigger.currentIndex <= 0)
@@ -1115,16 +1115,11 @@ Rectangle {
                 return "none";
             return fTrigger.currentText;
         }
-        // Reload the lists from the card data, keeping the current choices.
         function reloadLists() {
-            var trait = fTrait.editText, trig = fTrigger.currentText;
-            traitModel = ["Any"].concat(cardDatabase.distinctTraits());
-            triggerModel = ["Any", "None"].concat(cardDatabase.distinctTriggers());
-            var ti = fTrait.find(trait);
-            if (ti >= 0)
-                fTrait.currentIndex = ti;
-            else
-                fTrait.editText = trait;
+            var sets = bridge.indexSetCodes();
+            traitList = cardDatabase.distinctTraits(sets);
+            var trig = fTrigger.currentText;
+            triggerModel = ["Any", "None"].concat(cardDatabase.distinctTriggers(sets));
             fTrigger.currentIndex = Math.max(0, fTrigger.find(trig));
         }
 
@@ -1252,7 +1247,7 @@ Rectangle {
             fCode.text = "";
             fRarity.text = "";
             fTrigger.currentIndex = 0;
-            fTrait.currentIndex = 0;
+            fTrait.text = "";
             fText.text = "";
             fLevel.minText = "";
             fLevel.maxText = "";
@@ -1296,9 +1291,10 @@ Rectangle {
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: "Only cards matching these filters are compared with this crop. " + "Leave a field empty to ignore it."
+                text: "Only cards matching these filters are compared with this crop. " + "Leave a field empty to ignore it.<br><b>You need to download the set's card data in the 'Card Indexes' tab.</b>"
                 color: root.text2
                 font.pixelSize: 11
+                textFormat: Text.StyledText
             }
 
             ScrollView {
@@ -1487,12 +1483,103 @@ Rectangle {
                                 color: root.text2
                                 font.pixelSize: 11
                             }
-                            FilterCombo {
+                            FilterField {
                                 id: fTrait
-                                editable: true
-                                model: advSearchPopup.traitModel
-                                onEditTextChanged: advSearchPopup.scheduleRecount()
-                                onActivated: advSearchPopup.scheduleRecount()
+                                placeholderText: "Any trait"
+                                property bool picking: false
+
+                                onPressed: traitSuggest.show()
+                                onTextChanged: {
+                                    advSearchPopup.scheduleRecount();
+                                    if (activeFocus && !picking)
+                                        traitSuggest.show();
+                                }
+                                Keys.onDownPressed: {
+                                    traitSuggest.show();
+                                    traitListView.forceActiveFocus();
+                                }
+                                Keys.onEscapePressed: traitSuggest.close()
+
+                                Popup {
+                                    id: traitSuggest
+                                    y: fTrait.height + 2
+                                    width: fTrait.width
+                                    padding: 4
+                                    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+                                    implicitHeight: Math.min(traitListView.contentHeight + 8, 220)
+
+                                    property var matches: []
+
+                                    function refresh() {
+                                        var q = fTrait.text.trim().toLowerCase();
+                                        var all = advSearchPopup.traitList;
+                                        if (q === "") {
+                                            matches = all.slice(0, 300);
+                                            return;
+                                        }
+                                        var starts = [], contains = [];
+                                        for (var i = 0; i < all.length; ++i) {
+                                            var t = all[i].toLowerCase();
+                                            if (t.indexOf(q) === 0)
+                                                starts.push(all[i]);
+                                            else if (t.indexOf(q) > 0)
+                                                contains.push(all[i]);
+                                        }
+                                        matches = starts.concat(contains).slice(0, 300);
+                                    }
+                                    function show() {
+                                        refresh();
+                                        if (matches.length > 0)
+                                            open();
+                                        else
+                                            close();
+                                    }
+                                    function pick(t) {
+                                        fTrait.picking = true;
+                                        fTrait.text = t;
+                                        fTrait.picking = false;
+                                        close();
+                                        advSearchPopup.scheduleRecount();
+                                    }
+
+                                    background: Rectangle {
+                                        radius: 6
+                                        color: "#24272c"
+                                        border.width: 1
+                                        border.color: "#3a3f46"
+                                    }
+                                    contentItem: ListView {
+                                        id: traitListView
+                                        clip: true
+                                        model: traitSuggest.matches
+                                        ScrollIndicator.vertical: ScrollIndicator {}
+                                        Keys.onReturnPressed: if (currentIndex >= 0)
+                                            traitSuggest.pick(model[currentIndex])
+                                        Keys.onEscapePressed: {
+                                            traitSuggest.close();
+                                            fTrait.forceActiveFocus();
+                                        }
+                                        delegate: ItemDelegate {
+                                            required property string modelData
+                                            required property int index
+                                            width: traitListView.width
+                                            height: 28
+                                            highlighted: ListView.isCurrentItem || hovered
+                                            contentItem: Text {
+                                                text: modelData
+                                                color: "#e8eaed"
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            background: Rectangle {
+                                                radius: 4
+                                                color: highlighted ? "#2c3033" : "transparent"
+                                            }
+                                            onClicked: traitSuggest.pick(modelData)
+                                        }
+                                    }
+                                }
                             }
                         }
                         ColumnLayout {

@@ -620,14 +620,30 @@ QStringList DatabaseUtil::advancedSearchCodes(const QVariantMap &filters) const
     return out;
 }
 
-static QStringList distinctValues(const QString &sql)
+static QString setCondition(const QStringList &sets, QVariantList &binds)
+{
+    if (sets.isEmpty())
+        return "1";
+    QStringList marks;
+    for (const QString &s : sets) {
+        marks << "?";
+        binds << s.toUpper();
+    }
+    return "UPPER(SUBSTR(cards.cardcode, 1, INSTR(cards.cardcode, '/') - 1)) IN (" + marks.join(',')
+           + ")";
+}
+
+static QStringList distinctValues(const QString &sql, const QVariantList &binds)
 {
     QStringList out;
     QSqlDatabase db = getCardDb();
     if (!db.isValid())
         return out;
     QSqlQuery q(db);
-    if (!q.exec(sql)) {
+    q.prepare(sql);
+    for (const QVariant &b : binds)
+        q.addBindValue(b);
+    if (!q.exec()) {
         qDebug() << "distinctValues failed:" << q.lastError().text();
         return out;
     }
@@ -639,19 +655,33 @@ static QStringList distinctValues(const QString &sql)
     return out;
 }
 
-QStringList DatabaseUtil::distinctTraits() const
+QStringList DatabaseUtil::distinctTraits(const QStringList &sets) const
 {
+    QVariantList binds;
+    const QString condEn = setCondition(sets, binds);
+    const QString condNp = setCondition(sets, binds);
     return distinctValues("SELECT j.value FROM cards, "
                           "json_each(json_extract(cards.data,'$.locale.EN.attributes')) AS j "
-                          "UNION "
-                          "SELECT j.value FROM cards, "
-                          "json_each(json_extract(cards.data,'$.locale.NP.attributes')) AS j "
-                          "ORDER BY 1 COLLATE NOCASE");
+                          "WHERE "
+                              + condEn
+                              + " "
+                                "UNION "
+                                "SELECT j.value FROM cards, "
+                                "json_each(json_extract(cards.data,'$.locale.NP.attributes')) AS j "
+                                "WHERE "
+                              + condNp
+                              + " "
+                                "ORDER BY 1 COLLATE NOCASE",
+                          binds);
 }
 
-QStringList DatabaseUtil::distinctTriggers() const
+QStringList DatabaseUtil::distinctTriggers(const QStringList &sets) const
 {
+    QVariantList binds;
+    const QString cond = setCondition(sets, binds);
     return distinctValues("SELECT DISTINCT UPPER(j.value) FROM cards, "
                           "json_each(json_extract(cards.data,'$.trigger')) AS j "
-                          "ORDER BY 1");
+                          "WHERE "
+                              + cond + " ORDER BY 1",
+                          binds);
 }

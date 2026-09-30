@@ -54,6 +54,8 @@ DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, Selecti
     catalog_(catalog), installedProxy_(installedProxy) {
     buildUi();
 
+    bridge_->setSetCodesProvider([this] { return models_->indexSetCodes(); });
+
     connect(models_, &ModelService::loaded, this, [this](bool, const QString&){
         onModelLoaded(true);
     });
