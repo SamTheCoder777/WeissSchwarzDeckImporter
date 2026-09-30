@@ -64,5 +64,6 @@ private:
 
     QAction *settingsAction_ = nullptr;
     bool seriesUpdateAvailable_ = false;
+    bool appUpdateAvailable_ = false;
     bool indexNotifSilent_ = false;
 };

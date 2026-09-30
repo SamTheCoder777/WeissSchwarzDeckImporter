@@ -6,6 +6,8 @@
 #include <QVector>
 #include <QWidget>
 
+class QToolButton;
+
 class ImageCanvas : public QWidget
 {
     Q_OBJECT
@@ -35,6 +37,8 @@ public:
     void reorder(const QVector<int> &newOrder);
     int selectionId(int i) const { return sel_.value(i).id; }
 
+    void resetView();
+
 signals:
     void selectionsChanged();
     void selectionGeometryChanged(int i);
@@ -49,6 +53,8 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent *) override;
     void keyPressEvent(QKeyEvent *) override;
     void contextMenuEvent(QContextMenuEvent *) override;
+    void wheelEvent(QWheelEvent *) override;
+    void resizeEvent(QResizeEvent *) override;
 
 private:
     struct Sel
@@ -94,4 +100,14 @@ private:
 
     // vertex editing
     int dragSel_ = -1, dragVert_ = -1;
+
+    void clampPan();
+    void updateResetButton();
+
+    // zoom / pan
+    double zoom_ = 1.0;
+    QPointF pan_{0, 0};
+    bool panning_ = false;
+    QPointF panLast_;
+    QToolButton *resetBtn_ = nullptr;
 };

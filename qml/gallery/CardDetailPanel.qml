@@ -103,6 +103,18 @@ ScrollView {
             }
 
             Label {
+                text: "Cost"
+                color: "#888"
+                font.pixelSize: 12
+            }
+            SelText {
+                Layout.fillWidth: true
+                text: root.card.cost || "-"
+                color: "#e6e6e6"
+                font.pixelSize: 12
+            }
+
+            Label {
                 text: "Power"
                 color: "#888"
                 font.pixelSize: 12

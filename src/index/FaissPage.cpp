@@ -39,7 +39,7 @@ void FaissPage::buildUi()
     connect(catalog_, &IndexCatalog::useIndexRequested, this, [this](const QString& dir) {
         models_->setIndexDir(dir);
         // update default index
-        QString id = dir.split("/").last();
+        QString id = catalog_->activeIndexId();
         Config::instance().setCurIndexId(id);
 
         if (models_->isLoaded()) {

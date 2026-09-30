@@ -5,7 +5,6 @@
 #include "../cardsIndex/SeriesRepository.h"
 #include "../core/Config.h"
 #include "../database/DatabaseUtil.h"
-#include "../database/DatasetManager.h"
 #include "../detection/DetectionPage.h"
 #include "../gallery/GalleryPage.h"
 #include "../index/FaissPage.h"
@@ -64,7 +63,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(seriesRepo_,
             &SeriesRepository::updateAvailable,
             this,
-            [this](SeriesRepository::UpdateStatus s) {
+            [this](Config::DetectLocaleMode region, SeriesRepository::UpdateStatus s) {
                 seriesUpdateAvailable_ = (s == SeriesRepository::UpdateStatus::UpdateAvailable);
                 updateSettingsDot();
             });
@@ -161,6 +160,11 @@ void MainWindow::buildSidebar()
         seriesUpdateAvailable_ = false;
         updateSettingsDot();
     });
+
+    connect(settings_, &SettingsPage::appUpdateStateChanged, this, [this](bool available) {
+        appUpdateAvailable_ = available;
+        updateSettingsDot();
+    });
 }
 
 void MainWindow::updateSettingsDot()
@@ -183,6 +187,6 @@ void MainWindow::updateSettingsDot()
         dot->setAttribute(Qt::WA_TransparentForMouseEvents);
     }
     dot->move(btn->width() - 14, 6);
-    dot->setVisible(seriesUpdateAvailable_);
+    dot->setVisible(seriesUpdateAvailable_ || appUpdateAvailable_);
     dot->raise();
 }

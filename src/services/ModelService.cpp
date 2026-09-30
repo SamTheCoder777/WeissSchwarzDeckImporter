@@ -11,6 +11,24 @@ static QString indexDirForId(const QString &id)
     return Config::instance().getIndexInstallPath() + "/" + id;
 }
 
+QStringList ModelService::indexSetCodes()
+{
+    std::unique_lock<std::mutex> lock(onnxMutex_, std::try_to_lock);
+    if (!lock.owns_lock() || !tcgCore_)
+        return {};
+
+    QSet<QString> sets;
+    for (const std::string &id : tcgCore_->card_ids()) {
+        const QString code = QString::fromStdString(id);
+        const int slash = code.indexOf('/');
+        if (slash > 0)
+            sets.insert(code.left(slash).toUpper());
+    }
+    QStringList out(sets.begin(), sets.end());
+    out.sort();
+    return out;
+}
+
 ModelService::ModelService(QObject *parent)
     : QObject(parent)
 {
@@ -167,15 +185,28 @@ QString ModelService::indexDirForId(const QString &id)
 {
     if (id.isEmpty())
         return {};
-    QString base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    QString dir = base + "/indexes/" + id;
-    return QDir(dir).exists() ? dir : QString();
+    const QString root = Config::instance().getIndexInstallPath();
+
+    QFile f(root + "/custom_indexes.json");
+    if (f.open(QIODevice::ReadOnly) && QJsonDocument::fromJson(f.readAll()).object().contains(id))
+        return root + "/" + id;
+
+    const bool en = Config::instance().getCurDetectLocaleMode() == Config::DetectLocaleMode::EN;
+    return root + "/" + (en ? "EN_" + id : id);
 }
 
 std::vector<Candidate> ModelService::search(const cv::Mat &cropBgr, int topK)
 {
     std::lock_guard<std::mutex> lock(onnxMutex_);
     return tcgInfer_->search(cropBgr, topK);
+}
+
+std::vector<Candidate> ModelService::searchFiltered(const cv::Mat &cropBgr,
+                                                    int topK,
+                                                    const std::vector<std::string> &allowedCodes)
+{
+    std::lock_guard<std::mutex> lock(onnxMutex_);
+    return tcgInfer_->searchFiltered(cropBgr, topK, allowedCodes);
 }
 
 void ModelService::buildIndex(const QString &imageDir, const QString &saveDir, int batchSize)

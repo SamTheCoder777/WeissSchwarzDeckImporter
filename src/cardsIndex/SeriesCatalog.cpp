@@ -1,5 +1,8 @@
 #include "SeriesCatalog.h"
 
+#include <QTimer>
+#include "../core/Config.h"
+
 SeriesCatalog::SeriesCatalog(SeriesRepository* repo, QObject* parent)
     : QAbstractListModel(parent), repo_(repo) {
 
@@ -27,6 +30,36 @@ SeriesCatalog::SeriesCatalog(SeriesRepository* repo, QObject* parent)
         emit cardListDownloaded(id);
     });
 
+    connect(repo_,
+            &SeriesRepository::cardListUpdateState,
+            this,
+            [this](const QString &id, bool outdated) {
+                if (outdated)
+                    outdatedIds_.insert(id);
+                else
+                    outdatedIds_.remove(id);
+                const int r = rowForId(id);
+                if (r >= 0) {
+                    rows_[r].updateAvailable = outdated;
+                    touchRow(r);
+                }
+                emit stateChanged();
+            });
+
+    connect(repo_, &SeriesRepository::cardListCheckFinished, this, [this](int) {
+        emit stateChanged();
+    });
+
+    connect(&Config::instance(), &Config::detectLocaleModeChanged, this, [this] {
+        outdatedIds_.clear();
+        reloadFromRepo();
+    });
+
+    QTimer::singleShot(1500, this, [this] {
+        if (repo_)
+            repo_->checkCardListUpdates();
+    });
+
     reloadFromRepo();
 }
 
@@ -36,6 +69,7 @@ void SeriesCatalog::reloadFromRepo() {
         Row r;
         r.id = s.id; r.set = s.set; r.name = s.name; r.hash = s.hash;
         r.hasCardList = s.hasCardList;
+        r.updateAvailable = outdatedIds_.contains(s.id);
         loaded.push_back(r);
     }
     beginResetModel();
@@ -52,7 +86,10 @@ QVariant SeriesCatalog::data(const QModelIndex& idx, int role) const {
     case SetRole:         return r.set;
     case NameRole:        return r.name;
     case HashRole:        return r.hash;
-    case StatusRole:      return r.hasCardList ? (int)Downloaded : (int)NotDownloaded;
+    case StatusRole:
+        if (!r.hasCardList)
+            return (int) NotDownloaded;
+        return r.updateAvailable ? (int) UpdateAvailable : (int) Downloaded;
     case DownloadingRole: return r.downloading;
     case ProgressRole:    return r.progress;
     }

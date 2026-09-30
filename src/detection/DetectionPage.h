@@ -58,6 +58,7 @@ private:
         int         qty = 1;
         int id = -1;
         int rotation = 0;
+        QString filterSummary;
     };
 
     QVector<SelState> sel_;
@@ -80,8 +81,11 @@ private:
     void showSelectionResults(int index);
     void rotateSelectionImage(int index, int rot);
     void confirmCandidate(int candIndex);
+    void confirmCandidateCode(const QString &code);
     void exportDeck();
     QImage handlePasteImage();
+    void runFilteredSearch(const QVariantMap &filters, const QString &summary);
+    void clearFilteredSearch();
+    void redetectSelection(int i);
+    int canvasIndexFor(int selIdx) const;
 };
-
-

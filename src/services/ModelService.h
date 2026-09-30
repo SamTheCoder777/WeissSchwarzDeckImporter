@@ -49,11 +49,14 @@ public:
 
     // faiss index search
     std::vector<Candidate> search(const cv::Mat &cropBgr, int topK);
+    std::vector<Candidate> searchFiltered(const cv::Mat &cropBgr,
+                                          int topK,
+                                          const std::vector<std::string> &allowedCodes);
     // faiss build index
-    Q_INVOKABLE void buildIndex(const QString &imageDir,
-                                const QString &saveDir,
-                                const int batchSize);
+    Q_INVOKABLE
+    void buildIndex(const QString &imageDir, const QString &saveDir, const int batchSize);
     Q_INVOKABLE void cancelIndexBuild();
+    QStringList indexSetCodes();
 signals:
     void loaded(bool ok, const QString &message);
     void loading(bool finished);

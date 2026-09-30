@@ -20,6 +20,10 @@ Config::Config() {
 }
 
 void Config::load() {
+    settings_->beginGroup("Update");
+    dismissedReleaseTag_ = settings_->value("DismissedReleaseTag").toString();
+    settings_->endGroup();
+
     settings_->beginGroup("Path");
     curModelPath_ = settings_->value("ModelPath").toString();
     curYoloModelPath_ = settings_->value("YoloModelPath").toString();
@@ -30,10 +34,18 @@ void Config::load() {
     settings_->beginGroup("Dataset");
     cardListEtag_ = settings_->value("CardListEtag").value<QMap<QString, QString>>();
     jpSeriesListEtag_ = settings_->value("jpSeriesListEtag").toString();
+    enCardListEtag_ = settings_->value("enCardListEtag").value<QMap<QString, QString>>();
+    enSeriesListEtag_ = settings_->value("enSeriesListEtag").toString();
     settings_->endGroup();
 
     settings_->beginGroup("Index");
     disableNameCheck_ = settings_->value("DisableNameCheck").toBool();
+    settings_->endGroup();
+
+    settings_->beginGroup("Locale");
+    curDetectLocaleMode_ = static_cast<Config::DetectLocaleMode>(
+        settings_->value("CurDetectLocaleMode", static_cast<int>(Config::DetectLocaleMode::JP))
+            .toInt());
     settings_->endGroup();
 
     settings_->beginGroup("MissingCards");
@@ -47,6 +59,10 @@ void Config::load() {
 }
 
 void Config::save() {
+    settings_->beginGroup("Update");
+    settings_->setValue("DismissedReleaseTag", dismissedReleaseTag_);
+    settings_->endGroup();
+
     settings_->beginGroup("Path");
     settings_->setValue("ModelPath", curModelPath_);
     settings_->setValue("YoloModelPath", curYoloModelPath_);
@@ -56,10 +72,16 @@ void Config::save() {
     settings_->beginGroup("Dataset");
     settings_->setValue("CardListEtag", QVariant::fromValue(cardListEtag_));
     settings_->setValue("jpSeriesListEtag", jpSeriesListEtag_);
+    settings_->setValue("enCardListEtag", QVariant::fromValue(enCardListEtag_));
+    settings_->setValue("enSeriesListEtag", enSeriesListEtag_);
     settings_->endGroup();
 
     settings_->beginGroup("Index");
     settings_->setValue("DisableNameCheck", disableNameCheck_);
+    settings_->endGroup();
+
+    settings_->beginGroup("Locale");
+    settings_->setValue("CurDetectLocaleMode", static_cast<int>(curDetectLocaleMode_));
     settings_->endGroup();
 
     settings_->beginGroup("MissingCards");
@@ -74,6 +96,12 @@ void Config::save() {
 
     qDebug() << "Config saved to:" << settings_->fileName();
     qDebug() << "IndexId set to:" << curIndexId_;
+}
+
+void Config::setDismissedReleaseTag(const QString &tag)
+{
+    dismissedReleaseTag_ = tag;
+    save();
 }
 
 void Config::setCurModelPath(const QString &curModelPath)
@@ -99,19 +127,48 @@ void Config::setPreferredLocale(const QString &loc)
     save();
 }
 
+void Config::setCurDetectLocaleMode(DetectLocaleMode newLocaleMode)
+{
+    if (curDetectLocaleMode_ == newLocaleMode)
+        return;
+    curDetectLocaleMode_ = newLocaleMode;
+    save();
+    emit detectLocaleModeChanged();
+}
+
 void Config::setJpSeriestListEtag(const QString &etag) {
     jpSeriesListEtag_ = etag;
     save();
 }
 
+void Config::setEnSeriestListEtag(const QString &etag)
+{
+    enSeriesListEtag_ = etag;
+    save();
+}
+
+void Config::setSeriesListEtag(DetectLocaleMode m, const QString &etag)
+{
+    (m == DetectLocaleMode::JP ? jpSeriesListEtag_ : enSeriesListEtag_) = etag;
+    save();
+}
+
 void Config::setCardListEtag(const QString &id, const QString &etag) {
-    cardListEtag_[id] = etag;
+    curDetectLocaleMode_ == DetectLocaleMode::JP ? (cardListEtag_[id] = etag)
+                                                 : (enCardListEtag_[id] = etag);
     save();
 }
 
 void Config::clearCardListEtags()
 {
     cardListEtag_.clear();
+    enCardListEtag_.clear();
+    save();
+}
+
+void Config::clearCardListEtags(DetectLocaleMode m)
+{
+    (m == DetectLocaleMode::JP ? cardListEtag_ : enCardListEtag_).clear();
     save();
 }
 
