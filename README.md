@@ -40,6 +40,8 @@ pulls in card details and artwork automatically from [encoredecks](https://www.e
 
 Currently supports **English** and **Japanese** sets
 
+**Join our discord for bug reports, feature requests or any generic help with the app: https://discord.gg/vZGjQ2N8D6**
+
 ---
 
 ## Features
