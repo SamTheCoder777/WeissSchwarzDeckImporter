@@ -13,7 +13,7 @@
 
 <br>
 
-[Quickstart](QUICKSTART.md) &nbsp;•&nbsp; [Download](#download) &nbsp;•&nbsp; [Features](#features) &nbsp;•&nbsp; [How it works](#how-it-works) &nbsp;•&nbsp; [FAQ](#faq)
+[Quickstart](QUICKSTART.md) &nbsp;•&nbsp; [Download](#download) &nbsp;•&nbsp; [Features](#features) &nbsp;•&nbsp; [How it works](#how-it-works) &nbsp;•&nbsp; [FAQ](#faq) [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?&logo=discord&logoColor=white)](https://discord.gg/vZGjQ2N8D6)
 
 <br>
 
