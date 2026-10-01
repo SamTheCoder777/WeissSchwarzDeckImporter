@@ -10,10 +10,11 @@
 [![Qt](https://img.shields.io/badge/Qt-2CDE85?logo=Qt&logoColor=fff)](#)
 [![License](https://img.shields.io/github/license/SamTheCoder777/WeissSchwarzDeckImporter)](#)
 [![Version](https://img.shields.io/github/v/release/SamTheCoder777/WeissSchwarzDeckImporter)](https://github.com/SamTheCoder777/WeissSchwarzDeckImporter/releases/latest)
+[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?&logo=discord&logoColor=white)](https://discord.gg/vZGjQ2N8D6)
 
 <br>
 
-[Quickstart](QUICKSTART.md) &nbsp;•&nbsp; [Download](#download) &nbsp;•&nbsp; [Features](#features) &nbsp;•&nbsp; [How it works](#how-it-works) &nbsp;•&nbsp; [FAQ](#faq) [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?&logo=discord&logoColor=white)](https://discord.gg/vZGjQ2N8D6)
+[Quickstart](QUICKSTART.md) &nbsp;•&nbsp; [Download](#download) &nbsp;•&nbsp; [Features](#features) &nbsp;•&nbsp; [How it works](#how-it-works) &nbsp;•&nbsp; [FAQ](#faq) 
 
 <br>
 
