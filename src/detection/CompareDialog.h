@@ -29,8 +29,10 @@ public:
     int confirmedIndex() const { return confirmed_; }
 
 protected:
-    void keyPressEvent(QKeyEvent*) override;      // Left/Right/Enter/Esc
-    void resizeEvent(QResizeEvent*) override;     // rescale images to fit
+    void keyPressEvent(QKeyEvent *) override;  // Left/Right/Enter/Esc
+    void resizeEvent(QResizeEvent *) override; // rescale images to fit
+    void showEvent(QShowEvent *e)
+        override; // For bugfix: https://github.com/SamTheCoder777/WeissSchwarzDeckImporter/issues/6
 
 private:
     void showCandidate(int i);
