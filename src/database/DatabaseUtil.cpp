@@ -433,6 +433,44 @@ void DatabaseUtil::ensureCardData(const QString &cardCode)
     });
 }
 
+void DatabaseUtil::fetchOfficialImageUrl(const QString &cardCode)
+{
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(
+            this, [this, cardCode] { fetchOfficialImageUrl(cardCode); }, Qt::QueuedConnection);
+        return;
+    }
+
+    const bool en = isEnMode();
+    const QUrl url(en ? OfficialFallback::enPageUrlFromCardcode(cardCode)
+                      : OfficialFallback::dataUrlFromCardcode(cardCode));
+
+    QNetworkRequest req(url);
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::NoLessSafeRedirectPolicy);
+    req.setHeader(QNetworkRequest::UserAgentHeader, "TCGDeckBuilder/1.0");
+    QNetworkReply *reply = nam_.get(req);
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, cardCode, en] {
+        reply->deleteLater();
+
+        if (reply->error() != QNetworkReply::NoError) {
+            qDebug() << "[fetchOfficialImageUrl] request failed:" << cardCode
+                     << reply->errorString();
+            emit officialImageUrlReady(cardCode, QString());
+            return;
+        }
+
+        const QByteArray body = reply->readAll();
+        const QJsonObject shaped = en ? OfficialFallback::reshapeEnOfficialHtml(body, cardCode)
+                                      : parseJpOfficial(body, cardCode);
+
+        const QString imgUrl = shaped.isEmpty() ? QString()
+                                                : OfficialFallback::resolveImageUrl(shaped);
+        qDebug() << "[fetchOfficialImageUrl]" << cardCode << "->" << imgUrl;
+        emit officialImageUrlReady(cardCode, imgUrl);
+    });
+}
 void DatabaseUtil::ensureMissingTable()
 {
     QSqlDatabase db = getCardDb();

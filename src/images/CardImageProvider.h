@@ -23,10 +23,18 @@ private slots:
     void onFinished();
 
 private:
-    QSize          requestedSize_;
-    QImage         image_;
-    QNetworkReply* reply_ = nullptr;
-    QString        cachePath_;
+    QSize requestedSize_;
+    QImage image_;
+    QNetworkReply *reply_ = nullptr;
+    QString cachePath_;
+    QString cardCode_;
+    QString aliasPath_;
+    DatabaseUtil *dbUtil_ = nullptr;
+    bool triedOfficial_ = false;
+    void tryOfficialOrFinish();
+    void onFinishedOfficial();
+
+    void cancel() override;
 };
 
 class CardImageProvider : public QQuickAsyncImageProvider {
