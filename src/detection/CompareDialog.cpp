@@ -136,18 +136,21 @@ void CompareDialog::showCandidate(int i) {
                               .arg(cur_ + 1).arg(cands_.size()));
     counterLabel_->setText(QString("Candidate %1 of %2").arg(cur_ + 1).arg(cands_.size()));
 
-    QString url = dbUtil_->imageUrlFor(QString::fromStdString(c.card_id));
+    const QString code = QString::fromStdString(c.card_id);
+    const QString url = dbUtil_->imageUrlFor(code);
 
     curCandImage_ = QImage();
     if (url.isEmpty()) {
         showLoading(true);
-        dbUtil_->ensureCardData(QString::fromStdString(c.card_id));
+        dbUtil_->ensureCardData(code);
         return;
     }
 
-    const QString cachePath = CardImageProvider::cacheFilePath(url);
-    if (QFile::exists(cachePath)) {
-        QImage cached(cachePath);
+    const QString aliasPath = CardImageProvider::cacheFilePath("fallback:" + url);
+    for (const QString &p : {aliasPath, CardImageProvider::cacheFilePath(url)}) {
+        if (!QFile::exists(p))
+            continue;
+        QImage cached(p);
         if (!cached.isNull()) {
             curCandImage_ = cached;
             showLoading(false);
@@ -157,38 +160,96 @@ void CompareDialog::showCandidate(int i) {
     }
 
     showLoading(true);
-    const int requested = cur_;
-    qDebug() << "[CompareDialog] api call to: " << url;
-    QNetworkRequest req(url);
+    downloadImage(url, code, cur_, aliasPath, false);
+}
+
+void CompareDialog::downloadImage(
+    const QString &url, const QString &code, int requested, const QString &aliasPath, bool official)
+{
+    qDebug() << "[CompareDialog]" << (official ? "official" : "primary") << "call to:" << url;
+
+    QNetworkRequest req{QUrl(url)};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
     req.setHeader(QNetworkRequest::UserAgentHeader, "WSDeckImporter/1.0");
 
     QNetworkReply *r = net_.get(req);
-    connect(r, &QNetworkReply::finished, this, [this, r, requested, cachePath]{
+    connect(r, &QNetworkReply::finished, this, [this, r, url, code, requested, aliasPath, official] {
         r->deleteLater();
-        if (requested != cur_) return;
-        if (r->error() != QNetworkReply::NoError) {
-            showLoading(false);
-            candLabel_->setText("(image failed)");
-            return;
-        }
-        const QByteArray bytes = r->readAll();
-        curCandImage_.loadFromData(bytes);
 
-        if (!curCandImage_.loadFromData(bytes)) {
-            showLoading(false);
-            candLabel_->setText("(bad image data)");
-            return;
+        QImage img;
+        QByteArray bytes;
+        bool ok = (r->error() == QNetworkReply::NoError);
+        if (ok) {
+            bytes = r->readAll();
+            ok = img.loadFromData(bytes);
         }
 
-        QFile f(cachePath);
-        if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
-            f.write(bytes);
+        if (ok) {
+            QStringList paths{CardImageProvider::cacheFilePath(url)};
+            if (official)
+                paths << aliasPath;
+            for (const QString &p : paths) {
+                QFile f(p);
+                if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+                    f.write(bytes);
+            }
+            if (requested != cur_)
+                return;
+            curCandImage_ = img;
+            showLoading(false);
+            rescale();
+            return;
+        }
+
+        if (requested != cur_)
+            return;
+
+        if (!official) {
+            tryOfficial(code, requested, aliasPath);
+            return;
+        }
 
         showLoading(false);
-        rescale();
+        candLabel_->setText("(image failed)");
     });
+}
+
+void CompareDialog::tryOfficial(const QString &code, int requested, const QString &aliasPath)
+{
+    auto conn = std::make_shared<QMetaObject::Connection>();
+    *conn = connect(dbUtil_,
+                    &DatabaseUtil::officialImageUrlReady,
+                    this,
+                    [this, conn, code, requested, aliasPath](const QString &c, const QString &u) {
+                        if (c != code)
+                            return;
+                        QObject::disconnect(*conn);
+
+                        if (requested != cur_)
+                            return;
+                        if (u.isEmpty()) {
+                            showLoading(false);
+                            candLabel_->setText("(image failed)");
+                            return;
+                        }
+
+                        const QString officialPath = CardImageProvider::cacheFilePath(u);
+                        if (QFile::exists(officialPath)) {
+                            QImage cached(officialPath);
+                            if (!cached.isNull()) {
+                                if (!QFile::exists(aliasPath))
+                                    QFile::copy(officialPath, aliasPath);
+                                curCandImage_ = cached;
+                                showLoading(false);
+                                rescale();
+                                return;
+                            }
+                        }
+                        downloadImage(u, code, requested, aliasPath, true);
+                    });
+
+    dbUtil_->fetchOfficialImageUrl(code);
 }
 
 void CompareDialog::rescale() {
