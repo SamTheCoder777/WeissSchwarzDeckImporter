@@ -500,7 +500,19 @@ void ImageCanvas::keyPressEvent(QKeyEvent* e) {
         polyInProgress_.clear(); update();
         break;
     case Qt::Key_Backspace: case Qt::Key_Delete:
-        undo();
+        if (!polyInProgress_.isEmpty()) {
+            polyInProgress_.removeLast();
+            update();
+            break;
+        }
+        if (highlight_ < 0 || highlight_ >= sel_.size())
+            break;
+        undoSnapshot();
+        sel_.remove(highlight_);
+        highlight_ = -1;
+        dragSel_ = dragVert_ = -1;
+        update();
+        emit selectionsChanged();
         break;
     default:
         QWidget::keyPressEvent(e);
