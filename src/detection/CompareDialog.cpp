@@ -234,3 +234,9 @@ void CompareDialog::keyPressEvent(QKeyEvent* e) {
     }
     QDialog::keyPressEvent(e);
 }
+
+void CompareDialog::showEvent(QShowEvent *e)
+{
+    QDialog::showEvent(e);
+    rescale();
+}
