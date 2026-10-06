@@ -78,13 +78,39 @@ static bool buildAdvancedWhere(const QVariantMap &f, QString &where, QVariantLis
         if (v.compare("none", Qt::CaseInsensitive) == 0) {
             conds << "COALESCE(json_array_length(json_extract(data,'$.trigger')), 0) = 0";
         } else {
-            conds << "UPPER(json_extract(data,'$.trigger')) LIKE ? ESCAPE '\\'";
-            binds << likeContains(v.toUpper());
+            static const QHash<QString, QStringList> aliases = {
+                {"COMEBACK", {"COMEBACK", "SALVAGE"}},
+                {"GATE", {"GATE", "PANTS"}},
+                {"POOL", {"POOL", "BAG"}},
+                {"RETURN", {"RETURN", "BOUNCE"}},
+                {"TREASURE", {"TREASURE", "BAR"}},
+
+                {"CHOICE", {"CHOICE"}},
+                {"DRAW", {"DRAW"}},
+                {"BOOK", {"BOOK"}},
+                {"FOCUS", {"FOCUS"}},
+                {"SHOT", {"SHOT"}},
+                {"SOUL", {"SOUL"}},
+                {"STANDBY", {"STANDBY"}},
+            };
+            const QString key = v.toUpper();
+            const QStringList terms = aliases.value(key, QStringList{key});
+            QStringList ors;
+            for (const QString &t : terms) {
+                ors << "UPPER(json_extract(data,'$.trigger')) LIKE ? ESCAPE '\\'";
+                binds << likeContains(t);
+            }
+            conds << "(" + ors.join(" OR ") + ")";
         }
     }
-    if (const QString v = str("cardType"); !v.isEmpty()) {
-        conds << "json_extract(data,'$.cardtype') = ?";
-        binds << v;
+    const QStringList types = f.value("cardType").toStringList();
+    if (!types.isEmpty()) {
+        QStringList ph;
+        for (const QString &t : types) {
+            ph << "?";
+            binds << t;
+        }
+        conds << "json_extract(data,'$.cardtype') IN (" + ph.join(",") + ")";
     }
 
     const QStringList colors = f.value("colors").toStringList();
@@ -679,9 +705,38 @@ QStringList DatabaseUtil::distinctTriggers(const QStringList &sets) const
 {
     QVariantList binds;
     const QString cond = setCondition(sets, binds);
-    return distinctValues("SELECT DISTINCT UPPER(j.value) FROM cards, "
-                          "json_each(json_extract(cards.data,'$.trigger')) AS j "
-                          "WHERE "
-                              + cond + " ORDER BY 1",
-                          binds);
+    QStringList raw = distinctValues("SELECT DISTINCT UPPER(j.value) FROM cards, "
+                                     "json_each(json_extract(cards.data,'$.trigger')) AS j "
+                                     "WHERE "
+                                         + cond + " ORDER BY 1",
+                                     binds);
+
+    static const QHash<QString, QString> canon = {
+        {"CHOICE", "CHOICE"},
+        {"COMEBACK", "COMEBACK"},
+        {"SALVAGE", "COMEBACK"},
+        {"DRAW", "DRAW"},
+        {"BOOK", "BOOK"},
+        {"FOCUS", "FOCUS"},
+        {"GATE", "GATE"},
+        {"PANTS", "GATE"},
+        {"POOL", "POOL"},
+        {"BAG", "POOL"},
+        {"RETURN", "RETURN"},
+        {"BOUNCE", "RETURN"},
+        {"SHOT", "SHOT"},
+        {"SOUL", "SOUL"},
+        {"STANDBY", "STANDBY"},
+        {"TREASURE", "TREASURE"},
+        {"BAR", "TREASURE"},
+    };
+
+    QStringList out;
+    for (const QString &t : raw) {
+        const QString c = canon.value(t, t);
+        if (!out.contains(c))
+            out.append(c);
+    }
+    out.sort();
+    return out;
 }

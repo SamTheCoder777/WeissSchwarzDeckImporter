@@ -1100,7 +1100,7 @@ Rectangle {
 
         property int matchCount: 0
         property var colors: []
-        property string cardType: ""
+        property var selectedTypes: []
         property var traitModel: ["Any"]
         property var triggerModel: ["Any", "None"]
         property var traitList: []
@@ -1172,7 +1172,7 @@ Rectangle {
                 trait: traitValue(),
                 rarity: fRarity.text,
                 trigger: triggerValue(),
-                cardType: cardType,
+                cardType: advSearchPopup.selectedTypes,
                 colors: colors,
                 levelMin: fLevel.minText,
                 levelMax: fLevel.maxText,
@@ -1208,8 +1208,13 @@ Rectangle {
                 p.push("\u201C" + fName.text.trim() + "\u201D");
             if (fCode.text.trim())
                 p.push(fCode.text.trim().toUpperCase());
-            if (cardType)
-                p.push(typeChoices.find(t => t.code === cardType).label);
+            if (selectedTypes.length > 0) {
+                var labels = selectedTypes.map(code => {
+                    var t = typeChoices.find(tc => tc.code === code);
+                    return t ? t.label : code;
+                });
+                p.push(labels.join(", "));
+            }
             if (colors.length)
                 p.push(colors.map(c => c.charAt(0) + c.slice(1).toLowerCase()).join("/"));
             [rangeText("Lv", fLevel.minText, fLevel.maxText), rangeText("Cost", fCost.minText, fCost.maxText), rangeText("Power", fPower.minText, fPower.maxText), rangeText("Soul", fSoul.minText, fSoul.maxText)].forEach(s => {
@@ -1258,7 +1263,7 @@ Rectangle {
             fSoul.minText = "";
             fSoul.maxText = "";
             colors = [];
-            cardType = "";
+            selectedTypes = [];
             recount();
         }
 
@@ -1365,7 +1370,7 @@ Rectangle {
                             delegate: Rectangle {
                                 id: typeChip
                                 required property var modelData
-                                readonly property bool on: advSearchPopup.cardType === modelData.code
+                                readonly property bool on: advSearchPopup.selectedTypes.indexOf(modelData.code) >= 0
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 28
                                 radius: 6
@@ -1382,7 +1387,13 @@ Rectangle {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        advSearchPopup.cardType = typeChip.modelData.code;
+                                        var arr = advSearchPopup.selectedTypes.slice();
+                                        var i = arr.indexOf(typeChip.modelData.code);
+                                        if (i >= 0)
+                                            arr.splice(i, 1);
+                                        else
+                                            arr.push(typeChip.modelData.code);
+                                        advSearchPopup.selectedTypes = arr;
                                         advSearchPopup.scheduleRecount();
                                     }
                                 }
