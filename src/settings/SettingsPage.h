@@ -26,6 +26,7 @@ public:
                           QWidget *parent = nullptr);
 
     bool appUpdateAvailable() const { return appUpdateAvailable_; }
+    void updateModelPaths();
 
 signals:
     void appUpdateStateChanged(bool available);

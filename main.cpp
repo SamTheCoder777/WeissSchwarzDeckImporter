@@ -261,6 +261,21 @@ int main(int argc, char** argv) {
         QPushButton#actionGhost:pressed {
             background: #111315;
         }
+
+        /* --- Setup dialog --- */
+        QLabel#modelDesc { color: #9aa0a6; font-size: 12px; }
+        QLabel#setupSub  { color: #9aa0a6; font-size: 14px; }
+        
+        QLabel#status {
+            padding: 3px 10px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        QLabel#status[state="missing"]     { background: #3a2f1a; color: #f0b44c; }
+        QLabel#status[state="downloading"] { background: #1a2d44; color: #5aa9ff; }
+        QLabel#status[state="ready"]       { background: #17352a; color: #4cd08a; }
+        QLabel#status[state="error"]       { background: #3d1f23; color: #ff6b6b; }
     )");
 
     MainWindow w;
