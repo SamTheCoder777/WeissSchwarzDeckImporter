@@ -19,6 +19,7 @@ public:
     Q_INVOKABLE QString imageUrlFor(const QString &cardCode) const;
     Q_INVOKABLE QVariantMap cardDataFor(const QString &cardCode) const;
     Q_INVOKABLE void ensureCardData(const QString &cardCode);
+    void fetchOfficialImageUrl(const QString &cardCode);
     void purgeMissingCards();
     void cleanupExpiredMissing();
 
@@ -37,6 +38,7 @@ signals:
     void cardReady(const QString& cardCode);
     void cardFetchFailed(const QString& cardCode, const QString& reason);
     void missingCardsPurged(int count);
+    void officialImageUrlReady(const QString &cardCode, const QString &url);
 
 private:
     struct FetchState {

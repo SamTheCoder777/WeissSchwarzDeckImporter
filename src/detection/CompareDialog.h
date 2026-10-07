@@ -38,6 +38,12 @@ private:
     void showCandidate(int i);
     void rescale();
     void showLoading(bool on);
+    void downloadImage(const QString &url,
+                       const QString &code,
+                       int requested,
+                       const QString &aliasPath,
+                       bool official);
+    void tryOfficial(const QString &code, int requested, const QString &aliasPath);
 
     QImage crop_;
     std::vector<Candidate> cands_;
