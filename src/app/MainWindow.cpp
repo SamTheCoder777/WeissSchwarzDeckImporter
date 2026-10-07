@@ -207,7 +207,7 @@ void MainWindow::checkFirstLaunch()
     modelNotDownloaded[0] = Config::instance().getCurModelPath().isEmpty();
     modelNotDownloaded[1] = Config::instance().getCurYoloModelPath().isEmpty();
 
-    if (modelNotDownloaded.count(true) > 0 || !QFile::exists(Config::instance().getCurModelPath())) {
+    if (modelNotDownloaded.count(true) > 0) {
         showModelSetupDialog(this, modelNotDownloaded);
     }
 }
