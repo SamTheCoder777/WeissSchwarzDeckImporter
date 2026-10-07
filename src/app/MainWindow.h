@@ -2,11 +2,15 @@
 #pragma once
 
 #include <QFutureWatcher>
+#include <QLabel>
 #include <QMainWindow>
+#include <QNetworkAccessManager>
+#include <QPointer>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSqlDatabase>
 #include <QVector>
+#include <functional>
 #include <memory>
 #include <opencv2/core.hpp>
 
@@ -30,6 +34,13 @@ class QSortFilterProxyModel;
 
 QString toDeckCode(const std::string &cardId); // defined in Models.cpp
 
+// For onetime model setup
+struct ModelRow
+{
+    QProgressBar *bar;
+    QLabel *status;
+};
+
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -39,6 +50,21 @@ public:
 private:
     void buildSidebar();
     void updateSettingsDot();
+    void checkFirstLaunch();
+    void showModelSetupDialog(QWidget *parent, QBitArray modelNotDownloaded);
+    void downloadModel(ModelRow idRow,
+                       ModelRow detRow,
+                       QDialog *dlg,
+                       QBitArray modelNotDownloaded,
+                       std::function<void()> onFail,
+                       std::function<void()> onDone);
+    void downloadFile(const QUrl &url,
+                      const QString &destPath,
+                      ModelRow row,
+                      QDialog *dlg,
+                      std::shared_ptr<bool> failed,
+                      std::function<void()> onFail,
+                      std::function<void()> onSuccess);
 
     // shared services (owned here)
     SeriesRepository *seriesRepo_ = nullptr;
@@ -66,4 +92,6 @@ private:
     bool seriesUpdateAvailable_ = false;
     bool appUpdateAvailable_ = false;
     bool indexNotifSilent_ = false;
+
+    QNetworkAccessManager nam_;
 };

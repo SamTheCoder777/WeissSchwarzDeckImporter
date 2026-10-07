@@ -1001,3 +1001,15 @@ void SettingsPage::setAppUpdate(bool available, const QString &tag, const QDateT
         emit appUpdateStateChanged(available);
     }
 }
+
+void SettingsPage::updateModelPaths()
+{
+    bool modelPathLoaded = !Config::instance().getCurModelPath().isNull()
+                           && !Config::instance().getCurModelPath().isEmpty();
+    onnxEdit_->setText(modelPathLoaded ? Config::instance().getCurModelPath() : "");
+    onnxEdit_->setReadOnly(true);
+    bool yoloModelPathLoaded = !Config::instance().getCurYoloModelPath().isNull()
+                               && !Config::instance().getCurYoloModelPath().isEmpty();
+    yoloEdit_->setText(yoloModelPathLoaded ? Config::instance().getCurYoloModelPath() : "");
+    yoloEdit_->setReadOnly(true);
+}
