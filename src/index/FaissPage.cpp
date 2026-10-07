@@ -48,11 +48,11 @@ void FaissPage::buildUi()
             }catch(const std::exception& e){
                 QMessageBox::critical(this, "Error Loading Model", QString::fromStdString(e.what()));
             }
-        } else if (!models_->isSilent())
+        } /*else if (!models_->isSilent())
             QMessageBox::information(
                 this,
                 "Index selected",
-                "Index set. Choose the ONNX model in Settings, then press Load.");
+                "Index set. Choose the ONNX model in Settings, then press Load.");*/
 
         models_->setSilent(false);
     });
