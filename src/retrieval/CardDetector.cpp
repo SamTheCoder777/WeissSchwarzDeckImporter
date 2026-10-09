@@ -24,6 +24,15 @@ CardDetector::CardDetector(const std::string& onnx_path, int input_size,
         outNames_.emplace_back(session_->GetOutputNameAllocated(i, alloc).get());
     for (auto& s : inNames_)  inPtrs_.push_back(s.c_str());
     for (auto& s : outNames_) outPtrs_.push_back(s.c_str());
+
+    // override when v3 loaded
+    Ort::TypeInfo ti = session_->GetInputTypeInfo(0);
+    auto shp = ti.GetTensorTypeAndShapeInfo().GetShape();
+    if (shp.size() == 4 && shp[2] > 0 && shp[3] > 0) {
+        if (shp[2] != shp[3])
+            throw std::runtime_error("non-square model input not supported");
+        S_ = (int) shp[2];
+    }
 }
 
 // Resize preserving aspect into SxS, padding with 114 grey (YOLO convention).
