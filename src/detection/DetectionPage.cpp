@@ -591,28 +591,57 @@ cv::Mat DetectionPage::cropForSelection(int index) const {
 
     if (poly.size() == 4) {
         std::vector<cv::Point2f> p;
-        for (const QPointF& q : poly) p.emplace_back((float)q.x(), (float)q.y());
-        cv::Point2f c(0.f, 0.f);
-        for (auto& q : p) c += q;
-        c *= 1.0f / (float)p.size();
+        for (const QPointF &q : poly)
+            p.emplace_back((float) q.x(), (float) q.y());
+
         std::vector<cv::Point2f> src(4);
-        for (auto& q : p) {
-            if      (q.x <  c.x && q.y <  c.y) src[0] = q;
-            else if (q.x >= c.x && q.y <  c.y) src[1] = q;
-            else if (q.x >= c.x && q.y >= c.y) src[2] = q;
-            else                               src[3] = q;
+        {
+            int tl = 0, br = 0, tr = 0, bl = 0;
+            float sMin = 1e30f, sMax = -1e30f, dMin = 1e30f, dMax = -1e30f;
+            for (int i = 0; i < 4; ++i) {
+                const float s = p[i].x + p[i].y;
+                const float d = p[i].x - p[i].y;
+                if (s < sMin) {
+                    sMin = s;
+                    tl = i;
+                }
+                if (s > sMax) {
+                    sMax = s;
+                    br = i;
+                }
+                if (d > dMax) {
+                    dMax = d;
+                    tr = i;
+                }
+                if (d < dMin) {
+                    dMin = d;
+                    bl = i;
+                }
+            }
+            src[0] = p[tl];
+            src[1] = p[tr];
+            src[2] = p[br];
+            src[3] = p[bl];
         }
-        float wTop = (float)cv::norm(src[1] - src[0]), wBot = (float)cv::norm(src[2] - src[3]);
-        float hL   = (float)cv::norm(src[3] - src[0]), hR   = (float)cv::norm(src[2] - src[1]);
-        int W = (int)std::lround(std::max(wTop, wBot));
-        int H = (int)std::lround(std::max(hL, hR));
+
+        float wTop = (float) cv::norm(src[1] - src[0]), wBot = (float) cv::norm(src[2] - src[3]);
+        float hL = (float) cv::norm(src[3] - src[0]), hR = (float) cv::norm(src[2] - src[1]);
+        int W = (int) std::lround(std::max(wTop, wBot));
+        int H = (int) std::lround(std::max(hL, hR));
         if (W > 8 && H > 8) {
-            std::vector<cv::Point2f> dst{{0.f,0.f}, {(float)W-1,0.f},
-                                         {(float)W-1,(float)H-1}, {0.f,(float)H-1}};
+            std::vector<cv::Point2f> dst{{0.f, 0.f},
+                                         {(float) W - 1, 0.f},
+                                         {(float) W - 1, (float) H - 1},
+                                         {0.f, (float) H - 1}};
             cv::Mat M = cv::getPerspectiveTransform(src, dst);
             cv::Mat warped;
-            cv::warpPerspective(sourceBgr_, warped, M, cv::Size(W, H),
-                                cv::INTER_CUBIC, cv::BORDER_CONSTANT, cv::Scalar(114,114,114));
+            cv::warpPerspective(sourceBgr_,
+                                warped,
+                                M,
+                                cv::Size(W, H),
+                                cv::INTER_CUBIC,
+                                cv::BORDER_CONSTANT,
+                                cv::Scalar(114, 114, 114));
             applyRotation(warped);
             return warped;
         }
