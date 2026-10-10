@@ -3,8 +3,11 @@
 Welcome! This guide walks you through setting up the app, preparing set/card data, and detecting a decklist from an image.
 
 ---
+<details>
+<summary style="font-size: 20px;"><b>Pre-v1.0.1</b></summary>
+<br>
 
-## 1. First-Time Setup
+## 1. First-Time Setup (LOWER than v1.0.1)
 
 1. **Download** the latest release zip from the [Releases page](https://github.com/SamTheCoder777/WeissSchwarzDeckImporter/releases) and unzip it to a folder of your choice.
 
@@ -28,7 +31,28 @@ Once the models are loaded, setup is complete and you won't need to repeat these
 > [!NOTE]
 > You will get an error saying "The selected index is missing...". This is normal because we have not downloaded an index yet.
 
+</details>
+
+## 1. First-Time Setup (From v1.0.0)
+
+1. **Download** the latest release zip from the [Releases page](https://github.com/SamTheCoder777/WeissSchwarzDeckImporter/releases) and unzip it to a folder of your choice.
+
+2. Locate **`vc_redist.x64.exe`** on the unzipped folder and run it to download the required [Visual C++ runtime libraries](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170)
+
+4. Locate **`WSDeckImporter.exe`** inside the unzipped folder and launch it.
+
+5. You will be greeted with model setup page. Click **Download & setup** and wait for it to finish downloading.
+
+   ![Model Setup Page](docs/modelSetupStart.png)
+
+6. You are done when you see this page. Click **Start detecting**.
+
+   ![Model Setup Done](docs/modelSetupDone.png)
+
+Once this is done, setup is complete and you won't need to repeat these steps again.
+
 ---
+
 
 ## [Only if detecting ENGLISH set] Language set up
 
@@ -52,6 +76,8 @@ Before importing a decklist, you need to download data for the specific set you'
 3. Download the result and click **Use**.
 
    ![Download and Use button](docs/quickFaissUse.png)
+
+---
 
 ### Card Index Data
 
