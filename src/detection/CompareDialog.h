@@ -1,8 +1,3 @@
-// CompareDialog.h — big side-by-side compare + confirm window.
-//
-// Left: the user's crop (large). Right: one candidate at a time (large master art),
-// with Left/Right arrows to cycle candidates and Enter to confirm the shown one.
-// Returns via confirmedIndex(): the chosen candidate index, or -1 if cancelled.
 #pragma once
 
 #include <QDialog>
@@ -10,10 +5,12 @@
 #include <QProgressBar>
 #include <QSqlDatabase>
 #include <QStackedWidget>
+#include <QStringList>
 #include <QtNetwork>
+#include <vector>
+
 #include "../database/DatabaseUtil.h"
 #include "../models/tcg_infer.h"
-#include <vector>
 
 class QLabel;
 class QPushButton;
@@ -38,17 +35,14 @@ private:
     void showCandidate(int i);
     void rescale();
     void showLoading(bool on);
-    void downloadImage(const QString &url,
-                       const QString &code,
-                       int requested,
-                       const QString &aliasPath,
-                       bool official);
-    void tryOfficial(const QString &code, int requested, const QString &aliasPath);
+
+    void tryNextImage(const QStringList &urls, int index, quint64 generation);
 
     QImage crop_;
     std::vector<Candidate> cands_;
     int cur_ = 0;
     int confirmed_ = -1;
+    quint64 imageGeneration_ = 0;
 
     QLabel* cropLabel_;
     QLabel* candLabel_;
@@ -60,7 +54,6 @@ private:
 
     QSqlDatabase db_;
     QNetworkAccessManager net_;
-    QString imageUrlFor(QString cardId);
     DatabaseUtil* dbUtil_ = nullptr;
 
     QProgressBar *busyBar_ = nullptr;

@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include "../browser/CardBrowserDialog.h"
 #include "../cardsIndex/CardsPage.h"
 #include "../cardsIndex/SeriesCatalog.h"
 #include "../cardsIndex/SeriesRepository.h"
@@ -84,9 +85,17 @@ MainWindow::MainWindow(QWidget *parent)
     selModel_ = new SelectionModel(this);
     bridge_ = new UiBridge(this);
 
+    cardBrowserDialog_ = new CardBrowserDialog(this);
+
     // pages
-    detection_
-        = new DetectionPage(models_, dbUtil_, selModel_, bridge_, catalog_, installedProxy_, this);
+    detection_ = new DetectionPage(models_,
+                                   dbUtil_,
+                                   selModel_,
+                                   bridge_,
+                                   catalog_,
+                                   installedProxy_,
+                                   cardBrowserDialog_,
+                                   this);
     settings_ = new SettingsPage(models_, seriesRepo_, catalog_, dbUtil_, this);
     faiss_ = new FaissPage(models_, catalog_, this);
     cards_ = new CardsPage(seriesCatalog_, this);

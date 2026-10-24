@@ -1,21 +1,27 @@
 #include "DetectionPage.h"
-#include "ImageCanvas.h"
-#include "CompareDialog.h"
-#include "../viewmodels/Models.h"
-#include "../viewmodels/UiBridge.h"
-#include "../services/ModelService.h"
-#include "../index/IndexCatalog.h"
-#include "../database/DatabaseUtil.h"
-#include "../images/CardImageProvider.h"
 
-#include <QtWidgets>
-#include <QQuickWidget>
+#include <QApplication>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQuickWidget>
 #include <QShortcut>
+#include <QWebEnginePage>
+#include <QWebEngineProfile>
+#include <QWebEngineView>
 #include <QtConcurrent>
-#include <opencv2/imgproc.hpp>
+#include <QtWidgets>
 #include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
+
+#include "../browser/CardBrowserDialog.h"
+#include "../database/DatabaseUtil.h"
+#include "../images/CardImageProvider.h"
+#include "../index/IndexCatalog.h"
+#include "../services/ModelService.h"
+#include "../viewmodels/Models.h"
+#include "../viewmodels/UiBridge.h"
+#include "CompareDialog.h"
+#include "ImageCanvas.h"
 
 static QImage matToQImage(const cv::Mat& bgr) {
     cv::Mat rgb;
@@ -45,13 +51,23 @@ cv::Mat qImageToBgrMat(const QImage &imgIn)
     return bgr.clone();
 }
 
-
-DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, SelectionModel* selModel,
-                             UiBridge* bridge, IndexCatalog* catalog, QSortFilterProxyModel* installedProxy,
-                             QWidget* parent)
-    : QWidget(parent),
-    models_(models), dbUtil_(dbUtil), selModel_(selModel), bridge_(bridge),
-    catalog_(catalog), installedProxy_(installedProxy) {
+DetectionPage::DetectionPage(ModelService *models,
+                             DatabaseUtil *dbUtil,
+                             SelectionModel *selModel,
+                             UiBridge *bridge,
+                             IndexCatalog *catalog,
+                             QSortFilterProxyModel *installedProxy,
+                             CardBrowserDialog *cardBrowserDialog,
+                             QWidget *parent)
+    : QWidget(parent)
+    , models_(models)
+    , dbUtil_(dbUtil)
+    , selModel_(selModel)
+    , bridge_(bridge)
+    , catalog_(catalog)
+    , installedProxy_(installedProxy)
+    , cardBrowserDialog_(cardBrowserDialog)
+{
     buildUi();
 
     bridge_->setSetCodesProvider([this] { return models_->indexSetCodes(); });
@@ -95,6 +111,29 @@ DetectionPage::DetectionPage(ModelService* models, DatabaseUtil* dbUtil, Selecti
         candModel_->clear();
         pushStateToQml();
     });
+}
+
+void DetectionPage::openOfficialCard(const QString &cardCode)
+{
+    if (!dbUtil_)
+        return;
+
+    const QUrl url(dbUtil_->officialCardPageUrl(cardCode));
+    if (!url.isValid() || url.isEmpty())
+        return;
+
+    QImage cropImage;
+
+    if (currentSel_ >= 0 && currentSel_ < sel_.size()) {
+        const cv::Mat crop = cropForSelection(canvasIndexFor(currentSel_));
+
+        if (!crop.empty())
+            cropImage = matToQImage(crop).copy();
+    }
+
+    if (cardBrowserDialog_) {
+        cardBrowserDialog_->showCard(cardCode, url, cropImage);
+    }
 }
 
 void DetectionPage::onModelLoaded(bool) {
@@ -192,6 +231,7 @@ void DetectionPage::buildUi() {
     qmlPanel->engine()->addImageProvider("crop", cropProvider_);
     qmlPanel->engine()->addImageProvider("cardcache", new CardImageProvider(dbUtil_));
     qmlPanel->rootContext()->setContextProperty("cardDatabase", dbUtil_);
+    qmlPanel->rootContext()->setContextProperty("cardPageBrowser", this);
     qmlPanel->rootContext()->setContextProperty("bridge",   bridge_);
     qmlPanel->rootContext()->setContextProperty("candModel", candModel_);
     qmlPanel->rootContext()->setContextProperty("selModel",  selModel_);
@@ -430,6 +470,12 @@ void DetectionPage::syncSelections() {
     if (curId >= 0)
         for (int i = 0; i < sel_.size(); ++i)
             if (sel_[i].id == curId) { currentSel_ = i; break; }
+
+    if (currentSel_ < 0) {
+        candModel_->clear();
+        cropProvider_->setImage(QImage());
+        bridge_->bumpCrop();
+    }
 }
 
 void DetectionPage::sortSelectionsByPosition() {
@@ -712,7 +758,7 @@ void DetectionPage::runDetection() {
     auto crops = std::make_shared<std::vector<cv::Mat>>();
     auto ids = std::make_shared<std::vector<int>>();
     for (int i = 0; i < sel_.size(); ++i) {
-        crops->push_back(sel_[i].confirmed ? cv::Mat() : cropForSelection(i));
+        crops->push_back(sel_[i].confirmed ? cv::Mat() : cropForSelection(canvasIndexFor(i)));
         ids->push_back(sel_[i].id);
     }
 
@@ -926,7 +972,7 @@ void DetectionPage::redetectSelection(int i)
     if (i < 0 || i >= sel_.size())
         return;
 
-    const cv::Mat crop = cropForSelection(canvasIndexFor(i));
+    const cv::Mat crop = cropForSelection(canvasIndexFor(canvasIndexFor(i)));
     std::vector<Candidate> cands = models_->search(crop, 500);
 
     auto &s = sel_[i];

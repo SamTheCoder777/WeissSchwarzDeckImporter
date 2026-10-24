@@ -1,36 +1,45 @@
 #pragma once
 
-#include "ImageCanvas.h"
-#include "../viewmodels/Models.h"
-#include "../viewmodels/UiBridge.h"
+#include "../browser/CardBrowserDialog.h"
 #include "../index/IndexCatalog.h"
 #include "../services/ModelService.h"
+#include "../viewmodels/Models.h"
+#include "../viewmodels/UiBridge.h"
+#include "ImageCanvas.h"
 
+#include <QFutureWatcher>
+#include <QLabel>
 #include <QPushButton>
 #include <QQuickWidget>
 #include <QSortFilterProxyModel>
 #include <QStackedWidget>
 #include <QWidget>
-#include <QFutureWatcher>
-#include <QLabel>
 
-class DetectionPage: public QWidget {
+class DetectionPage : public QWidget
+{
     Q_OBJECT
 
 public:
-    explicit DetectionPage(ModelService* models, DatabaseUtil* dbUtil,
-                           SelectionModel* selModel, UiBridge* bridge,
-                           IndexCatalog* catalog, QSortFilterProxyModel* installedProxy,
-                           QWidget* parent = nullptr);
+    explicit DetectionPage(ModelService *models,
+                           DatabaseUtil *dbUtil,
+                           SelectionModel *selModel,
+                           UiBridge *bridge,
+                           IndexCatalog *catalog,
+                           QSortFilterProxyModel *installedProxy,
+                           CardBrowserDialog *cardBrowserDialog,
+                           QWidget *parent = nullptr);
+
+    Q_INVOKABLE void openOfficialCard(const QString &cardCode);
 
 private:
-    ModelService* models_;
-    DatabaseUtil* dbUtil_;
-    SelectionModel* selModel_;
-    UiBridge* bridge_;
-    IndexCatalog* catalog_;
-    QSortFilterProxyModel* installedProxy_;
+    ModelService *models_;
+    DatabaseUtil *dbUtil_;
+    SelectionModel *selModel_;
+    UiBridge *bridge_;
+    IndexCatalog *catalog_;
+    QSortFilterProxyModel *installedProxy_;
     QSortFilterProxyModel *installedSearchProxy_;
+    CardBrowserDialog *cardBrowserDialog_;
 
     QPushButton *rectBtn_;
     QPushButton *polyBtn_;
@@ -44,25 +53,26 @@ private:
     CandidateModel *candModel_;
     CropImageProvider *cropProvider_;
 
-    cv::Mat  sourceBgr_;
-    QString  sourcePath_;
+    cv::Mat sourceBgr_;
+    QString sourcePath_;
 
     QMap<int, int> selRotations_;
 
     QFutureWatcher<void> detectWatcher_;
 
-    struct SelState {
+    struct SelState
+    {
         std::vector<Candidate> cands;
-        bool        confirmed = false;
+        bool confirmed = false;
         std::string cardId;
-        int         qty = 1;
+        int qty = 1;
         int id = -1;
         int rotation = 0;
         QString filterSummary;
     };
 
     QVector<SelState> sel_;
-    int      currentSel_ = -1;
+    int currentSel_ = -1;
 
     bool detecting_ = false;
 

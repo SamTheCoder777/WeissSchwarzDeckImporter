@@ -659,11 +659,12 @@ void SettingsPage::buildUi()
     outer->addWidget(missingGroup);
 
     connect(dbUtil_, &DatabaseUtil::missingCardsPurged, this, [this](int n) {
-        QMessageBox::information(this,
-                                 "Cache cleared",
-                                 QString("Cleared %1 remembered missing-card record(s). "
-                                         "They'll be re-checked when next viewed.")
-                                     .arg(n));
+        QMessageBox::information(
+            this,
+            "Cache cleared",
+            QString("Cleared remembered missing-card record(s) and locally cached images. "
+                    "They'll be re-checked when next viewed.")
+                .arg(n));
     });
 
     // advanced settings
@@ -696,7 +697,7 @@ void SettingsPage::buildUi()
     maintGrid->setHorizontalSpacing(10);
     maintGrid->setVerticalSpacing(8);
 
-    const QStringList headers = {"Series list", "Card data", "Official fallbacks"};
+    const QStringList headers = {"Series list", "Card data"};
     for (int c = 0; c < headers.size(); ++c) {
         auto *h = new QLabel(headers[c], advWidget);
         h->setStyleSheet("color:#9aa0a6; font-size:12px;");
@@ -722,10 +723,8 @@ void SettingsPage::buildUi()
 
         auto *btnSeries = makeDangerBtn("Reset");
         auto *btnCards = makeDangerBtn("Reset");
-        auto *btnFallback = makeDangerBtn("Purge");
         maintGrid->addWidget(btnSeries, gridRow, 1);
         maintGrid->addWidget(btnCards, gridRow, 2);
-        maintGrid->addWidget(btnFallback, gridRow, 3);
 
         connect(btnSeries, &QPushButton::clicked, this, [this, region, lang] {
             if (confirmDestructive("Reset " + lang + " series list",
@@ -741,30 +740,10 @@ void SettingsPage::buildUi()
                                          "including cards fetched from the EncoreDecks."))
                 seriesRepository_->resetCards(region);
         });
-        connect(btnFallback, &QPushButton::clicked, this, [this, region, lang] {
-            if (confirmDestructive("Purge " + lang + " fallback cards",
-                                   "This removes " + lang
-                                       + " cards that were fetched from the official "
-                                         "site. They'll be fetched again when next viewed."))
-                seriesRepository_->purgeFallbackCards(region);
-        });
         ++gridRow;
     }
     maintGrid->setColumnStretch(4, 1);
     advForm->addRow(maintGrid);
-
-    connect(seriesRepository_,
-            &SeriesRepository::fallbackCardsPurged,
-            this,
-            [this](Config::DetectLocaleMode region, int n) {
-                QMessageBox::information(
-                    this,
-                    "Purge complete",
-                    QString("Removed %1 %2 fallback card(s). They will be re-fetched "
-                            "from EncoreDecks or the official site next time they're viewed.")
-                        .arg(n)
-                        .arg(regionTitle(region)));
-            });
 
     // imgSizeSpin_ = new QSpinBox;
     // imgSizeSpin_->setRange(64, 1024);
