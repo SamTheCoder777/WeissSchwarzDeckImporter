@@ -333,16 +333,27 @@ void DetectionPage::buildUi() {
     connect(bridge_, &UiBridge::clearFilterRequested, this, &DetectionPage::clearFilteredSearch);
 
     // arrows cycle cards; space opens compare
-    auto* nextSc = new QShortcut(QKeySequence(Qt::Key_Right), this);
+    auto *nextSc = new QShortcut(this);
+    nextSc->setKeys({QKeySequence(Qt::Key_Right), QKeySequence(Qt::Key_D)});
+
     connect(nextSc, &QShortcut::activated, this, [this] {
-        if (sel_.isEmpty()) return;
+        if (sel_.isEmpty())
+            return;
+
         int n = (currentSel_ < 0) ? 0 : (currentSel_ + 1) % sel_.size();
+
         showSelectionResults(n);
     });
-    auto* prevSc = new QShortcut(QKeySequence(Qt::Key_Left), this);
+
+    auto *prevSc = new QShortcut(this);
+    prevSc->setKeys({QKeySequence(Qt::Key_Left), QKeySequence(Qt::Key_A)});
+
     connect(prevSc, &QShortcut::activated, this, [this] {
-        if (sel_.isEmpty()) return;
+        if (sel_.isEmpty())
+            return;
+
         int n = (currentSel_ <= 0) ? sel_.size() - 1 : currentSel_ - 1;
+
         showSelectionResults(n);
     });
     auto* cmpSc = new QShortcut(QKeySequence(Qt::Key_Space), this);
