@@ -64,6 +64,7 @@ add_executable(WSDeckImporter WIN32
     src/models/tcg_util.h
     src/index/IndexGenerationPage.h src/index/IndexGenerationPage.cpp
     src/browser/CardBrowserDialog.h src/browser/CardBrowserDialog.cpp
+    src/browser/CardBrowserWidget.h src/browser/CardBrowserWidget.cpp
 )
 
 set(APP_VERSION "")

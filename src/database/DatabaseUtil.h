@@ -43,6 +43,7 @@ public:
     Q_INVOKABLE bool imageUsesOtherRarity(const QString &cardCode) const;
     void reportLoadedImage(const QString &cardCode, const QString &url);
     Q_INVOKABLE QString officialCardPageUrl(const QString &cardCode) const;
+    bool hasExactImageUrl(const QString &cardCode, const QString &url) const;
 
 signals:
     void localeChanged();

@@ -641,6 +641,19 @@ QString DatabaseUtil::officialCardPageUrl(const QString &cardCode) const
     return url.toString(QUrl::FullyEncoded);
 }
 
+bool DatabaseUtil::hasExactImageUrl(const QString &cardCode, const QString &url) const
+{
+    bool found = false;
+    const QJsonObject card = fetchCardObject(cardCode, found);
+
+    if (!found)
+        return false;
+
+    const QString exact = CardResolver::imageUrl(card);
+
+    return !exact.isEmpty() && QUrl(exact) == QUrl(url);
+}
+
 QVariantList DatabaseUtil::searchCards(const QString &query, int limit) const
 {
     QVariantList out;

@@ -14,6 +14,7 @@
 
 class QLabel;
 class QPushButton;
+class CardBrowserWidget;
 
 class CompareDialog : public QDialog {
     Q_OBJECT
@@ -30,6 +31,7 @@ protected:
     void resizeEvent(QResizeEvent *) override; // rescale images to fit
     void showEvent(QShowEvent *e)
         override; // For bugfix: https://github.com/SamTheCoder777/WeissSchwarzDeckImporter/issues/6
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void showCandidate(int i);
@@ -37,6 +39,12 @@ private:
     void showLoading(bool on);
 
     void tryNextImage(const QStringList &urls, int index, quint64 generation);
+
+    void showOfficialPage(const QString &code);
+    bool requiresOfficialData(const QString &code) const;
+    void showLoadedImage(const QString &code, const QImage &image);
+
+    CardBrowserWidget *browserPanel_ = nullptr;
 
     QImage crop_;
     std::vector<Candidate> cands_;

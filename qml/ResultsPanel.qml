@@ -798,6 +798,59 @@ Rectangle {
                                 horizontalAlignment: Text.AlignHCenter
                                 wrapMode: Text.WordWrap
                             }
+                            // Highlight the thumbnail on hover.
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 6
+                                color: "transparent"
+                                border.width: thumbnailArea.containsMouse ? 2 : 0
+                                border.color: root.accent
+                            }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 6
+                                color: "#88000000"
+
+                                opacity: thumbnailArea.containsMouse ? 1 : 0
+                                visible: opacity > 0
+
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 120
+                                    }
+                                }
+
+                                Column {
+                                    anchors.centerIn: parent
+                                    spacing: 4
+
+                                    Text {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: "↗"
+                                        color: "white"
+                                        font.pixelSize: 23
+                                    }
+
+                                    Text {
+                                        text: "Compare"
+                                        color: "white"
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                id: thumbnailArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+
+                                onClicked: {
+                                    cardPageBrowser.openCompareAt(index);
+                                }
+                            }
                         }
 
                         ColumnLayout {

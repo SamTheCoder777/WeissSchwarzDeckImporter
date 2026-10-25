@@ -1,4 +1,6 @@
 #include "CompareDialog.h"
+
+#include "../browser/CardBrowserWidget.h"
 #include "../database/DatabaseUtil.h"
 #include "../images/CardImageProvider.h"
 
@@ -13,7 +15,7 @@ CompareDialog::CompareDialog(const QImage& crop,
 
     setWindowTitle("Compare & Confirm");
     setModal(true);
-    resize(1100, 800);
+    resize(900, 800);
     setStyleSheet("QDialog{background:#1b1d21;} QLabel{color:#e8eaed;}");
 
     auto* root = new QVBoxLayout(this);
@@ -63,6 +65,8 @@ CompareDialog::CompareDialog(const QImage& crop,
     bl->addLayout(barRow);
     bl->addStretch();
     candStack_->addWidget(busyPage);
+    browserPanel_ = new CardBrowserWidget(candStack_);
+    candStack_->addWidget(browserPanel_);
 
     rightCol->addWidget(candCaption_);
     rightCol->addWidget(candStack_, 1);
@@ -110,6 +114,7 @@ CompareDialog::CompareDialog(const QImage& crop,
         accept();
     });
 
+    qApp->installEventFilter(this);
     showCandidate(startIndex >= 0 && startIndex < (int) cands_.size() ? startIndex : 0);
 
     setFocusPolicy(Qt::StrongFocus);
@@ -123,8 +128,16 @@ void CompareDialog::tryNextImage(const QStringList &urls, int index, quint64 gen
 
     const QString requestedCode = QString::fromStdString(cands_[cur_].card_id);
 
+    const QString exactImageUrl = dbUtil_ ? dbUtil_->imageUrlFor(requestedCode) : QString();
+
     while (index < urls.size()) {
         const QString url = urls.at(index++);
+
+        if (!dbUtil_ || !dbUtil_->hasExactImageUrl(requestedCode, url)) {
+            showOfficialPage(requestedCode);
+            return;
+        }
+
         const QString cachePath = CardImageProvider::cacheFilePath(url);
 
         QImage cached(cachePath);
@@ -137,9 +150,7 @@ void CompareDialog::tryNextImage(const QStringList &urls, int index, quint64 gen
 
             CardImageProvider::rememberImage(requestedCode, cached);
 
-            curCandImage_ = cached;
-            showLoading(false);
-            rescale();
+            showLoadedImage(requestedCode, cached);
             return;
         }
 
@@ -202,9 +213,7 @@ void CompareDialog::tryNextImage(const QStringList &urls, int index, quint64 gen
                         return;
 
                     if (!downloaded.isNull()) {
-                        curCandImage_ = downloaded;
-                        showLoading(false);
-                        rescale();
+                        showLoadedImage(requestedCode, downloaded);
                         return;
                     }
 
@@ -214,10 +223,7 @@ void CompareDialog::tryNextImage(const QStringList &urls, int index, quint64 gen
         return;
     }
 
-    showLoading(false);
-    curCandImage_ = QImage();
-    candLabel_->clear();
-    candLabel_->setText("(image failed)");
+    showOfficialPage(requestedCode);
 }
 
 void CompareDialog::showCandidate(int i)
@@ -241,18 +247,22 @@ void CompareDialog::showCandidate(int i)
     const QString code = QString::fromStdString(c.card_id);
 
     const quint64 generation = ++imageGeneration_;
+    browserPanel_->stop();
 
     curCandImage_ = QImage();
     candLabel_->clear();
+
+    if (requiresOfficialData(code)) {
+        showOfficialPage(code);
+        return;
+    }
 
     const QImage memory = CardImageProvider::memoryImage(code);
 
     if (!memory.isNull()) {
         qDebug() << "[IMAGE][Compare][MEMORY]" << code;
 
-        curCandImage_ = memory;
-        showLoading(false);
-        rescale();
+        showLoadedImage(code, memory);
         return;
     }
 
@@ -287,6 +297,73 @@ void CompareDialog::showLoading(bool on)
 {
     loading_ = on;
     candStack_->setCurrentIndex(on ? 1 : 0);
+}
+
+bool CompareDialog::requiresOfficialData(const QString &code) const
+{
+    if (!dbUtil_)
+        return true;
+
+    const QVariantMap data = dbUtil_->cardDataFor(code);
+
+    return data.isEmpty() || data.value("dataFallbackUsed").toBool();
+}
+
+void CompareDialog::showOfficialPage(const QString &code)
+{
+    loading_ = false;
+    curCandImage_ = QImage();
+
+    candStack_->setCurrentWidget(browserPanel_);
+
+    if (dbUtil_) {
+        browserPanel_->loadCard(QUrl(dbUtil_->officialCardPageUrl(code)));
+    }
+}
+
+void CompareDialog::showLoadedImage(const QString &code, const QImage &image)
+{
+    if (dbUtil_ && dbUtil_->imageUsesOtherRarity(code)) {
+        showOfficialPage(code);
+        return;
+    }
+
+    curCandImage_ = image;
+    showLoading(false);
+    rescale();
+}
+
+bool CompareDialog::eventFilter(QObject *watched, QEvent *event)
+{
+    auto *widget = qobject_cast<QWidget *>(watched);
+
+    if (!isVisible() || !isActiveWindow() || !widget || (widget != this && !isAncestorOf(widget))) {
+        return QDialog::eventFilter(watched, event);
+    }
+
+    if (event->type() != QEvent::ShortcutOverride && event->type() != QEvent::KeyPress) {
+        return QDialog::eventFilter(watched, event);
+    }
+
+    auto *key = static_cast<QKeyEvent *>(event);
+
+    if (key->modifiers() != Qt::NoModifier)
+        return QDialog::eventFilter(watched, event);
+
+    if (key->key() != Qt::Key_Left && key->key() != Qt::Key_Right && key->key() != Qt::Key_Escape) {
+        return QDialog::eventFilter(watched, event);
+    }
+
+    key->accept();
+
+    if (event->type() == QEvent::KeyPress) {
+        if (key->key() == Qt::Key_Escape)
+            reject();
+        else
+            showCandidate(cur_ + (key->key() == Qt::Key_Right ? 1 : -1));
+    }
+
+    return true;
 }
 
 void CompareDialog::keyPressEvent(QKeyEvent *e)

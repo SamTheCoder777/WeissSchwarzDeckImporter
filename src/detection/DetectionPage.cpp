@@ -431,24 +431,48 @@ void DetectionPage::detectCards() {
     pushStateToQml();
 }
 
-void DetectionPage::openCompareDialog() {
-    if (currentSel_ < 0 || currentSel_ >= sel_.size()) return;
-    const auto& cands = sel_[currentSel_].cands;
-    if (cands.empty()) return;
+void DetectionPage::openCompareDialog()
+{
+    openCompareAt(-1);
+}
 
-    cv::Mat crop = cropForSelection(currentSel_);
-    QImage cropImg = crop.empty() ? QImage() : matToQImage(crop);
+void DetectionPage::openCompareAt(int candidateIndex)
+{
+    if (currentSel_ < 0 || currentSel_ >= sel_.size())
+        return;
+
+    const auto &cands = sel_[currentSel_].cands;
+    if (cands.empty())
+        return;
 
     int start = 0;
-    if (!sel_[currentSel_].cardId.empty())
-        for (int i = 0; i < (int)cands.size(); ++i)
-            if (cands[i].card_id == sel_[currentSel_].cardId) { start = i; break; }
+
+    if (candidateIndex >= 0) {
+        if (candidateIndex >= static_cast<int>(cands.size()))
+            return;
+
+        start = candidateIndex;
+    } else if (!sel_[currentSel_].cardId.empty()) {
+        for (int i = 0; i < static_cast<int>(cands.size()); ++i) {
+            if (cands[i].card_id == sel_[currentSel_].cardId) {
+                start = i;
+                break;
+            }
+        }
+    }
+
+    const cv::Mat crop = cropForSelection(canvasIndexFor(currentSel_));
+
+    const QImage cropImage = crop.empty() ? QImage() : matToQImage(crop);
 
     QSqlDatabase db;
-    CompareDialog dlg(cropImg, cands, start, db, dbUtil_, this);
-    if (dlg.exec() == QDialog::Accepted) {
-        int idx = dlg.confirmedIndex();
-        if (idx >= 0) confirmCandidate(idx);
+    CompareDialog dialog(cropImage, cands, start, db, dbUtil_, this);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        const int confirmedIndex = dialog.confirmedIndex();
+
+        if (confirmedIndex >= 0)
+            confirmCandidate(confirmedIndex);
     }
 }
 

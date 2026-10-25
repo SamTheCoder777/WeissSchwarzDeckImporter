@@ -30,6 +30,7 @@ public:
                            QWidget *parent = nullptr);
 
     Q_INVOKABLE void openOfficialCard(const QString &cardCode);
+    Q_INVOKABLE void openCompareAt(int candidateIndex);
 
 private:
     ModelService *models_;
