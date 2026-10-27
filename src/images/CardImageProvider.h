@@ -20,15 +20,12 @@ public:
 
     QQuickTextureFactory* textureFactory() const override;
 
-private slots:
-    void onFinished();
-
 private:
     DatabaseUtil *dbUtil_ = nullptr;
 
     QSize requestedSize_;
     QImage image_;
-    QNetworkReply *reply_ = nullptr;
+    quint64 requestId_ = 0;
     QString cachePath_;
     QString cardCode_;
 

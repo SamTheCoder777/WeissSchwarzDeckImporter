@@ -7,7 +7,6 @@
 #include <algorithm>
 
 #include <QDateTime>
-#include <QNetworkReply>
 #include <QNetworkRequest>
 
 #include <QDebug>
@@ -541,8 +540,9 @@ bool DatabaseUtil::imageRetryBlocked(const QString &url)
 
 void DatabaseUtil::recordImageFailure(const QString &url, int httpStatus)
 {
-    if (url.isEmpty())
+    if (url.isEmpty() || (httpStatus != 404 && httpStatus != 410)) {
         return;
+    }
 
     markMissing(imageMissingKey(url), QStringLiteral("Image load failed: HTTP %1").arg(httpStatus));
 }

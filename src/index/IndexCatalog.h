@@ -1,11 +1,12 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QFile>
+#include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
-#include <QVector>
 #include <QString>
-#include <QFile>
+#include <QVector>
 
 class IndexCatalog : public QAbstractListModel {
     Q_OBJECT
@@ -34,7 +35,7 @@ public:
     QString activeIndexId() const { return activeId_; }
 
     // called from QML
-    Q_INVOKABLE void refresh();               // fetch the manifest
+    Q_INVOKABLE void refresh(bool manual = false); // fetch the manifest
     Q_INVOKABLE void download(int row);       // download / update one index
     Q_INVOKABLE void cancel();
     Q_INVOKABLE void use(int row);            // tell the app to use this index
@@ -89,6 +90,9 @@ private:
     QString installedJsonPath() const;
     void migrateInstalledJson();
 
+    QString manifestCachePath(const QUrl &url) const;
+    void applyManifest(const QJsonObject &manifest);
+
     QNetworkAccessManager nam_;
     QNetworkReply* reply_ = nullptr;
     QFile          outFile_;
@@ -102,6 +106,8 @@ private:
     int     dlFile_ = 0;
     qint64  dlBytesBefore_ = 0;
     QString dlDir_;
+    QString dlCooldownKey_;
+    bool dlAttemptStarted_ = false;
 
     QString activeId_;
 

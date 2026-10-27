@@ -1,12 +1,12 @@
 #include "CompareDialog.h"
 
+#include <QSqlQuery>
+#include <QtWidgets>
+
 #include "../browser/CardBrowserWidget.h"
 #include "../database/DatabaseUtil.h"
 #include "../images/CardImageProvider.h"
-
-#include <QNetworkReply>
-#include <QSqlQuery>
-#include <QtWidgets>
+#include "../network/NetGuard.h"
 
 CompareDialog::CompareDialog(const QImage& crop,
                              const std::vector<Candidate>& candidates,
@@ -128,8 +128,6 @@ void CompareDialog::tryNextImage(const QStringList &urls, int index, quint64 gen
 
     const QString requestedCode = QString::fromStdString(cands_[cur_].card_id);
 
-    const QString exactImageUrl = dbUtil_ ? dbUtil_->imageUrlFor(requestedCode) : QString();
-
     while (index < urls.size()) {
         const QString url = urls.at(index++);
 
@@ -145,80 +143,75 @@ void CompareDialog::tryNextImage(const QStringList &urls, int index, quint64 gen
         if (!cached.isNull()) {
             qDebug() << "[IMAGE][Compare][DISK]" << requestedCode << url;
 
-            if (dbUtil_)
-                dbUtil_->reportLoadedImage(requestedCode, url);
-
+            dbUtil_->reportLoadedImage(requestedCode, url);
             CardImageProvider::rememberImage(requestedCode, cached);
 
             showLoadedImage(requestedCode, cached);
             return;
         }
 
-        if (dbUtil_ && dbUtil_->imageRetryBlocked(url)) {
+        if (dbUtil_->imageRetryBlocked(url)) {
             qDebug() << "[IMAGE][Compare][SKIP MISSING DB]" << requestedCode << url;
             continue;
         }
 
-        QNetworkRequest request{QUrl(url)};
-        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                             QNetworkRequest::NoLessSafeRedirectPolicy);
-        request.setHeader(QNetworkRequest::UserAgentHeader, "WSDeckImporter/1.0");
+        NetRequest request;
+        request.url = QUrl(url);
+        request.key = QStringLiteral("card-image:") + url;
+        request.useCache = false;
+        request.timeoutMs = 15000;
+        request.retries = 0;
 
-        qDebug() << "[IMAGE][Compare][HTTP GET]" << requestedCode << url;
+        NetGuard::instance().get(request,
+                                 this,
+                                 [this, urls, index, generation, requestedCode, url, cachePath](
+                                     const NetResult &result) {
+                                     if (generation != imageGeneration_)
+                                         return;
 
-        QNetworkReply *reply = net_.get(request);
+                                     if (result.status == NetResult::Cancelled)
+                                         return;
 
-        connect(reply,
-                &QNetworkReply::finished,
-                this,
-                [this, reply, urls, index, generation, cachePath, requestedCode, url] {
-                    QImage downloaded;
-                    QByteArray bytes;
+                                     QImage image;
+                                     if (result.ok())
+                                         image.loadFromData(result.body);
 
-                    if (reply->error() == QNetworkReply::NoError) {
-                        bytes = reply->readAll();
-                        downloaded.loadFromData(bytes);
-                    }
+                                     if (!image.isNull()) {
+                                         CardImageProvider::rememberImage(requestedCode, image);
 
-                    const int httpStatus
-                        = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+                                         if (dbUtil_)
+                                             dbUtil_->reportLoadedImage(requestedCode, url);
 
-                    const QString error = reply->errorString();
+                                         QSaveFile file(cachePath);
 
-                    const bool cancelled = reply->error() == QNetworkReply::OperationCanceledError;
+                                         if (!file.open(QIODevice::WriteOnly)) {
+                                             qWarning() << "Image cache open failed:" << cachePath
+                                                        << file.errorString();
+                                         } else if (file.write(result.body) != result.body.size()) {
+                                             qWarning() << "Image cache write failed:" << cachePath
+                                                        << file.errorString();
+                                             file.cancelWriting();
+                                         } else if (!file.commit()) {
+                                             qWarning() << "Image cache commit failed:" << cachePath
+                                                        << file.errorString();
+                                         }
 
-                    reply->deleteLater();
+                                         showLoadedImage(requestedCode, image);
+                                         return;
+                                     }
 
-                    if (!downloaded.isNull()) {
-                        CardImageProvider::rememberImage(requestedCode, downloaded);
+                                     if (!result.blocked && result.status == NetResult::ClientError
+                                         && (result.http == 404 || result.http == 410) && dbUtil_) {
+                                         dbUtil_->recordImageFailure(url, result.http);
+                                     }
 
-                        if (dbUtil_)
-                            dbUtil_->reportLoadedImage(requestedCode, url);
+                                     qWarning()
+                                         << "[IMAGE][Compare][FAILED]" << requestedCode << url
+                                         << (result.ok() ? QStringLiteral("Invalid image data")
+                                                         : result.message);
 
-                        QFile file(cachePath);
-                        if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-                            file.write(bytes);
-                        }
-
-                        qDebug() << "[IMAGE][Compare][DOWNLOADED]" << requestedCode << url;
-                    } else if (!cancelled) {
-                        if (dbUtil_)
-                            dbUtil_->recordImageFailure(url, httpStatus);
-
-                        qDebug() << "[IMAGE][Compare][FAILED]" << requestedCode << url
-                                 << "HTTP:" << httpStatus << error;
-                    }
-
-                    if (generation != imageGeneration_)
-                        return;
-
-                    if (!downloaded.isNull()) {
-                        showLoadedImage(requestedCode, downloaded);
-                        return;
-                    }
-
-                    tryNextImage(urls, index, generation);
-                });
+                                     tryNextImage(urls, index, generation);
+                                 });
 
         return;
     }

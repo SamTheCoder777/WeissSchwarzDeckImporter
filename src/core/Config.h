@@ -177,6 +177,22 @@ public:
     int getMissingPurgeInterval() const;
     void setMissingPurgeInterval(int interval);
 
+    // --- Update check intervals ---
+
+    int getAutomaticUpdateCheckIntervalMinutes() const
+    {
+        return automaticUpdateCheckIntervalMinutes_;
+    }
+    void setAutomaticUpdateCheckIntervalMinutes(int minutes);
+
+    int getManualUpdateCheckIntervalMinutes() const { return manualUpdateCheckIntervalMinutes_; }
+    void setManualUpdateCheckIntervalMinutes(int minutes);
+
+    qint64 updateCheckWaitSeconds(const QString &key, bool manual) const; //for series/ cardlist
+    qint64 hourlyCheckWaitSeconds(const QString &key) const; //for app automated check on startup
+    void recordUpdateCheck(const QString &key);
+    void clearUpdateCheck(const QString &key);
+
     // --- Hardware acceleration settings ---
     bool getUseAcceleration() const { return useAcceleration_; }
     void setUseAcceleration(bool use);
@@ -245,6 +261,11 @@ private:
 
     // --- missing card purge settings ---
     int missingPurgeInterval_;
+
+    // --- update check intervals ---
+    int automaticUpdateCheckIntervalMinutes_ = 180;
+    int manualUpdateCheckIntervalMinutes_ = 15;
+    QVariantMap updateCheckTimes_;
 
     // --- Hardware acceleration settings ---
     bool useAcceleration_ = true;

@@ -1,6 +1,8 @@
 #include <QApplication>
 #include <QQuickStyle>
+#include <QStandardPaths>
 #include "src/app/MainWindow.h"
+#include "src/network/NetGuard.h"
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
@@ -277,6 +279,13 @@ int main(int argc, char** argv) {
         QLabel#status[state="ready"]       { background: #17352a; color: #4cd08a; }
         QLabel#status[state="error"]       { background: #3d1f23; color: #ff6b6b; }
     )");
+
+    // Initiate network guard before anything else
+    auto &guard = NetGuard::instance();
+    guard.policy().maxConcurrent = 2;
+
+    guard.setStorageDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+                        + "/network");
 
     MainWindow w;
     w.show();

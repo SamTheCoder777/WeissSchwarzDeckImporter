@@ -49,7 +49,7 @@ private:
     QString updateUrl_;
     QString latestTag_;
     bool appUpdateAvailable_ = false;
-    QNetworkAccessManager updateNam_;
+    bool appUpdateCheckInFlight_ = false;
 
     // settings widgets
     QLineEdit* onnxEdit_;

@@ -6,11 +6,13 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
 
 #include "../core/Config.h"
+#include "../network/NetGuard.h"
 
 static bool isEnMode()
 {
@@ -255,13 +257,16 @@ int IndexCatalog::dlRowById()
     return -1;
 }
 
-void IndexCatalog::refresh()
+void IndexCatalog::refresh(bool manual)
 {
     if (reply_)
         return;
+
     pendingRefresh_ = false;
     const quint64 gen = ++refreshGen_;
-    setStatus("Checking for index updates…");
+
+    auto &config = Config::instance();
+    auto &guard = NetGuard::instance();
 
     migrateCustomEntries();
     migrateInstalledJson();
@@ -273,124 +278,215 @@ void IndexCatalog::refresh()
     pruneMissingCustomRows();
     endResetModel();
 
-    const QString url = Config::instance().getIndexManifestUrl();
-    qDebug() << "[IndexCatalog] refresh gen" << gen << "mode" << (isEnMode() ? "EN" : "JP")
-             << "manifest:" << url;
+    const QUrl manifestUrl(config.getIndexManifestUrl());
+    const QString checkKey = QStringLiteral("manifest:")
+                             + (isEnMode() ? QStringLiteral("EN:") : QStringLiteral("JP:"))
+                             + manifestUrl.toString(QUrl::FullyEncoded);
+    const QString cachePath = manifestCachePath(manifestUrl);
+    const QJsonObject cachedManifest = readJsonFile(cachePath);
 
-    QNetworkRequest req{QUrl(url)};
-    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                     QNetworkRequest::NoLessSafeRedirectPolicy);
-    req.setHeader(QNetworkRequest::UserAgentHeader, "WSDeckImporter/1.0");
+    if (cachedManifest.value("indexes").isArray())
+        applyManifest(cachedManifest);
 
-    QNetworkReply *reply = nam_.get(req);
+    const qint64 intervalWaitSeconds = config.updateCheckWaitSeconds(checkKey, manual);
+    const qint64 serverWaitMs = guard.blockedForMs(manifestUrl);
+    const qint64 waitMs = qMax(intervalWaitSeconds * 1000, serverWaitMs);
+
+    if (waitMs > 0) {
+        if (!manual)
+            emit refreshFinished();
+
+        setStatus(QString("Showing saved/local indexes · next check in %1")
+                      .arg(NetGuard::minsText(waitMs)));
+
+        return;
+    }
+
+    QNetworkRequest request(manifestUrl);
+
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                         QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setHeader(QNetworkRequest::UserAgentHeader, "WSDeckImporter/1.0");
+    request.setTransferTimeout(15000);
+
+    config.recordUpdateCheck(checkKey);
+
+    QNetworkReply *reply = nam_.get(request);
     reply_ = reply;
 
-    connect(reply, &QNetworkReply::finished, this, [this, reply, gen] {
+    setStatus("Checking for index updates…");
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, gen, cachePath] {
+        const NetResult outcome = NetGuard::instance().noteReply(reply->url(), reply);
+
         reply->deleteLater();
+
         if (reply_ == reply)
             reply_ = nullptr;
 
+        emit stateChanged();
+
         if (pendingRefresh_) {
             pendingRefresh_ = false;
-            QTimer::singleShot(0, this, &IndexCatalog::refresh);
+
+            QTimer::singleShot(0, this, [this] { refresh(false); });
+
             return;
         }
 
         if (gen != refreshGen_)
             return;
 
-        QByteArray body;
-        QString err;
-        if (reply->error() == QNetworkReply::NoError)
-            body = reply->readAll();
-        else
-            err = reply->errorString();
+        if (!outcome.ok()) {
+            setStatus(outcome.message + " · showing saved/local indexes.");
 
-        if (!err.isEmpty()) {
-            setStatus(QString("Offline · showing %1 local index(es)").arg(rows_.size()));
             emit refreshFinished();
             return;
         }
 
-        QJsonParseError pe;
-        QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
-        if (pe.error != QJsonParseError::NoError || !doc.isObject()) {
-            setStatus("Manifest is not valid JSON.");
-            emit errorOccurred(pe.errorString());
+        const QByteArray body = reply->readAll();
+
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parseError);
+
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()
+            || !document.object().value("indexes").isArray()) {
+            setStatus("Manifest is not valid index JSON.");
+
+            emit errorOccurred("Manifest must contain an indexes array.");
+
+            emit refreshFinished();
             return;
         }
 
-        beginResetModel();
+        QSaveFile cache(cachePath);
 
-        rows_.clear();
-        scanLocalIndexes();
-        loadInstalledState();
+        if (!cache.open(QIODevice::WriteOnly)) {
+            qWarning() << "Manifest cache open failed:" << cachePath << cache.errorString();
+        } else if (cache.write(body) != body.size()) {
+            qWarning() << "Manifest cache write failed:" << cachePath << cache.errorString();
 
-        bool adopted = false;
-        for (const QJsonValue &v : doc.object().value("indexes").toArray()) {
-            QJsonObject o = v.toObject();
-            const QString id = o.value("id").toString();
-            if (id.isEmpty())
-                continue;
-
-            Row *target = nullptr;
-            for (Row &r : rows_)
-                if (r.id == id) {
-                    target = &r;
-                    break;
-                }
-
-            if (target && target->isCustom) {
-                if (target->noEntry) {
-                    target->isCustom = false;
-                    target->installedVersion = "unknown";
-                    adopted = true;
-                } else {
-                    setStatus("Custom index '" + id + "' shadows a cloud index of the same name.");
-                    continue;
-                }
-            }
-
-            if (!target) {
-                Row nr;
-                nr.id = id;
-                rows_.push_back(nr);
-                target = &rows_.last();
-            }
-
-            target->name = o.value("name").toString(id);
-            target->desc = o.value("description").toString(target->desc);
-            target->version = o.value("version").toVariant().toString();
-            target->files.clear();
-            target->totalSize = 0;
-            for (const QJsonValue &fv : o.value("files").toArray()) {
-                QJsonObject fo = fv.toObject();
-                FileEntry fe;
-                fe.name = fo.value("name").toString();
-                fe.url = fo.value("url").toString();
-                fe.sha256 = fo.value("sha256").toString();
-                fe.size = (qint64) fo.value("size").toDouble();
-                target->totalSize += fe.size;
-                target->files.push_back(fe);
-            }
+            cache.cancelWriting();
+        } else if (!cache.commit()) {
+            qWarning() << "Manifest cache commit failed:" << cachePath << cache.errorString();
         }
-        if (adopted)
-            saveInstalledState();
-        loadInstalledState();
-        pruneMissingCustomRows();
-        endResetModel();
 
-        int updates = 0;
-        for (const Row &r : rows_)
-            if (!r.installedVersion.isEmpty() && r.installedVersion != r.version)
-                ++updates;
-        setStatus(updates > 0 ? QString("%1 index(es) available · %2 update(s) ready")
-                                    .arg(rows_.size())
-                                    .arg(updates)
-                              : QString("%1 index(es) available").arg(rows_.size()));
+        applyManifest(document.object());
 
         emit refreshFinished();
     });
+}
+
+QString IndexCatalog::manifestCachePath(const QUrl &url) const
+{
+    const QString directory = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+                              + "/manifests";
+
+    QDir().mkpath(directory);
+
+    const QByteArray identity = (isEnMode() ? QByteArray("EN:") : QByteArray("JP:"))
+                                + url.toEncoded();
+
+    const QByteArray hash = QCryptographicHash::hash(identity, QCryptographicHash::Sha256).toHex();
+
+    return directory + "/" + QString::fromLatin1(hash) + ".json";
+}
+
+void IndexCatalog::applyManifest(const QJsonObject &manifest)
+{
+    beginResetModel();
+
+    rows_.clear();
+    scanLocalIndexes();
+    loadInstalledState();
+
+    bool adopted = false;
+
+    const QJsonArray indexes = manifest.value("indexes").toArray();
+
+    for (const QJsonValue &value : indexes) {
+        const QJsonObject object = value.toObject();
+        const QString id = object.value("id").toString();
+
+        if (id.isEmpty())
+            continue;
+
+        Row *target = nullptr;
+
+        for (Row &row : rows_) {
+            if (row.id == id) {
+                target = &row;
+                break;
+            }
+        }
+
+        if (target && target->isCustom) {
+            if (target->noEntry) {
+                target->isCustom = false;
+                target->installedVersion = "unknown";
+                adopted = true;
+            } else {
+                setStatus("Custom index '" + id + "' shadows a cloud index of the same name.");
+                continue;
+            }
+        }
+
+        if (!target) {
+            Row row;
+            row.id = id;
+
+            rows_.push_back(row);
+            target = &rows_.last();
+        }
+
+        target->name = object.value("name").toString(id);
+
+        target->desc = object.value("description").toString(target->desc);
+
+        target->version = object.value("version").toVariant().toString();
+
+        target->files.clear();
+        target->totalSize = 0;
+
+        const QJsonArray files = object.value("files").toArray();
+
+        for (const QJsonValue &fileValue : files) {
+            const QJsonObject fileObject = fileValue.toObject();
+
+            FileEntry file;
+            file.name = fileObject.value("name").toString();
+            file.url = fileObject.value("url").toString();
+            file.sha256 = fileObject.value("sha256").toString();
+
+            file.size = static_cast<qint64>(fileObject.value("size").toDouble());
+
+            target->totalSize += file.size;
+            target->files.push_back(file);
+        }
+    }
+
+    if (adopted)
+        saveInstalledState();
+
+    loadInstalledState();
+    pruneMissingCustomRows();
+
+    endResetModel();
+
+    int updates = 0;
+
+    for (const Row &row : rows_) {
+        if (!row.installedVersion.isEmpty() && row.installedVersion != row.version) {
+            ++updates;
+        }
+    }
+
+    if (updates > 0) {
+        setStatus(
+            QString("%1 index(es) available · %2 update(s) ready").arg(rows_.size()).arg(updates));
+    } else {
+        setStatus(QString("%1 index(es) available").arg(rows_.size()));
+    }
 }
 
 void IndexCatalog::useById(const QString &id)
@@ -404,19 +500,45 @@ void IndexCatalog::useById(const QString &id)
 
 void IndexCatalog::download(int row)
 {
-    if (reply_ || row < 0 || row >= rows_.size())
+    if (reply_ || !dlId_.isEmpty() || row < 0 || row >= rows_.size()) {
         return;
+    }
+
+    if (rows_[row].files.isEmpty()) {
+        setStatus("This index has no downloadable files.");
+        return;
+    }
+
+    const QString cooldownKey = QStringLiteral("item-download:faiss:")
+                                + (isEnMode() ? QStringLiteral("EN:") : QStringLiteral("JP:"))
+                                + rows_[row].id;
+
+    const qint64 waitSeconds = Config::instance().updateCheckWaitSeconds(cooldownKey, true);
+
+    if (waitSeconds > 0) {
+        setStatus(QString("Download cooldown for %1 · try again in %2")
+                      .arg(rows_[row].name, NetGuard::minsText(waitSeconds * 1000)));
+
+        return;
+    }
+
+    dlCooldownKey_ = cooldownKey;
+    dlAttemptStarted_ = false;
+
     dlRow_ = row;
     dlId_ = rows_[row].id;
     dlFile_ = 0;
     dlBytesBefore_ = 0;
     dlDir_ = dirFor(rows_[row].id);
+
     QDir().mkpath(dlDir_);
 
     rows_[row].downloading = true;
     rows_[row].progress = 0.0;
+
     touchRow(row);
     setStatus("Downloading " + rows_[row].name + "…");
+
     startNextFile();
 }
 
@@ -447,6 +569,12 @@ void IndexCatalog::startNextFile()
                      QNetworkRequest::NoLessSafeRedirectPolicy);
     req.setHeader(QNetworkRequest::UserAgentHeader, "WSDeckImporter/1.0");
     reply_ = nam_.get(req);
+
+    if (!dlAttemptStarted_) {
+        dlAttemptStarted_ = true;
+
+        Config::instance().recordUpdateCheck(dlCooldownKey_);
+    }
     emit stateChanged();
 
     connect(reply_, &QNetworkReply::readyRead, this, [this] {
@@ -532,13 +660,15 @@ void IndexCatalog::finishDownload(bool ok, const QString &message)
     }
     dlRow_ = -1;
     dlId_.clear();
+    dlCooldownKey_.clear();
+    dlAttemptStarted_ = false;
     setStatus(message);
     if (!ok && !pendingRefresh_)
         emit errorOccurred(message);
 
     if (pendingRefresh_) {
         pendingRefresh_ = false;
-        QTimer::singleShot(0, this, &IndexCatalog::refresh);
+        QTimer::singleShot(0, this, [this] { refresh(false); });
     }
 }
 

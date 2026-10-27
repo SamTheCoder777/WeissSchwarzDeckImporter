@@ -1,5 +1,4 @@
 #include "SettingsPage.h"
-#include "../core/Config.h"
 
 #include <QButtonGroup>
 #include <QComboBox>
@@ -25,6 +24,9 @@
 #include <QUrl>
 #include <QVariantAnimation>
 #include <QVersionNumber>
+
+#include "../core/Config.h"
+#include "../network/NetGuard.h"
 
 SettingsPage::SettingsPage(ModelService *models,
                            SeriesRepository *seriesRepository,
@@ -174,10 +176,12 @@ void SettingsPage::buildUi()
         setAppUpdate(false);
     });
 
-    // Check startup and every 6 hours
+    // Attempt once shortly after startup.
     QTimer::singleShot(3000, this, &SettingsPage::checkForAppUpdate);
+
+    // Attempt again every hour while the application remains open.
     auto *updateTimer = new QTimer(this);
-    updateTimer->setInterval(6 * 60 * 60 * 1000);
+    updateTimer->setInterval(60 * 60 * 1000);
     connect(updateTimer, &QTimer::timeout, this, &SettingsPage::checkForAppUpdate);
     updateTimer->start();
 
@@ -849,10 +853,12 @@ QWidget *SettingsPage::buildDatasetRow(Region region, QWidget *parent)
     connect(btn, &QPushButton::clicked, this, [this, region] {
         if (seriesRepository_->isBusy())
             return;
+
         pbDataset_->setRange(0, 100);
         pbDataset_->setValue(0);
-        pbDataset_->setVisible(true);
-        seriesRepository_->refreshSeriesList(region);
+
+        seriesRepository_->refreshSeriesList(region, true);
+        pbDataset_->setVisible(seriesRepository_->isBusy());
     });
 
     return row;
@@ -878,11 +884,10 @@ void SettingsPage::setDatasetRowState(Region region, SeriesRepository::UpdateSta
         btnObject = "actionGhost";
         break;
     case SeriesRepository::UpdateStatus::Error:
-        text = "Download needed";
-        color = "#ef4444";
-        btnText = "Download";
-        btnObject = "actionError";
-        icon = QIcon(":/icon/error.svg");
+        text = "Update status not verified";
+        color = "#9aa0a6";
+        btnText = "Fetch series list";
+        btnObject = "actionGhost";
         break;
     }
 
@@ -923,40 +928,80 @@ bool SettingsPage::confirmDestructive(const QString &title, const QString &text)
 
 void SettingsPage::checkForAppUpdate()
 {
+    if (appUpdateCheckInFlight_)
+        return;
+
     const QVersionNumber current = versionFromTag(QStringLiteral(APP_VERSION));
+
     if (current.isNull())
         return;
 
-    QNetworkRequest req(QUrl("https://api.github.com/repos/" + Config::instance().releaseRepo_
-                             + "/releases/latest"));
-    req.setRawHeader("Accept", "application/vnd.github+json");
-    req.setHeader(QNetworkRequest::UserAgentHeader, QByteArray("WSDeckImporter/") + APP_VERSION);
-    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                     QNetworkRequest::NoLessSafeRedirectPolicy);
-    req.setTransferTimeout(15000);
+    auto &config = Config::instance();
 
-    QNetworkReply *reply = updateNam_.get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, current] {
-        reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            qDebug() << "[AppUpdate] check failed:" << reply->errorString();
+    const QString repo = config.releaseRepo_;
+    const QString checkKey = QStringLiteral("app-version:") + repo;
+    const qint64 waitSeconds = config.hourlyCheckWaitSeconds(checkKey);
+
+    if (waitSeconds > 0) {
+        qDebug() << "[AppUpdate] skipped; next check in" << waitSeconds << "seconds";
+        return;
+    }
+
+    NetRequest request;
+
+    request.url = QUrl(QStringLiteral("https://api.github.com/repos/") + repo
+                       + QStringLiteral("/releases/latest"));
+
+    request.key = checkKey;
+    request.timeoutMs = 15000;
+    request.retries = 0;
+    request.useCache = false;
+
+    request.userAgent = QByteArray("WSDeckImporter/") + APP_VERSION;
+
+    request.headers.insert("Accept", "application/vnd.github+json");
+
+    request.validate = [](const QByteArray &body) {
+        const QJsonDocument document = QJsonDocument::fromJson(body);
+
+        if (!document.isObject())
+            return false;
+
+        const QJsonObject object = document.object();
+
+        return !object.value("tag_name").toString().isEmpty()
+               && !object.value("html_url").toString().isEmpty();
+    };
+
+    request.onStarted = [checkKey] { Config::instance().recordUpdateCheck(checkKey); };
+
+    appUpdateCheckInFlight_ = true;
+
+    NetGuard::instance().get(request, this, [this, current](const NetResult &result) {
+        appUpdateCheckInFlight_ = false;
+
+        if (!result.ok()) {
+            qDebug() << "[AppUpdate] check failed:" << result.message;
             return;
         }
 
-        const QJsonObject o = QJsonDocument::fromJson(reply->readAll()).object();
-        const QString tag = o.value("tag_name").toString();
-        const QString url = o.value("html_url").toString();
-        const QDateTime published = QDateTime::fromString(o.value("published_at").toString(),
+        const QJsonObject object = QJsonDocument::fromJson(result.body).object();
+
+        const QString tag = object.value("tag_name").toString();
+
+        const QString releaseUrl = object.value("html_url").toString();
+
+        const QDateTime published = QDateTime::fromString(object.value("published_at").toString(),
                                                           Qt::ISODate);
-        if (tag.isEmpty() || url.isEmpty())
-            return;
 
         latestTag_ = tag;
-        updateUrl_ = url;
+        updateUrl_ = releaseUrl;
 
         const bool newer = versionFromTag(tag) > current;
+
         const bool dismissed = Config::instance().getDismissedReleaseTag() == tag;
-        qDebug() << "[AppUpdate] current" << APP_VERSION << "latest" << tag
+
+        qDebug() << "[AppUpdate] current:" << APP_VERSION << "latest:" << tag
                  << (newer ? "(newer)" : "(up to date)");
 
         setAppUpdate(newer && !dismissed, tag, published);

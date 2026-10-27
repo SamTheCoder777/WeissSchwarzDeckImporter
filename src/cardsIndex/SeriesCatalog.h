@@ -2,6 +2,7 @@
 
 #include <QAbstractListModel>
 #include <QString>
+#include <QSet>
 #include <QVector>
 #include "SeriesRepository.h"
 
@@ -40,8 +41,9 @@ public:
 
     Q_INVOKABLE void refreshSeriesList()
     {
-        if (repo_)
-            repo_->refreshSeriesList();
+        if (repo_) {
+            repo_->refreshSeriesList(Config::instance().getCurDetectLocaleMode(), true);
+        }
     }
     Q_INVOKABLE void downloadCardList(const QString &seriesId)
     {
@@ -54,11 +56,16 @@ public:
             repo_->cancel();
     }
 
+    Q_INVOKABLE void checkAutomatically()
+    {
+        if (repo_) repo_->checkAutomaticUpdates();
+    }
+
     int outdatedCount() const { return outdatedIds_.size(); }
     Q_INVOKABLE void checkCardListUpdates()
     {
         if (repo_)
-            repo_->checkCardListUpdates();
+            repo_->checkCardListUpdates(true);
     }
     Q_INVOKABLE void updateOutdatedCardLists()
     {
@@ -68,15 +75,19 @@ public:
 
     Q_INVOKABLE void checkForUpdatesFor(const QString &region)
     {
-        if (repo_)
+        if (repo_) {
             repo_->checkForUpdates(region == "EN" ? SeriesRepository::Region::EN
-                                                  : SeriesRepository::Region::JP);
+                                                  : SeriesRepository::Region::JP,
+                                   true);
+        }
     }
     Q_INVOKABLE void refreshSeriesListFor(const QString &region)
     {
-        if (repo_)
+        if (repo_) {
             repo_->refreshSeriesList(region == "EN" ? SeriesRepository::Region::EN
-                                                    : SeriesRepository::Region::JP);
+                                                    : SeriesRepository::Region::JP,
+                                     true);
+        }
     }
 
 signals:

@@ -56,6 +56,21 @@ void Config::load() {
     settings_->beginGroup("Acceleration");
     useAcceleration_ = settings_->value("UseAcceleration", true).toBool();
     settings_->endGroup();
+
+    settings_->beginGroup("UpdateChecks");
+    automaticUpdateCheckIntervalMinutes_
+        = qMax(1, settings_->value("AutomaticIntervalMinutes", 180).toInt());
+    manualUpdateCheckIntervalMinutes_ = qMax(1,
+                                             settings_->value("ManualIntervalMinutes", 15).toInt());
+    updateCheckTimes_ = settings_->value("LastCheckTimes").toMap();
+    settings_->endGroup();
+
+    // Normalize future timestamps after a wall-clock correction across sessions.
+    const qint64 updateCheckNow = QDateTime::currentSecsSinceEpoch();
+    for (auto check = updateCheckTimes_.begin(); check != updateCheckTimes_.end(); ++check) {
+        if (check.value().toLongLong() > updateCheckNow)
+            check.value() = updateCheckNow;
+    }
 }
 
 void Config::save() {
@@ -90,6 +105,12 @@ void Config::save() {
 
     settings_->beginGroup("Acceleration");
     settings_->setValue("UseAcceleration", useAcceleration_);
+    settings_->endGroup();
+
+    settings_->beginGroup("UpdateChecks");
+    settings_->setValue("AutomaticIntervalMinutes", automaticUpdateCheckIntervalMinutes_);
+    settings_->setValue("ManualIntervalMinutes", manualUpdateCheckIntervalMinutes_);
+    settings_->setValue("LastCheckTimes", updateCheckTimes_);
     settings_->endGroup();
 
     settings_->sync();
@@ -219,6 +240,62 @@ void Config::setMissingPurgeInterval(int interval)
 {
     missingPurgeInterval_ = interval;
     save();
+}
+
+void Config::setAutomaticUpdateCheckIntervalMinutes(int minutes)
+{
+    minutes = qMax(1, minutes);
+    if (automaticUpdateCheckIntervalMinutes_ == minutes)
+        return;
+    automaticUpdateCheckIntervalMinutes_ = minutes;
+    save();
+}
+
+void Config::setManualUpdateCheckIntervalMinutes(int minutes)
+{
+    minutes = qMax(1, minutes);
+    if (manualUpdateCheckIntervalMinutes_ == minutes)
+        return;
+    manualUpdateCheckIntervalMinutes_ = minutes;
+    save();
+}
+
+qint64 Config::hourlyCheckWaitSeconds(const QString &key) const
+{
+    const qint64 last = updateCheckTimes_.value(key).toLongLong();
+
+    if (last <= 0)
+        return 0;
+
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+
+    const qint64 elapsed = qMax(qint64{0}, now - last);
+
+    return qMax(qint64{0}, qint64{3600} - elapsed);
+}
+
+qint64 Config::updateCheckWaitSeconds(const QString &key, bool manual) const
+{
+    const qint64 last = updateCheckTimes_.value(key).toLongLong();
+    if (last <= 0)
+        return 0;
+    const qint64 interval = 60LL
+                            * (manual ? manualUpdateCheckIntervalMinutes_
+                                      : automaticUpdateCheckIntervalMinutes_);
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    return qMax<qint64>(0, interval - qMax<qint64>(0, now - last));
+}
+
+void Config::recordUpdateCheck(const QString &key)
+{
+    updateCheckTimes_.insert(key, QDateTime::currentSecsSinceEpoch());
+    save();
+}
+
+void Config::clearUpdateCheck(const QString &key)
+{
+    if (updateCheckTimes_.remove(key) > 0)
+        save();
 }
 
 void Config::setUseAcceleration(bool use)

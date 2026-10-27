@@ -61,7 +61,6 @@ private:
     QImage curCandImage_;
 
     QSqlDatabase db_;
-    QNetworkAccessManager net_;
     DatabaseUtil* dbUtil_ = nullptr;
 
     QProgressBar *busyBar_ = nullptr;

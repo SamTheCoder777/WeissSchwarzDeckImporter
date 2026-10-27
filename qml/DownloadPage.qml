@@ -23,7 +23,7 @@ Rectangle {
     readonly property color text2:      "#9aa0a6"
     readonly property color text3:      "#676c72"
 
-    Component.onCompleted: catalog.refresh();
+    Component.onCompleted: catalog.refresh(false)
 
     Connections {
         target: catalog
@@ -80,7 +80,12 @@ Rectangle {
                 text: catalog.busy ? "Cancel" : "Check for updates"
                 implicitHeight: 36
                 implicitWidth: contentItem.implicitWidth + 32
-                onClicked: catalog.busy ? catalog.cancel() : catalog.refresh()
+                onClicked: {
+                    if (catalog.busy)
+                        catalog.cancel()
+                    else
+                        catalog.refresh(true)
+                }
                 background: Rectangle {
                     radius: 8
                     color: catalog.busy
