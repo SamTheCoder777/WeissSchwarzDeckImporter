@@ -88,7 +88,7 @@ struct NetRequest
     // Retry-After). Delay = retryDelayMs * attempt. 429 is never retried.
     int retries = 0;
 
-    QByteArray userAgent = "WSDeckImporter/1.0";
+    QByteArray userAgent = QByteArray("WSDeckImporter/") + APP_VERSION;
     QHash<QByteArray, QByteArray> headers;
 
     // Optional: return false to reject a 2xx body (e.g. invalid JSON). A rejected

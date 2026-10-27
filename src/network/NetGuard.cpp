@@ -385,6 +385,7 @@ void NetGuard::send(const QString &key)
     }
     QNetworkReply *reply = request.method == NetRequest::Method::Head
         ? nam_.head(networkRequest) : nam_.get(networkRequest);
+    qDebug() << "[NetGuard] Call to " + request.url.toString();
     it->reply = reply;
     connect(reply, &QNetworkReply::downloadProgress, this,
         [this, key, serial](qint64 received, qint64 total) {

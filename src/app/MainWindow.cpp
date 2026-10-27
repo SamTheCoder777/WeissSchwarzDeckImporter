@@ -473,7 +473,7 @@ void MainWindow::downloadFile(const QUrl &url,
     QNetworkRequest req(url);
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
-    req.setHeader(QNetworkRequest::UserAgentHeader, "TCGDeckBuilder/1.0");
+    req.setHeader(QNetworkRequest::UserAgentHeader, QByteArray("TCGDeckBuilder/") + APP_VERSION);
 
     const QString partPath = destPath + ".part";
     auto *file = new QFile(partPath);

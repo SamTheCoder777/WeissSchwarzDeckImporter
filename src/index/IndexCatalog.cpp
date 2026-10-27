@@ -306,7 +306,7 @@ void IndexCatalog::refresh(bool manual)
 
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::NoLessSafeRedirectPolicy);
-    request.setHeader(QNetworkRequest::UserAgentHeader, "WSDeckImporter/1.0");
+    request.setHeader(QNetworkRequest::UserAgentHeader, QByteArray("WSDeckImporter/") + APP_VERSION);
     request.setTransferTimeout(15000);
 
     config.recordUpdateCheck(checkKey);
@@ -567,7 +567,7 @@ void IndexCatalog::startNextFile()
     QNetworkRequest req{QUrl(fe.url)};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
-    req.setHeader(QNetworkRequest::UserAgentHeader, "WSDeckImporter/1.0");
+    req.setHeader(QNetworkRequest::UserAgentHeader, QByteArray("WSDeckImporter/") + APP_VERSION);
     reply_ = nam_.get(req);
 
     if (!dlAttemptStarted_) {
