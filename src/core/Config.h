@@ -7,6 +7,7 @@
 #include <QStandardPaths>
 #include <QString>
 #include <QUrl>
+#include <QVariantMap>
 
 using StringStringMap = QMap<QString, QString>;
 Q_DECLARE_METATYPE(StringStringMap)
@@ -193,6 +194,11 @@ public:
     void recordUpdateCheck(const QString &key);
     void clearUpdateCheck(const QString &key);
 
+    // --- App Update ---
+    QVariantMap appUpdaterState(const QString &repository) const;
+
+    void setAppUpdaterState(const QString &repository, const QVariantMap &state);
+
     // --- Hardware acceleration settings ---
     bool getUseAcceleration() const { return useAcceleration_; }
     void setUseAcceleration(bool use);
@@ -266,6 +272,9 @@ private:
     int automaticUpdateCheckIntervalMinutes_ = 180;
     int manualUpdateCheckIntervalMinutes_ = 15;
     QVariantMap updateCheckTimes_;
+
+    // --- app update ---
+    QVariantMap appUpdaterStates_;
 
     // --- Hardware acceleration settings ---
     bool useAcceleration_ = true;

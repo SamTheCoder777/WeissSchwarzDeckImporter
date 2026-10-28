@@ -1,0 +1,21 @@
+{
+    "overwrite": [
+        "translations/*",
+        "qmltooling/*",
+        "sqldrivers/*",
+        "styles/*",
+        "tls/*",
+        "generic/*",
+        "iconengines/*",
+        "imageformats/*",
+        "networkinformation/*",
+        "platforms/*",
+        "qml/*",
+        "*.dll"
+    ],
+    "preserve": [
+        "*.ini",
+        "*.db"
+    ],
+    "delete": []
+}

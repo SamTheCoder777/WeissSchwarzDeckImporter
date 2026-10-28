@@ -1,10 +1,15 @@
 #include <QApplication>
 #include <QQuickStyle>
 #include <QStandardPaths>
+
 #include "src/app/MainWindow.h"
+#include "src/core/AppUpdateController.h"
 #include "src/network/NetGuard.h"
 
 int main(int argc, char** argv) {
+    if (!AppUpdateController::allowStartup())
+        return 0;
+
     QApplication app(argc, argv);
 
     QQuickStyle::setStyle("Fusion");

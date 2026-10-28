@@ -71,6 +71,10 @@ void Config::load() {
         if (check.value().toLongLong() > updateCheckNow)
             check.value() = updateCheckNow;
     }
+
+    settings_->beginGroup("AppUpdater");
+    appUpdaterStates_ = settings_->value("States").toMap();
+    settings_->endGroup();
 }
 
 void Config::save() {
@@ -111,6 +115,10 @@ void Config::save() {
     settings_->setValue("AutomaticIntervalMinutes", automaticUpdateCheckIntervalMinutes_);
     settings_->setValue("ManualIntervalMinutes", manualUpdateCheckIntervalMinutes_);
     settings_->setValue("LastCheckTimes", updateCheckTimes_);
+    settings_->endGroup();
+
+    settings_->beginGroup("AppUpdater");
+    settings_->setValue("States", appUpdaterStates_);
     settings_->endGroup();
 
     settings_->sync();
@@ -296,6 +304,20 @@ void Config::clearUpdateCheck(const QString &key)
 {
     if (updateCheckTimes_.remove(key) > 0)
         save();
+}
+
+QVariantMap Config::appUpdaterState(const QString &repository) const
+{
+    return appUpdaterStates_.value(repository).toMap();
+}
+
+void Config::setAppUpdaterState(const QString &repository, const QVariantMap &state)
+{
+    if (appUpdaterStates_.value(repository).toMap() == state)
+        return;
+
+    appUpdaterStates_.insert(repository, state);
+    save();
 }
 
 void Config::setUseAcceleration(bool use)

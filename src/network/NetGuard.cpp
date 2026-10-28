@@ -18,8 +18,13 @@ namespace {
 qint64 nowMs() { return QDateTime::currentMSecsSinceEpoch(); }
 }
 
+// =====================================================================
+//  setup / helpers
+// =====================================================================
+
 NetGuard &NetGuard::instance()
 {
+    // parented to qApp so it is destroyed before the event loop machinery
     static NetGuard *g = new NetGuard(qApp);
     return *g;
 }
@@ -68,6 +73,12 @@ QString NetGuard::describe(NetResult::Status st, int http, const QString &err)
     return {};
 }
 
+// =====================================================================
+//  classification
+// =====================================================================
+
+// Turns "whatever Qt + HTTP gave us" into one Status. Check the HTTP code
+// BEFORE the Qt error: Qt reports 429 as a generic content error.
 NetResult::Status NetGuard::classify(QNetworkReply *reply, int http)
 {
     const auto error = reply->error();
@@ -86,9 +97,10 @@ NetResult::Status NetGuard::classify(QNetworkReply *reply, int http)
     if (error != QNetworkReply::NoError) return NetResult::Offline;
     if (http == 304) return NetResult::NotModified;
     if (http >= 200 && http < 300) return NetResult::Ok;
-    return NetResult::BadBody;
+    return NetResult::BadBody; // Unhandled redirects / unexpected status.
 }
 
+// "How long did the server tell us to wait?" (0 = it didn't)
 qint64 NetGuard::retryAfterMs(QNetworkReply *reply, qint64 now)
 {
     const qint64 maximum = std::numeric_limits<qint64>::max() - now;
@@ -125,6 +137,12 @@ qint64 NetGuard::serverWaitFor(QNetworkReply *reply, NetResult::Status status, q
         ? retryAfterMs(reply, now) : 0;
 }
 
+// =====================================================================
+//  backoff state machine
+// =====================================================================
+
+// Updates per-host state from one finished request and builds the verdict.
+// Shared by get() (high level) and noteReply() (low level / streaming).
 NetResult NetGuard::applyOutcome(const QUrl &url, QNetworkReply *reply,
     NetResult::Status status, int http, qint64 serverWait, qint64 now)
 {
@@ -152,8 +170,8 @@ NetResult NetGuard::applyOutcome(const QUrl &url, QNetworkReply *reply,
         qint64 calculated = qMin(base * (1LL << qMin(next.fails - 1, 6)), cap);
         const double jitter = 1.0 + policy_.jitter
             * (2.0 * QRandomGenerator::global()->generateDouble() - 1.0);
-        calculated = qBound<qint64>(0, qint64(double(calculated) * jitter),
-                                    policy_.maxServerWaitMs);
+        calculated = qBound(qint64{0}, qint64(double(calculated) * jitter),
+                            policy_.maxServerWaitMs);
         const qint64 wait = qMax(calculated, serverWait);
         next.retryNotBefore = now + wait;
         next.hard = newHard;
@@ -185,7 +203,7 @@ qint64 NetGuard::blockedForMs(const QUrl &url, bool force) const
     const qint64 remain = it->retryNotBefore - nowMs();
     if (remain <= 0)
         return 0;
-    if (force && !it->hard)
+    if (force && !it->hard)  // "retry now" may override our own guess, not the server's order
         return 0;
     return remain;
 }
@@ -206,6 +224,10 @@ void NetGuard::clearBackoff(const QString &host)
         hosts_.remove(host);
     saveState();
 }
+
+// =====================================================================
+//  public get(): the four gates
+// =====================================================================
 
 quint64 NetGuard::get(const NetRequest &input, QObject *context, Callback callback)
 {
@@ -228,6 +250,8 @@ quint64 NetGuard::get(const NetRequest &input, QObject *context, Callback callba
 
     auto existing = inflight_.find(request.key);
     if (existing != inflight_.end()) {
+        // Keys identify one method, URL and representation. Never silently merge
+        // mismatched requests if a caller accidentally reuses a key.
         if (existing->req.url != request.url || existing->req.method != request.method
             || existing->req.headers != request.headers) {
             NetResult bad;
@@ -291,7 +315,7 @@ quint64 NetGuard::get(const NetRequest &input, QObject *context, Callback callba
     flight.waiters.append(waiter);
     inflight_.insert(request.key, flight);
     pending_.append(request.key);
-
+    // Start asynchronously: callers can store the returned ID first.
     QTimer::singleShot(0, this, &NetGuard::pump);
     return waiter.id;
 }
@@ -331,6 +355,12 @@ void NetGuard::finish(const QString &key, const NetResult &result)
     QTimer::singleShot(0, this, &NetGuard::pump);
 }
 
+// =====================================================================
+//  sending + finishing
+// =====================================================================
+
+// Starts queued requests while there are free slots.
+// Called when a request is queued and whenever a slot is released.
 void NetGuard::pump()
 {
     while (running_ < qMax(1, policy_.maxConcurrent) && !pending_.isEmpty()) {
@@ -354,7 +384,7 @@ void NetGuard::send(const QString &key)
     if (it == inflight_.end()) return;
     const NetRequest request = it->req;
     const quint64 serial = it->serial;
-
+    // Every attempt, including delayed retries, obeys current host cooldowns.
     if (blockedForMs(request.url, request.force) > 0) {
         finish(key, blockedResult(request));
         return;
@@ -385,8 +415,16 @@ void NetGuard::send(const QString &key)
     }
     QNetworkReply *reply = request.method == NetRequest::Method::Head
         ? nam_.head(networkRequest) : nam_.get(networkRequest);
-    qDebug() << "[NetGuard] Call to " + request.url.toString();
     it->reply = reply;
+    if (request.maxBodyBytes > 0) {
+        reply->setReadBufferSize(request.maxBodyBytes + 1);
+        connect(reply, &QIODevice::readyRead, this, [reply, limit = request.maxBodyBytes] {
+            if (reply->bytesAvailable() > limit) {
+                reply->setProperty("netguardBodyTooLarge", true);
+                reply->abort();
+            }
+        });
+    }
     connect(reply, &QNetworkReply::downloadProgress, this,
         [this, key, serial](qint64 received, qint64 total) {
             const auto current = inflight_.constFind(key);
@@ -410,6 +448,7 @@ void NetGuard::onFinished(const QString &key, QNetworkReply *reply, quint64 seri
     const qint64 now = nowMs();
     const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     auto status = classify(reply, http);
+    if (reply->property("netguardBodyTooLarge").toBool()) status = NetResult::BadBody;
     const qint64 serverWait = serverWaitFor(reply, status, now);
     const QByteArray body = reply->readAll();
     QByteArray cachedBody;
@@ -421,8 +460,10 @@ void NetGuard::onFinished(const QString &key, QNetworkReply *reply, quint64 seri
             readableCache = !request.validate || request.validate(cachedBody);
         }
     }
-    if (status == NetResult::NotModified && request.method == NetRequest::Method::Get
+    if (status == NetResult::NotModified
+        && request.method == NetRequest::Method::Get
         && !request.allowNotModified && !readableCache) {
+        // Recover at most once, and remove caller-provided validators too.
         if (!it->recovered304) {
             it->recovered304 = true;
             keys_.remove(key);
@@ -449,9 +490,8 @@ void NetGuard::onFinished(const QString &key, QNetworkReply *reply, quint64 seri
     if (transient && serverWait == 0 && it->attempt < request.retries) {
         ++it->attempt;
         it->reply.clear();
-        const qint64 delay = qBound(qint64{0},
-                                    policy_.retryDelayMs * qint64(it->attempt),
-                                    qint64(std::numeric_limits<int>::max()));
+        const qint64 delay = qBound(qint64{0}, policy_.retryDelayMs * qint64(it->attempt),
+                                   qint64(std::numeric_limits<int>::max()));
         QTimer::singleShot(int(delay), this, [this, key, serial] {
             const auto current = inflight_.constFind(key);
             if (current != inflight_.constEnd() && current->serial == serial)
@@ -459,7 +499,7 @@ void NetGuard::onFinished(const QString &key, QNetworkReply *reply, quint64 seri
         });
         return;
     }
-
+    // Use the requested host for admission/backoff consistently across redirects.
     NetResult result = applyOutcome(request.url, reply, status, http, serverWait, now);
     if (status == NetResult::Ok) {
         result.body = body;
@@ -486,11 +526,15 @@ void NetGuard::onFinished(const QString &key, QNetworkReply *reply, quint64 seri
     finish(key, result);
 }
 
+// =====================================================================
+//  callbacks / cancel
+// =====================================================================
+
 void NetGuard::deliver(const QVector<Waiter> &ws, const NetResult &r)
 {
     for (const Waiter &w : ws) {
         if (w.hasCtx && w.ctx.isNull())
-            continue;
+            continue; // owner died, don't call into a dead object
         if (w.cb)
             w.cb(r);
     }
@@ -523,7 +567,7 @@ void NetGuard::cancelKey(const QString &key)
     QPointer<QNetworkReply> rep = it->reply;
     if (it->started)
         --running_;
-    inflight_.erase(it);
+    inflight_.erase(it); // erase first: onFinished will see nothing and ignore the abort
 
     NetResult r;
     r.status = NetResult::Cancelled;
@@ -553,7 +597,7 @@ void NetGuard::cancel(quint64 id)
             r.message = describe(r.status, 0, QString());
             deliverLater(QVector<Waiter>{w}, r);
 
-            if (it->waiters.isEmpty()) {
+            if (it->waiters.isEmpty()) { // nobody left interested: stop the transfer
                 QPointer<QNetworkReply> rep = it->reply;
                 if (it->started)
                     --running_;
@@ -566,6 +610,10 @@ void NetGuard::cancel(quint64 id)
         }
     }
 }
+
+// =====================================================================
+//  disk: cache + state
+// =====================================================================
 
 QString NetGuard::cachePath(const QString &key) const
 {

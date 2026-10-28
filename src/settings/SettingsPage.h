@@ -6,14 +6,17 @@
 #include "../services/ModelService.h"
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDateTime>
+#include <QFrame>
 #include <QLabel>
 #include <QLineEdit>
-#include <QNetworkAccessManager>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QWidget>
+
+class AppUpdateController;
 
 class SettingsPage: public QWidget {
     Q_OBJECT
@@ -39,17 +42,21 @@ private:
     IndexCatalog* indexCatalog_;
     DatabaseUtil *dbUtil_;
 
-    // settings app update notif
+    // App update notification.
     void checkForAppUpdate();
+
     void setAppUpdate(bool available, const QString &tag = {}, const QDateTime &published = {});
 
     QFrame *updateBanner_ = nullptr;
     QLabel *updateTitle_ = nullptr;
     QLabel *updateSubtitle_ = nullptr;
+
     QString updateUrl_;
     QString latestTag_;
+
     bool appUpdateAvailable_ = false;
-    bool appUpdateCheckInFlight_ = false;
+
+    AppUpdateController *appUpdater_ = nullptr;
 
     // settings widgets
     QLineEdit* onnxEdit_;

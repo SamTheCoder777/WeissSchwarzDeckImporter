@@ -83,12 +83,13 @@ struct NetRequest
     bool force = false;
 
     int timeoutMs = 15000;
+    qint64 maxBodyBytes = 0; // Zero = no application-level body cap.
 
     // Quiet in-call retries for transient failures (offline/timeout/5xx without
     // Retry-After). Delay = retryDelayMs * attempt. 429 is never retried.
     int retries = 0;
 
-    QByteArray userAgent = QByteArray("WSDeckImporter/") + APP_VERSION;
+    QByteArray userAgent = "WSDeckImporter/1.0";
     QHash<QByteArray, QByteArray> headers;
 
     // Optional: return false to reject a 2xx body (e.g. invalid JSON). A rejected
