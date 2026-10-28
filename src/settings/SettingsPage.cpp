@@ -1,30 +1,31 @@
 #include "SettingsPage.h"
-#include "../core/Config.h"
 
 #include <QButtonGroup>
 #include <QComboBox>
+#include <QDateTime>
 #include <QElapsedTimer>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QFrame>
 #include <QGridLayout>
 #include <QGroupBox>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QStyle>
 #include <QTimer>
+#include <QVBoxLayout>
 
 #include <QDesktopServices>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QLocale>
-#include <QNetworkReply>
-#include <QNetworkRequest>
 #include <QPropertyAnimation>
 #include <QUrl>
 #include <QVariantAnimation>
-#include <QVersionNumber>
+
+#include "../core/AppUpdateController.h"
+#include "../core/Config.h"
 
 SettingsPage::SettingsPage(ModelService *models,
                            SeriesRepository *seriesRepository,
@@ -37,15 +38,8 @@ SettingsPage::SettingsPage(ModelService *models,
     , indexCatalog_(indexCatalog)
     , dbUtil_(dbUtil)
 {
+    appUpdater_ = new AppUpdateController(this);
     buildUi();
-}
-
-static QVersionNumber versionFromTag(QString tag)
-{
-    tag = tag.trimmed();
-    if (tag.startsWith('v', Qt::CaseInsensitive))
-        tag.remove(0, 1);
-    return QVersionNumber::fromString(tag);
 }
 
 void SettingsPage::buildUi()
@@ -140,15 +134,26 @@ void SettingsPage::buildUi()
 
     auto *bannerText = new QVBoxLayout;
     bannerText->setSpacing(2);
+
     updateTitle_ = new QLabel(updateBanner_);
     updateTitle_->setStyleSheet("font-weight:600; color:#3b82f6;");
+
     updateSubtitle_ = new QLabel(updateBanner_);
     updateSubtitle_->setStyleSheet("font-size:12px; color:#9aa0a6;");
+
     bannerText->addWidget(updateTitle_);
     bannerText->addWidget(updateSubtitle_);
 
+    // Primary installation action.
+    auto *btnUpdate = new QPushButton("Update now", updateBanner_);
+    btnUpdate->setObjectName("actionPrimary");
+    btnUpdate->setCursor(Qt::PointingHandCursor);
+    btnUpdate->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btnUpdate->setMinimumHeight(32);
+
+    // Separate browser action.
     auto *btnViewRelease = new QPushButton("View release", updateBanner_);
-    btnViewRelease->setObjectName("actionPrimary");
+    btnViewRelease->setObjectName("actionGhost");
     btnViewRelease->setCursor(Qt::PointingHandCursor);
     btnViewRelease->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     btnViewRelease->setMinimumHeight(32);
@@ -161,25 +166,71 @@ void SettingsPage::buildUi()
 
     bannerRow->addWidget(bannerDot, 0, Qt::AlignVCenter);
     bannerRow->addLayout(bannerText, 1);
+    bannerRow->addWidget(btnUpdate, 0, Qt::AlignVCenter);
     bannerRow->addWidget(btnViewRelease, 0, Qt::AlignVCenter);
     bannerRow->addWidget(btnDismiss, 0, Qt::AlignVCenter);
+
     outer->addWidget(updateBanner_);
 
+    // Start automatic installation
+    connect(btnUpdate, &QPushButton::clicked, this, [this] { appUpdater_->install(); });
+
+    // Use the action label selected by the controller
+    connect(appUpdater_,
+            &AppUpdateController::actionTextChanged,
+            this,
+            [btnUpdate, btnDismiss](const QString &text) {
+                btnUpdate->setText(text);
+
+                // An interrupted installation must not be dismissed.
+                btnDismiss->setEnabled(text != QStringLiteral("Repair interrupted update"));
+            });
+
+    // Receive release information and update the existing banner.
+    connect(appUpdater_,
+            &AppUpdateController::releaseDetected,
+            this,
+            [this](bool available,
+                   const QString &tag,
+                   const QString &releaseUrl,
+                   const QDateTime &published) {
+                latestTag_ = tag;
+                updateUrl_ = releaseUrl;
+
+                setAppUpdate(available, tag, published);
+
+                if (available && tag == QStringLiteral("interrupted update")) {
+                    updateTitle_->setText(QStringLiteral("An interrupted update needs repair"));
+
+                    updateSubtitle_->setText(
+                        QStringLiteral("Close other app instances, then choose "
+                                       "Repair interrupted update."));
+                }
+            });
+
+    // Open release notes/downloads in the browser.
     connect(btnViewRelease, &QPushButton::clicked, this, [this] {
         if (!updateUrl_.isEmpty())
             QDesktopServices::openUrl(QUrl(updateUrl_));
     });
+
     connect(btnDismiss, &QPushButton::clicked, this, [this] {
         Config::instance().setDismissedReleaseTag(latestTag_);
         setAppUpdate(false);
     });
 
-    // Check startup and every 6 hours
+    // Manual check button in the page header
+    // auto *btnCheckUpdates = new QPushButton("Check now", this);
+    // btnCheckUpdates->setObjectName("actionGhost");
+    // btnCheckUpdates->setCursor(Qt::PointingHandCursor);
+    // btnCheckUpdates->setMinimumHeight(32);
+
+    // headerRow->addWidget(btnCheckUpdates, 0, Qt::AlignVCenter);
+
+    // connect(btnCheckUpdates, &QPushButton::clicked, this, [this] { appUpdater_->check(true); });
+
+    // Initial automatic check
     QTimer::singleShot(3000, this, &SettingsPage::checkForAppUpdate);
-    auto *updateTimer = new QTimer(this);
-    updateTimer->setInterval(6 * 60 * 60 * 1000);
-    connect(updateTimer, &QTimer::timeout, this, &SettingsPage::checkForAppUpdate);
-    updateTimer->start();
 
     // Detect Language Setting
     auto *langGroup = new QFrame(this);
@@ -659,11 +710,12 @@ void SettingsPage::buildUi()
     outer->addWidget(missingGroup);
 
     connect(dbUtil_, &DatabaseUtil::missingCardsPurged, this, [this](int n) {
-        QMessageBox::information(this,
-                                 "Cache cleared",
-                                 QString("Cleared %1 remembered missing-card record(s). "
-                                         "They'll be re-checked when next viewed.")
-                                     .arg(n));
+        QMessageBox::information(
+            this,
+            "Cache cleared",
+            QString("Cleared remembered missing-card record(s) and locally cached images. "
+                    "They'll be re-checked when next viewed.")
+                .arg(n));
     });
 
     // advanced settings
@@ -696,7 +748,7 @@ void SettingsPage::buildUi()
     maintGrid->setHorizontalSpacing(10);
     maintGrid->setVerticalSpacing(8);
 
-    const QStringList headers = {"Series list", "Card data", "Official fallbacks"};
+    const QStringList headers = {"Series list", "Card data"};
     for (int c = 0; c < headers.size(); ++c) {
         auto *h = new QLabel(headers[c], advWidget);
         h->setStyleSheet("color:#9aa0a6; font-size:12px;");
@@ -722,10 +774,8 @@ void SettingsPage::buildUi()
 
         auto *btnSeries = makeDangerBtn("Reset");
         auto *btnCards = makeDangerBtn("Reset");
-        auto *btnFallback = makeDangerBtn("Purge");
         maintGrid->addWidget(btnSeries, gridRow, 1);
         maintGrid->addWidget(btnCards, gridRow, 2);
-        maintGrid->addWidget(btnFallback, gridRow, 3);
 
         connect(btnSeries, &QPushButton::clicked, this, [this, region, lang] {
             if (confirmDestructive("Reset " + lang + " series list",
@@ -741,30 +791,10 @@ void SettingsPage::buildUi()
                                          "including cards fetched from the EncoreDecks."))
                 seriesRepository_->resetCards(region);
         });
-        connect(btnFallback, &QPushButton::clicked, this, [this, region, lang] {
-            if (confirmDestructive("Purge " + lang + " fallback cards",
-                                   "This removes " + lang
-                                       + " cards that were fetched from the official "
-                                         "site. They'll be fetched again when next viewed."))
-                seriesRepository_->purgeFallbackCards(region);
-        });
         ++gridRow;
     }
     maintGrid->setColumnStretch(4, 1);
     advForm->addRow(maintGrid);
-
-    connect(seriesRepository_,
-            &SeriesRepository::fallbackCardsPurged,
-            this,
-            [this](Config::DetectLocaleMode region, int n) {
-                QMessageBox::information(
-                    this,
-                    "Purge complete",
-                    QString("Removed %1 %2 fallback card(s). They will be re-fetched "
-                            "from EncoreDecks or the official site next time they're viewed.")
-                        .arg(n)
-                        .arg(regionTitle(region)));
-            });
 
     // imgSizeSpin_ = new QSpinBox;
     // imgSizeSpin_->setRange(64, 1024);
@@ -870,10 +900,12 @@ QWidget *SettingsPage::buildDatasetRow(Region region, QWidget *parent)
     connect(btn, &QPushButton::clicked, this, [this, region] {
         if (seriesRepository_->isBusy())
             return;
+
         pbDataset_->setRange(0, 100);
         pbDataset_->setValue(0);
-        pbDataset_->setVisible(true);
-        seriesRepository_->refreshSeriesList(region);
+
+        seriesRepository_->refreshSeriesList(region, true);
+        pbDataset_->setVisible(seriesRepository_->isBusy());
     });
 
     return row;
@@ -899,11 +931,10 @@ void SettingsPage::setDatasetRowState(Region region, SeriesRepository::UpdateSta
         btnObject = "actionGhost";
         break;
     case SeriesRepository::UpdateStatus::Error:
-        text = "Download needed";
-        color = "#ef4444";
-        btnText = "Download";
-        btnObject = "actionError";
-        icon = QIcon(":/icon/error.svg");
+        text = "Update status not verified";
+        color = "#9aa0a6";
+        btnText = "Fetch series list";
+        btnObject = "actionGhost";
         break;
     }
 
@@ -944,56 +975,25 @@ bool SettingsPage::confirmDestructive(const QString &title, const QString &text)
 
 void SettingsPage::checkForAppUpdate()
 {
-    const QVersionNumber current = versionFromTag(QStringLiteral(APP_VERSION));
-    if (current.isNull())
-        return;
-
-    QNetworkRequest req(QUrl("https://api.github.com/repos/" + Config::instance().releaseRepo_
-                             + "/releases/latest"));
-    req.setRawHeader("Accept", "application/vnd.github+json");
-    req.setHeader(QNetworkRequest::UserAgentHeader, QByteArray("WSDeckImporter/") + APP_VERSION);
-    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                     QNetworkRequest::NoLessSafeRedirectPolicy);
-    req.setTransferTimeout(15000);
-
-    QNetworkReply *reply = updateNam_.get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, current] {
-        reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            qDebug() << "[AppUpdate] check failed:" << reply->errorString();
-            return;
-        }
-
-        const QJsonObject o = QJsonDocument::fromJson(reply->readAll()).object();
-        const QString tag = o.value("tag_name").toString();
-        const QString url = o.value("html_url").toString();
-        const QDateTime published = QDateTime::fromString(o.value("published_at").toString(),
-                                                          Qt::ISODate);
-        if (tag.isEmpty() || url.isEmpty())
-            return;
-
-        latestTag_ = tag;
-        updateUrl_ = url;
-
-        const bool newer = versionFromTag(tag) > current;
-        const bool dismissed = Config::instance().getDismissedReleaseTag() == tag;
-        qDebug() << "[AppUpdate] current" << APP_VERSION << "latest" << tag
-                 << (newer ? "(newer)" : "(up to date)");
-
-        setAppUpdate(newer && !dismissed, tag, published);
-    });
+    appUpdater_->check(false);
 }
 
 void SettingsPage::setAppUpdate(bool available, const QString &tag, const QDateTime &published)
 {
     if (available) {
         updateTitle_->setText(QString("Version %1 is available").arg(tag));
-        QString sub = QString("You have %1").arg(QStringLiteral(APP_VERSION));
-        if (published.isValid())
-            sub += "  ·  Released "
-                   + QLocale().toString(published.toLocalTime().date(), QLocale::ShortFormat);
-        updateSubtitle_->setText(sub);
+
+        QString subtitle = QString("You have %1").arg(QStringLiteral(APP_VERSION));
+
+        if (published.isValid()) {
+            subtitle += QStringLiteral("  ·  Released ");
+
+            subtitle += QLocale().toString(published.toLocalTime().date(), QLocale::ShortFormat);
+        }
+
+        updateSubtitle_->setText(subtitle);
     }
+
     updateBanner_->setVisible(available);
 
     if (available != appUpdateAvailable_) {

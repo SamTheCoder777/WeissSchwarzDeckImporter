@@ -3,74 +3,79 @@
 #include <QTimer>
 #include "../core/Config.h"
 
-SeriesCatalog::SeriesCatalog(SeriesRepository* repo, QObject* parent)
-    : QAbstractListModel(parent), repo_(repo) {
-
+SeriesCatalog::SeriesCatalog(SeriesRepository *repo, QObject *parent)
+    : QAbstractListModel(parent), repo_(repo)
+{
     connect(repo_, &SeriesRepository::seriesListUpdated,
             this, &SeriesCatalog::reloadFromRepo);
-
-    connect(repo_, &SeriesRepository::busyChanged,   this, &SeriesCatalog::stateChanged);
-    connect(repo_, &SeriesRepository::statusChanged,  this, [this](const QString&){ emit stateChanged(); });
-    connect(repo_, &SeriesRepository::errorOccurred,  this, &SeriesCatalog::errorOccurred);
-
+    connect(repo_, &SeriesRepository::busyChanged, this, &SeriesCatalog::stateChanged);
+    connect(repo_, &SeriesRepository::checkStateChanged, this, &SeriesCatalog::stateChanged);
+    connect(repo_, &SeriesRepository::updateAllStateChanged, this, &SeriesCatalog::stateChanged);
+    connect(repo_, &SeriesRepository::statusChanged, this,
+            [this](const QString &) { emit stateChanged(); });
+    connect(repo_, &SeriesRepository::errorOccurred, this, &SeriesCatalog::errorOccurred);
     connect(repo_, &SeriesRepository::cardProgress, this,
-            [this](const QString& id, double p) {
-        int r = rowForId(id);
-        if (r < 0) return;
-        rows_[r].downloading = (p < 1.0);
-        rows_[r].progress = p;
-        touchRow(r);
-    });
-
+        [this](const QString &id, double progress) {
+            const int row = rowForId(id);
+            if (row < 0) return;
+            rows_[row].downloading = progress < 1.0;
+            rows_[row].progress = progress;
+            touchRow(row);
+        });
+    connect(repo_, &SeriesRepository::cardDownloadFinished, this,
+        [this](const QString &id, bool success) {
+            const int row = rowForId(id);
+            if (row < 0) return;
+            rows_[row].downloading = false;
+            rows_[row].progress = success ? 1.0 : 0.0;
+            touchRow(row);
+        });
     connect(repo_, &SeriesRepository::cardListDownloaded, this,
-            [this](const QString& id) {
-        int r = rowForId(id);
-        if (r >= 0) { rows_[r].hasCardList = true; rows_[r].downloading = false;
-                      rows_[r].progress = 1.0; touchRow(r); }
-        emit cardListDownloaded(id);
-    });
-
-    connect(repo_,
-            &SeriesRepository::cardListUpdateState,
-            this,
-            [this](const QString &id, bool outdated) {
-                if (outdated)
-                    outdatedIds_.insert(id);
-                else
-                    outdatedIds_.remove(id);
-                const int r = rowForId(id);
-                if (r >= 0) {
-                    rows_[r].updateAvailable = outdated;
-                    touchRow(r);
-                }
-                emit stateChanged();
-            });
-
-    connect(repo_, &SeriesRepository::cardListCheckFinished, this, [this](int) {
-        emit stateChanged();
-    });
-
-    connect(&Config::instance(), &Config::detectLocaleModeChanged, this, [this] {
-        outdatedIds_.clear();
-        reloadFromRepo();
-    });
-
-    QTimer::singleShot(1500, this, [this] {
-        if (repo_)
-            repo_->checkCardListUpdates();
-    });
-
+        [this](const QString &id) {
+            const int row = rowForId(id);
+            if (row >= 0) {
+                rows_[row].hasCardList = true;
+                rows_[row].downloading = false;
+                rows_[row].progress = 1.0;
+                touchRow(row);
+            }
+            emit cardListDownloaded(id);
+        });
+    connect(repo_, &SeriesRepository::cardListUpdateState, this,
+        [this](const QString &id, bool outdated) {
+            if (outdated) outdatedIds_.insert(id);
+            else outdatedIds_.remove(id);
+            const int row = rowForId(id);
+            if (row >= 0) {
+                rows_[row].updateAvailable = outdated;
+                touchRow(row);
+            }
+            emit stateChanged();
+        });
+    connect(repo_, &SeriesRepository::cardListCheckFinished, this,
+            [this](int) { emit stateChanged(); });
+    connect(&Config::instance(), &Config::detectLocaleModeChanged,
+            this, &SeriesCatalog::reloadFromRepo);
     reloadFromRepo();
+    QTimer::singleShot(1500, this, [this] {
+        if (repo_) repo_->checkAutomaticUpdates();
+    });
 }
 
-void SeriesCatalog::reloadFromRepo() {
+void SeriesCatalog::reloadFromRepo()
+{
     QVector<Row> loaded;
-    for (const SeriesRepository::SeriesRow& s : repo_->loadSeries()) {
-        Row r;
-        r.id = s.id; r.set = s.set; r.name = s.name; r.hash = s.hash;
-        r.hasCardList = s.hasCardList;
-        r.updateAvailable = outdatedIds_.contains(s.id);
-        loaded.push_back(r);
+    outdatedIds_.clear();
+    for (const auto &series : repo_->loadSeries()) {
+        Row row;
+        row.id = series.id;
+        row.set = series.set;
+        row.name = series.name;
+        row.hash = series.hash;
+        row.hasCardList = series.hasCardList;
+        row.updateAvailable = series.updateAvailable;
+        if (row.updateAvailable) outdatedIds_.insert(row.id);
+        loaded.append(row);
     }
     beginResetModel();
     rows_ = loaded;

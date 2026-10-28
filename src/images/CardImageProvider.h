@@ -1,13 +1,14 @@
 #pragma once
 
+#include <QImage>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
 #include <QQuickAsyncImageProvider>
 #include <QQuickImageResponse>
 #include <QQuickTextureFactory>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QImage>
-#include <QString>
 #include <QSize>
+#include <QString>
+#include <QStringList>
 
 class DatabaseUtil;
 
@@ -19,20 +20,21 @@ public:
 
     QQuickTextureFactory* textureFactory() const override;
 
-private slots:
-    void onFinished();
-
 private:
+    DatabaseUtil *dbUtil_ = nullptr;
+
     QSize requestedSize_;
     QImage image_;
-    QNetworkReply *reply_ = nullptr;
+    quint64 requestId_ = 0;
     QString cachePath_;
     QString cardCode_;
-    QString aliasPath_;
-    DatabaseUtil *dbUtil_ = nullptr;
-    bool triedOfficial_ = false;
-    void tryOfficialOrFinish();
-    void onFinishedOfficial();
+
+    QStringList urls_;
+    int nextUrl_ = 0;
+    bool completed_ = false;
+
+    void tryNextImage();
+    void complete();
 
     void cancel() override;
 };
@@ -45,8 +47,11 @@ public:
                                               const QSize& requestedSize) override;
 
     static QString cacheDir();
-    static QString cacheFilePath(const QString& url);
+    static QString cacheFilePath(const QString &url);
+    static bool clearImageCaches();
+    static QImage memoryImage(const QString &cardCode);
+    static void rememberImage(const QString &cardCode, const QImage &image);
 
 private:
-    DatabaseUtil*         dbUtil_;
+    DatabaseUtil *dbUtil_;
 };

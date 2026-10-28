@@ -691,6 +691,22 @@ Rectangle {
 
                     property string code: deckCode
                     property var _cardData: ({})
+                    readonly property bool missingCardData: code !== "" && !dataLoading && fetchFailed
+                    property bool imageFallback: cardDatabase.imageUsesOtherRarity(code)
+
+                    readonly property bool dataFallback: !!_cardData.dataFallbackUsed
+
+                    readonly property bool usingOtherRarity: imageFallback || dataFallback
+
+                    readonly property string fallbackMessage: {
+                        if (imageFallback && dataFallback)
+                            return "Using another rarity's image and card data.";
+
+                        if (imageFallback)
+                            return "Using another rarity's image.";
+
+                        return "Using another rarity's card data.";
+                    }
                     property bool isOfficial: _cardData.source === "official"
                     property bool imageLoaded: false
                     property bool fetchFailed: false
@@ -707,6 +723,7 @@ Rectangle {
                         fetchFailed = false;
                         failReason = "";
                         imageLoaded = false;
+                        imageFallback = cardDatabase.imageUsesOtherRarity(code);
                         if (code) {
                             dataLoading = true;
                             cardDatabase.ensureCardData(code);
@@ -727,7 +744,6 @@ Rectangle {
                                 delegateRoot.fetchFailed = false;
                                 delegateRoot.refreshCardData();
                                 delegateRoot.imageLoaded = true;
-                                candImg.rev++;
                             }
                         }
                         function onCardFetchFailed(c, reason) {
@@ -735,6 +751,11 @@ Rectangle {
                                 delegateRoot.dataLoading = false;
                                 delegateRoot.fetchFailed = true;
                                 delegateRoot.failReason = reason;
+                            }
+                        }
+                        function onImageFallbackChanged(c) {
+                            if (c.toUpperCase() === delegateRoot.code.toUpperCase()) {
+                                delegateRoot.imageFallback = cardDatabase.imageUsesOtherRarity(c);
                             }
                         }
                     }
@@ -752,12 +773,11 @@ Rectangle {
                             clip: true
                             Image {
                                 id: candImg
-                                property int rev: 0
                                 anchors.fill: parent
                                 anchors.margins: 2
                                 fillMode: Image.PreserveAspectFit
                                 asynchronous: true
-                                source: deckCode ? "image://cardcache/" + encodeURIComponent(deckCode) + "?r=" + candImg.rev : ""
+                                source: deckCode ? "image://cardcache/" + encodeURIComponent(deckCode) : ""
                                 cache: true
                                 visible: !delegateRoot.fetchFailed && status === Image.Ready
                             }
@@ -777,6 +797,59 @@ Rectangle {
                                 font.pixelSize: 9
                                 horizontalAlignment: Text.AlignHCenter
                                 wrapMode: Text.WordWrap
+                            }
+                            // Highlight the thumbnail on hover.
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 6
+                                color: "transparent"
+                                border.width: thumbnailArea.containsMouse ? 2 : 0
+                                border.color: root.accent
+                            }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 6
+                                color: "#88000000"
+
+                                opacity: thumbnailArea.containsMouse ? 1 : 0
+                                visible: opacity > 0
+
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 120
+                                    }
+                                }
+
+                                Column {
+                                    anchors.centerIn: parent
+                                    spacing: 4
+
+                                    Text {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: "↗"
+                                        color: "white"
+                                        font.pixelSize: 23
+                                    }
+
+                                    Text {
+                                        text: "Compare"
+                                        color: "white"
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                id: thumbnailArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+
+                                onClicked: {
+                                    cardPageBrowser.openCompareAt(index);
+                                }
                             }
                         }
 
@@ -807,26 +880,116 @@ Rectangle {
                                     elide: Text.ElideRight
                                     Layout.fillWidth: true
                                 }
-                                Rectangle {
-                                    visible: delegateRoot._cardData.source === "official"
-                                    width: 18
-                                    height: 18
-                                    radius: 9
-                                    color: "#5e4416"
-                                    Label {
-                                        anchors.centerIn: parent
+                                Button {
+                                    id: warningButton
+
+                                    visible: delegateRoot.usingOtherRarity || delegateRoot.missingCardData
+                                    Layout.preferredWidth: 24
+                                    Layout.preferredHeight: 24
+                                    Layout.alignment: Qt.AlignVCenter
+
+                                    padding: 0
+                                    hoverEnabled: true
+
+                                    onClicked: {
+                                        warningTooltip.close();
+                                        cardPageBrowser.openOfficialCard(delegateRoot.code);
+                                    }
+
+                                    background: Rectangle {
+                                        radius: 9
+                                        color: warningButton.down ? "#61451d" : warningButton.hovered ? "#49371f" : "#30291d"
+
+                                        border.width: 1
+                                        border.color: warningButton.hovered ? "#e8ad48" : "#69502b"
+
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: 120
+                                            }
+                                        }
+                                    }
+
+                                    contentItem: Text {
                                         text: "!"
-                                        color: "#fcd9a0"
-                                        font.pixelSize: 12
-                                        font.bold: true
+                                        color: "#ffc66d"
+                                        font.pixelSize: 16
+                                        font.weight: Font.DemiBold
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
                                     }
-                                    HoverHandler {
-                                        id: warnHover
-                                    }
+
                                     ToolTip {
-                                        visible: warnHover.hovered
-                                        text: "EncoreDecks doesn't have this card.\n" + "Using the official card API — translation data may be missing."
-                                        delay: 200
+                                        id: warningTooltip
+                                        parent: warningButton
+                                        visible: warningButton.visible && warningButton.hovered && !warningButton.down
+
+                                        delay: 120
+                                        timeout: -1
+                                        width: 290
+                                        padding: 14
+                                        margins: 8
+
+                                        x: warningButton.width - width
+                                        y: -implicitHeight - 8
+
+                                        background: Rectangle {
+                                            color: "#23272f"
+                                            radius: 12
+                                            border.width: 1
+                                            border.color: "#414854"
+                                        }
+
+                                        contentItem: Column {
+                                            spacing: 8
+
+                                            Text {
+                                                width: parent.width
+                                                text: delegateRoot.missingCardData ? "Card data unavailable" : "Different rarity used"
+                                                color: "#ffc66d"
+                                                font.pixelSize: 13
+                                                font.weight: Font.DemiBold
+                                                wrapMode: Text.WordWrap
+                                            }
+
+                                            Text {
+                                                width: parent.width
+
+                                                text: {
+                                                    if (delegateRoot.dataFallback && delegateRoot.imageFallback) {
+                                                        return "EncoreDecks is missing this card. " + "The image and card data use another rarity.";
+                                                    }
+
+                                                    if (delegateRoot.imageFallback) {
+                                                        return "EncoreDecks is missing this card's image. " + "The image uses another rarity.";
+                                                    }
+
+                                                    if (delegateRoot.missingCardData) {
+                                                        return "Set missing in local database. " + "You will need to download it in the card lists.";
+                                                    }
+
+                                                    return "EncoreDecks is missing this card data. " + "The data uses another rarity.";
+                                                }
+
+                                                color: "#e1e5eb"
+                                                font.pixelSize: 12
+                                                wrapMode: Text.WordWrap
+                                            }
+
+                                            Rectangle {
+                                                width: parent.width
+                                                height: 1
+                                                color: "#3a414c"
+                                            }
+
+                                            Text {
+                                                width: parent.width
+                                                text: "Click the button to view the official card page"
+                                                color: "#9ebfe8"
+                                                font.pixelSize: 11
+                                                wrapMode: Text.WordWrap
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -999,7 +1162,7 @@ Rectangle {
                         font.bold: true
                     }
                     Label {
-                        text: "Not in your data. It will be fetched from the official site."
+                        text: "Not in your data. Another EncoreDecks rarity will be tried."
                         color: root.text2
                         font.pixelSize: 10
                     }

@@ -21,7 +21,7 @@ Rectangle {
     readonly property color text1: "#f0f2f4"
     readonly property color text2: "#9aa0a6"
     readonly property color text3: "#676c72"
-    readonly property bool working: catalog.busy || catalog.updatingAll
+    readonly property bool working: catalog.busy || catalog.updatingAll || catalog.checkingUpdates
 
     ColumnLayout {
         anchors.fill: parent
@@ -74,7 +74,7 @@ Rectangle {
             Button {
                 id: cardUpdatesBtn
                 readonly property bool hasUpdates: catalog.outdatedCount > 0
-                visible: !root.working
+                visible: !catalog.busy && !catalog.updatingAll
                 enabled: !catalog.checkingUpdates
                 text: catalog.checkingUpdates ? "Checking…" : hasUpdates ? "Update all (" + catalog.outdatedCount + ")" : "Check card updates"
                 implicitHeight: 36

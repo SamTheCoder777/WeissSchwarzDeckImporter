@@ -47,18 +47,27 @@ Rectangle {
     clip: false
 
     function refresh() {
-        var d = cardDatabase.cardDataFor(cardId) || {};
+        var d = preloaded && preloaded.cardName !== undefined ? Object.assign({}, preloaded) : (cardDatabase.cardDataFor(cardId) || {});
         d.cardId = cardId;
         fullData = Object.assign({}, d);
     }
 
-    Component.onCompleted: {
-        cardDatabase.ensureCardData(cardId);
+    function loadCardData() {
+        if (!cardId)
+            return;
+
+        refresh();
+
+        if (fullData.cardName === undefined)
+            cardDatabase.ensureCardData(cardId);
     }
+
+    Component.onCompleted: loadCardData()
+
     onCardIdChanged: {
         fetchFailed = false;
         failReason = "";
-        cardDatabase.ensureCardData(cardId);
+        loadCardData();
     }
     onPreloadedChanged: refresh()
 
@@ -68,11 +77,12 @@ Rectangle {
             if (code === root.cardId) {
                 root.fetchFailed = false;
                 root.refresh();
-                img.rev++;
             }
         }
         function onLocaleChanged() {
-            root.refresh();
+            var d = cardDatabase.cardDataFor(root.cardId) || {};
+            d.cardId = root.cardId;
+            root.fullData = Object.assign({}, d);
         }
         function onCardFetchFailed(code, reason) {
             if (code === root.cardId) {
@@ -97,9 +107,8 @@ Rectangle {
 
             Image {
                 id: img
-                property int rev: 0
                 anchors.fill: parent
-                source: root.loaded && root.fullData.cardCode ? "image://cardcache/" + encodeURIComponent(root.fullData.cardCode) + "?r=" + rev : ""
+                source: root.loaded && root.fullData.cardCode ? "image://cardcache/" + encodeURIComponent(root.fullData.cardCode) : ""
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
                 cache: true

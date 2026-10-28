@@ -30,7 +30,7 @@ endif()
 
 find_package(faiss CONFIG REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickWidgets Network Concurrent Sql Svg QuickControls2)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickWidgets Network Concurrent Sql Svg QuickControls2 WebEngineWidgets)
 
 add_executable(WSDeckImporter WIN32
     main.cpp
@@ -58,11 +58,15 @@ add_executable(WSDeckImporter WIN32
     src/cardsIndex/SeriesCatalog.h src/cardsIndex/SeriesCatalog.cpp
     src/cardsIndex/SeriesSearchProxy.h
     src/images/CardImageProvider.h src/images/CardImageProvider.cpp
-    src/database/OfficialFallback.cpp src/database/OfficialFallback.h
+    src/database/CardResolver.cpp src/database/CardResolver.h
     src/cardsIndex/CardsPage.cpp src/cardsIndex/CardsPage.h src/cardsIndex/SeriesCatalog.cpp src/cardsIndex/SeriesCatalog.h src/cardsIndex/SeriesRepository.cpp src/cardsIndex/SeriesRepository.h src/cardsIndex/SeriesSearchProxy.h
     src/models/index_builder.cpp src/models/index_builder.h src/models/tcg_core.cpp src/models/tcg_core.h src/models/tcg_infer.cpp src/models/tcg_infer.h
     src/models/tcg_util.h
     src/index/IndexGenerationPage.h src/index/IndexGenerationPage.cpp
+    src/browser/CardBrowserDialog.h src/browser/CardBrowserDialog.cpp
+    src/browser/CardBrowserWidget.h src/browser/CardBrowserWidget.cpp
+    src/network/NetGuard.cpp src/network/NetGuard.h
+    src/core/AppUpdateController.cpp src/core/AppUpdateController.h
 )
 
 set(APP_VERSION "")
@@ -91,6 +95,7 @@ target_link_libraries(WSDeckImporter PRIVATE
     Qt6::Sql
     Qt6::Svg
     Qt6::QuickControls2
+    Qt6::WebEngineWidgets
     onnxruntime
     faiss
     ${OpenCV_LIBS}

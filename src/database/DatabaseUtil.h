@@ -1,10 +1,14 @@
 #pragma once
 
-#include <QString>
-#include <QSqlDatabase>
-#include <QVariantMap>
-#include <QObject>
+#include <QHash>
 #include <QNetworkAccessManager>
+#include <QObject>
+#include <QSqlDatabase>
+#include <QString>
+#include <QStringList>
+#include <QVariantMap>
+
+#include "../images/CardImageProvider.h"
 
 class DatabaseUtil : public QObject {
     Q_OBJECT
@@ -17,9 +21,9 @@ public:
     Q_INVOKABLE void setLocale(const QString& loc);
 
     Q_INVOKABLE QString imageUrlFor(const QString &cardCode) const;
+    Q_INVOKABLE QStringList imageUrlsFor(const QString &cardCode) const;
     Q_INVOKABLE QVariantMap cardDataFor(const QString &cardCode) const;
     Q_INVOKABLE void ensureCardData(const QString &cardCode);
-    void fetchOfficialImageUrl(const QString &cardCode);
     void purgeMissingCards();
     void cleanupExpiredMissing();
 
@@ -33,29 +37,28 @@ public:
     Q_INVOKABLE QStringList distinctTraits(const QStringList &sets = {}) const;
     Q_INVOKABLE QStringList distinctTriggers(const QStringList &sets = {}) const;
 
+    bool imageRetryBlocked(const QString &url);
+    void recordImageFailure(const QString &url, int httpStatus);
+
+    Q_INVOKABLE bool imageUsesOtherRarity(const QString &cardCode) const;
+    void reportLoadedImage(const QString &cardCode, const QString &url);
+    Q_INVOKABLE QString officialCardPageUrl(const QString &cardCode) const;
+    bool hasExactImageUrl(const QString &cardCode, const QString &url) const;
+
 signals:
     void localeChanged();
     void cardReady(const QString& cardCode);
     void cardFetchFailed(const QString& cardCode, const QString& reason);
     void missingCardsPurged(int count);
-    void officialImageUrlReady(const QString &cardCode, const QString &url);
+
+    void imageFallbackChanged(const QString &cardCode);
 
 private:
-    struct FetchState {
-        int failures = 0;
-        qint64 nextRetryMs = 0;
-        bool permanent = false;
-    };
-
-    static constexpr int kMaxRetries = 4;
-
-    QHash<QString, FetchState> fetchState_;
+    QHash<QString, bool> imageFallback_;
 
     QString locale_ = "EN";
     QNetworkAccessManager nam_;
-    bool cardInDb(const QString& cardCode) const;
-    void storeOfficialCard(const QString& cardCode, const QJsonObject& encoreShaped);
-
+    bool cardInDb(const QString &cardCode) const;
     bool isKnownMissing(const QString &cardCode) const;
     void markMissing(const QString &cardCode, const QString &reason);
     void ensureMissingTable();
