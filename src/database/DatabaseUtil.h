@@ -13,9 +13,12 @@
 class DatabaseUtil : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString locale READ locale WRITE setLocale NOTIFY localeChanged)
+    Q_PROPERTY(QString cardDataSource READ cardDataSource WRITE setCardDataSource NOTIFY
+                   cardDataSourceChanged)
+    Q_PROPERTY(int dataRevision READ dataRevision NOTIFY cardDataChanged)
 
 public:
-    using QObject::QObject;
+    explicit DatabaseUtil(QObject *parent = nullptr);
 
     QString locale() const { return locale_; }
     Q_INVOKABLE void setLocale(const QString& loc);
@@ -45,6 +48,14 @@ public:
     Q_INVOKABLE QString officialCardPageUrl(const QString &cardCode) const;
     bool hasExactImageUrl(const QString &cardCode, const QString &url) const;
 
+    QString cardDataSource() const { return cardDataSource_; }
+    Q_INVOKABLE void setCardDataSource(const QString &source);
+
+    int dataRevision() const { return dataRevision_; }
+    Q_INVOKABLE QString imageContext() const;
+    Q_INVOKABLE QString cardImageSource(const QString &cardCode) const;
+    Q_INVOKABLE void reloadCardData();
+
 signals:
     void localeChanged();
     void cardReady(const QString& cardCode);
@@ -52,6 +63,9 @@ signals:
     void missingCardsPurged(int count);
 
     void imageFallbackChanged(const QString &cardCode);
+
+    void cardDataSourceChanged();
+    void cardDataChanged();
 
 private:
     QHash<QString, bool> imageFallback_;
@@ -62,4 +76,12 @@ private:
     bool isKnownMissing(const QString &cardCode) const;
     void markMissing(const QString &cardCode, const QString &reason);
     void ensureMissingTable();
+
+    QString cardDataSource_ = QStringLiteral("encore");
+    QVariantMap localCardDataFor(const QString &cardCode) const;
+
+    int dataRevision_ = 0;
+    QString lastImageContext_;
+    void invalidateCardData();
+    QString exactImageUrl(const QString &cardCode) const;
 };

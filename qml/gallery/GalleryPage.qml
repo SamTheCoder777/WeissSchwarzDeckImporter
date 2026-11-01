@@ -151,12 +151,12 @@ Item {
     }
     Connections {
         target: cardDatabase
-        function onLocaleChanged() {
-            root._requested = {};
-            root.rebuild();
-        }
         function onCardReady(code) {
             root.patchCardData(code);
+        }
+        function onCardDataChanged() {
+            root._requested = {};
+            root.rebuild();
         }
     }
 
@@ -188,6 +188,24 @@ Item {
                             font.pixelSize: 15
                             font.bold: true
                             Layout.fillWidth: true
+                        }
+                        ComboBox {
+                            model: ["EncoreDecks", "Local database"]
+
+                            currentIndex:
+                                cardDatabase.cardDataSource === "local" ? 1 : 0
+
+                            onActivated: {
+                                cardDatabase.setCardDataSource(
+                                    index === 1 ? "local" : "encore"
+                                );
+
+                                currentIndex = Qt.binding(function() {
+                                    return cardDatabase.cardDataSource === "local"
+                                        ? 1
+                                        : 0;
+                                });
+                            }
                         }
                         Row {
                             spacing: 0

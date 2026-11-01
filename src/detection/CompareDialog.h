@@ -23,6 +23,7 @@ public:
                   const std::vector<Candidate>& candidates,
                   int startIndex, QSqlDatabase& db, DatabaseUtil* dbUtil,
                   QWidget* parent = nullptr);
+    ~CompareDialog() override;
 
     int confirmedIndex() const { return confirmed_; }
 
@@ -44,6 +45,8 @@ private:
     bool requiresOfficialData(const QString &code) const;
     void showLoadedImage(const QString &code, const QImage &image);
 
+    void cancelImageRequest();
+
     CardBrowserWidget *browserPanel_ = nullptr;
 
     QImage crop_;
@@ -51,6 +54,8 @@ private:
     int cur_ = 0;
     int confirmed_ = -1;
     quint64 imageGeneration_ = 0;
+    quint64 imageRequestId_ = 0;
+    QString imageMessage_;
 
     QLabel* cropLabel_;
     QLabel* candLabel_;

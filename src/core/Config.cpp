@@ -48,6 +48,14 @@ void Config::load() {
             .toInt());
     settings_->endGroup();
 
+    settings_->beginGroup("CardData");
+    cardDataSource_
+        = settings_->value("Source", QStringLiteral("encore")).toString().trimmed().toLower();
+    settings_->endGroup();
+    if (cardDataSource_ != QStringLiteral("encore") && cardDataSource_ != QStringLiteral("local")) {
+        cardDataSource_ = QStringLiteral("encore");
+    }
+
     settings_->beginGroup("MissingCards");
     missingPurgeInterval_
         = settings_->value("MissingPurgeInterval", (int) MissingPurgeInterval::Never).toInt();
@@ -101,6 +109,10 @@ void Config::save() {
 
     settings_->beginGroup("Locale");
     settings_->setValue("CurDetectLocaleMode", static_cast<int>(curDetectLocaleMode_));
+    settings_->endGroup();
+
+    settings_->beginGroup("CardData");
+    settings_->setValue("Source", cardDataSource_);
     settings_->endGroup();
 
     settings_->beginGroup("MissingCards");
@@ -198,6 +210,21 @@ void Config::clearCardListEtags()
 void Config::clearCardListEtags(DetectLocaleMode m)
 {
     (m == DetectLocaleMode::JP ? cardListEtag_ : enCardListEtag_).clear();
+    save();
+}
+
+void Config::setCardDataSource(const QString &source)
+{
+    const QString selected = source.trimmed().toLower();
+
+    if (selected != QStringLiteral("encore") && selected != QStringLiteral("local")) {
+        return;
+    }
+
+    if (selected == cardDataSource_)
+        return;
+
+    cardDataSource_ = selected;
     save();
 }
 

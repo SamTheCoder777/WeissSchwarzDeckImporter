@@ -1,16 +1,20 @@
 #include "CardImageProvider.h"
 
 #include <QCache>
+#include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QMetaObject>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QPixmapCache>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QUrl>
+#include <QUrlQuery>
 
 #include "../core/Config.h"
 #include "../database/DatabaseUtil.h"
@@ -29,11 +33,22 @@ QString CardImageProvider::cacheFilePath(const QString& url) {
 
 static QMutex cardImageMutex;
 static QCache<QString, QImage> cardImages(64 * 1024);
+static QString cardImageNamespace;
 
 static QString imageMemoryKey(const QString &cardCode)
 {
-    return Config::instance().getCardListDatabasePath() + QChar(0x1f)
-           + cardCode.trimmed().toUpper();
+    return cardImageNamespace + QChar(0x1f) + cardCode.trimmed().toUpper();
+}
+
+void CardImageProvider::setCacheNamespace(const QString &value)
+{
+    QMutexLocker lock(&cardImageMutex);
+
+    if (value == cardImageNamespace)
+        return;
+
+    cardImageNamespace = value;
+    cardImages.clear();
 }
 
 bool CardImageProvider::clearImageCaches()
@@ -96,10 +111,12 @@ void CardImageProvider::rememberImage(const QString &cardCode, const QImage &ima
 
 CardImageResponse::CardImageResponse(const QString &cardCode,
                                      const QSize &requestedSize,
-                                     DatabaseUtil *dbUtil)
-    : requestedSize_(requestedSize)
+                                     DatabaseUtil *dbUtil,
+                                     const QString &expectedStamp)
+    : dbUtil_(dbUtil)
+    , requestedSize_(requestedSize)
     , cardCode_(cardCode)
-    , dbUtil_(dbUtil)
+    , expectedStamp_(expectedStamp)
 {
     moveToThread(QCoreApplication::instance()->thread());
 
@@ -109,6 +126,26 @@ CardImageResponse::CardImageResponse(const QString &cardCode,
             if (completed_)
                 return;
 
+            if (!dbUtil_) {
+                complete();
+                return;
+            }
+
+            dataRevision_ = dbUtil_->dataRevision();
+            dataContext_ = dbUtil_->imageContext();
+
+            const QUrl currentUrl(dbUtil_->cardImageSource(cardCode_));
+
+            const QString actualStamp = QUrlQuery(currentUrl).queryItemValue("context");
+
+            if (!expectedStamp_.isEmpty() && expectedStamp_ != actualStamp) {
+                complete();
+                return;
+            }
+
+            CardImageProvider::setCacheNamespace(dataContext_ + QChar(0x1f)
+                                                 + QString::number(dataRevision_));
+
             image_ = CardImageProvider::memoryImage(cardCode_);
 
             if (!image_.isNull()) {
@@ -116,12 +153,16 @@ CardImageResponse::CardImageResponse(const QString &cardCode,
                 return;
             }
 
-            if (dbUtil_)
-                urls_ = dbUtil_->imageUrlsFor(cardCode_);
-
+            urls_ = dbUtil_->imageUrlsFor(cardCode_);
             tryNextImage();
         },
         Qt::QueuedConnection);
+}
+
+bool CardImageResponse::currentDataContext() const
+{
+    return dbUtil_ && dataRevision_ == dbUtil_->dataRevision()
+           && dataContext_ == dbUtil_->imageContext();
 }
 
 void CardImageResponse::complete()
@@ -131,8 +172,11 @@ void CardImageResponse::complete()
 
     completed_ = true;
 
-    if (!image_.isNull())
+    if (!currentDataContext()) {
+        image_ = QImage();
+    } else if (!image_.isNull()) {
         CardImageProvider::rememberImage(cardCode_, image_);
+    }
 
     emit finished();
 }
@@ -142,33 +186,37 @@ void CardImageResponse::tryNextImage()
     if (completed_)
         return;
 
+    if (!currentDataContext()) {
+        complete();
+        return;
+    }
+
     while (nextUrl_ < urls_.size()) {
         const QString url = urls_.at(nextUrl_++);
+
         const QString path = CardImageProvider::cacheFilePath(url);
 
-        // 1. Existing disk cache.
         QImage cached(path);
+
         if (!cached.isNull()) {
             image_ = cached;
 
-            if (dbUtil_)
-                dbUtil_->reportLoadedImage(cardCode_, url);
+            dbUtil_->reportLoadedImage(cardCode_, url);
 
             complete();
             return;
         }
 
-        // 2. Previously confirmed missing URL.
-        if (dbUtil_ && dbUtil_->imageRetryBlocked(url))
+        if (dbUtil_->imageRetryBlocked(url))
             continue;
 
-        // 3. Network request through NetGuard.
         NetRequest request;
         request.url = QUrl(url);
         request.key = QStringLiteral("card-image:") + url;
         request.useCache = false;
         request.timeoutMs = 15000;
-        request.retries = 0; // Start conservatively.
+        request.maxBodyBytes = 15LL * 1024 * 1024;
+        request.retries = 0;
 
         requestId_ = NetGuard::instance()
                          .get(request, this, [this, url, path](const NetResult &result) {
@@ -177,56 +225,50 @@ void CardImageResponse::tryNextImage()
                              if (completed_)
                                  return;
 
-                             if (result.status == NetResult::Cancelled) {
+                             if (!currentDataContext() || result.status == NetResult::Cancelled) {
                                  complete();
                                  return;
                              }
 
                              QImage downloaded;
+
                              if (result.ok())
                                  downloaded.loadFromData(result.body);
 
                              if (!downloaded.isNull()) {
                                  image_ = downloaded;
 
-                                 if (dbUtil_)
-                                     dbUtil_->reportLoadedImage(cardCode_, url);
+                                 dbUtil_->reportLoadedImage(cardCode_, url);
 
-                                 // Atomic replacement of the image cache file.
                                  QSaveFile file(path);
+
                                  if (file.open(QIODevice::WriteOnly)) {
                                      if (file.write(result.body) == result.body.size()) {
-                                         if (!file.commit())
-                                             qWarning() << "Image cache commit failed:" << path;
+                                         if (!file.commit()) {
+                                             qWarning() << "[IMAGE] Cache commit failed:" << path;
+                                         }
                                      } else {
                                          file.cancelWriting();
-                                         qWarning() << "Image cache write failed:" << path;
                                      }
                                  }
 
-                                 complete(); // Also populates your memory cache.
+                                 complete();
                                  return;
                              }
 
-                             // Temporary failures must not become missing-image records.
-                             if (!result.blocked && result.status == NetResult::ClientError
-                                 && (result.http == 404 || result.http == 410) && dbUtil_) {
+                             if (!result.blocked && result.status == NetResult::ClientError) {
                                  dbUtil_->recordImageFailure(url, result.http);
                              }
 
-                             qWarning() << "[IMAGE]" << url
-                                        << (result.ok() ? QStringLiteral("Invalid image data")
-                                                        : result.message);
+                             qWarning() << "[IMAGE]" << url << result.message;
 
-                             // Cached alternatives can still load.
-                             // NetGuard rejects network requests to a blocked host.
                              tryNextImage();
                          });
 
-        return; // Continue when the callback completes.
+        return;
     }
 
-    complete(); // No usable image.
+    complete();
 }
 
 void CardImageResponse::cancel()
@@ -255,11 +297,14 @@ QQuickTextureFactory* CardImageResponse::textureFactory() const {
 CardImageProvider::CardImageProvider(DatabaseUtil* dbUtil)
     : dbUtil_(dbUtil) {}
 
-QQuickImageResponse* CardImageProvider::requestImageResponse(const QString& id,
-                                                             const QSize& requestedSize) {
-    QString clean = id;
-    int q = clean.indexOf('?');
-    if (q >= 0) clean = clean.left(q);
-    const QString cardCode = QUrl::fromPercentEncoding(clean.toUtf8());
-    return new CardImageResponse(cardCode, requestedSize, dbUtil_);
+QQuickImageResponse *CardImageProvider::requestImageResponse(const QString &id,
+                                                             const QSize &requestedSize)
+{
+    const int separator = id.indexOf('?');
+    const QString encodedCode = separator < 0 ? id : id.left(separator);
+    const QString query = separator < 0 ? QString() : id.mid(separator + 1);
+    const QString cardCode = QUrl::fromPercentEncoding(encodedCode.toUtf8());
+    const QString expectedStamp = QUrlQuery(query).queryItemValue("context");
+
+    return new CardImageResponse(cardCode, requestedSize, dbUtil_, expectedStamp);
 }

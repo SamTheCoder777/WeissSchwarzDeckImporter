@@ -1,13 +1,5 @@
 #pragma once
 
-// NetGuard: one shared place for
-//   - HTTP error classification (429, 5xx, offline, timeout, ...)
-//   - per-HOST backoff with Retry-After support (persisted across restarts)
-//   - per-KEY minimum check interval + disk cache + ETag/Last-Modified (304)
-//   - in-flight de-duplication (same key requested twice = one request)
-//
-// Main-thread only. Qt 5.15+ (QNetworkRequest::setTransferTimeout).
-
 #include <QByteArray>
 #include <QHash>
 #include <QNetworkAccessManager>
@@ -66,8 +58,7 @@ struct NetRequest
     std::function<void(qint64, qint64)> progress;
     std::function<void()> onStarted; // Once, when the first attempt is sent.
 
-    // Identity of "this thing". Used for cache, interval, de-dupe.
-    // Empty = url string. Use e.g. "manifest:EN" if one URL serves several purposes.
+    // Identity
     QString key;
 
     // >0: if the last success for this key is younger than this, return the cached

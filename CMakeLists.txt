@@ -67,6 +67,8 @@ add_executable(WSDeckImporter WIN32
     src/browser/CardBrowserWidget.h src/browser/CardBrowserWidget.cpp
     src/network/NetGuard.cpp src/network/NetGuard.h
     src/core/AppUpdateController.cpp src/core/AppUpdateController.h
+    src/database/LocalCardStore.cpp src/database/LocalCardStore.h
+    src/database/LocalCardStore.cpp src/database/LocalCardStore.h
 )
 
 set(APP_VERSION "")

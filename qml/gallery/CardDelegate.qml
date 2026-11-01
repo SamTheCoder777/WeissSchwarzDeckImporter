@@ -47,9 +47,10 @@ Rectangle {
     clip: false
 
     function refresh() {
-        var d = preloaded && preloaded.cardName !== undefined ? Object.assign({}, preloaded) : (cardDatabase.cardDataFor(cardId) || {});
-        d.cardId = cardId;
-        fullData = Object.assign({}, d);
+        var data = cardDatabase.cardDataFor(root.cardId) || {};
+
+        data.cardId = root.cardId;
+        root.fullData = Object.assign({}, data);
     }
 
     function loadCardData() {
@@ -76,19 +77,27 @@ Rectangle {
         function onCardReady(code) {
             if (code === root.cardId) {
                 root.fetchFailed = false;
+                root.failReason = "";
                 root.refresh();
             }
-        }
-        function onLocaleChanged() {
-            var d = cardDatabase.cardDataFor(root.cardId) || {};
-            d.cardId = root.cardId;
-            root.fullData = Object.assign({}, d);
         }
         function onCardFetchFailed(code, reason) {
             if (code === root.cardId) {
                 root.fetchFailed = true;
                 root.failReason = reason;
             }
+        }
+        function refreshFromDatabase() {
+            var d = cardDatabase.cardDataFor(root.cardId) || {};
+            d.cardId = root.cardId;
+
+            root.fullData = Object.assign({}, d);
+        }
+        function onCardDataChanged() {
+            root.fetchFailed = false;
+            root.failReason = "";
+
+            root.loadCardData();
         }
     }
 
@@ -108,7 +117,10 @@ Rectangle {
             Image {
                 id: img
                 anchors.fill: parent
-                source: root.loaded && root.fullData.cardCode ? "image://cardcache/" + encodeURIComponent(root.fullData.cardCode) : ""
+                source: {
+                    var revision = cardDatabase.dataRevision;
+                    return cardDatabase.cardImageSource(root.cardId);
+                }
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
                 cache: true

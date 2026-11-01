@@ -20,19 +20,6 @@ ScrollView {
             cardDatabase.ensureCardData(id);
     }
 
-    // Connections {
-    //     target: cardDatabase
-    //     function onCardReady(code) {
-    //         if (code === root.card.cardCode || code === root.card.cardId)
-    //             root.card = cardDatabase.cardDataFor(code);
-    //     }
-    //     function onLocaleChanged() {
-    //         var id = root.card.cardCode || root.card.cardId;
-    //         if (id)
-    //             root.card = cardDatabase.cardDataFor(id);
-    //     }
-    // }
-
     component SelText: TextEdit {
         readOnly: true
         selectByMouse: true
@@ -57,7 +44,11 @@ ScrollView {
             clip: true
             Image {
                 anchors.fill: parent
-                source: root.card.cardCode ? "image://cardcache/" + encodeURIComponent(root.card.cardCode) : ""
+                source: {
+                    var revision = cardDatabase.dataRevision;
+
+                    return cardDatabase.cardImageSource(root.card.cardCode || root.card.cardId || "");
+                }
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
             }

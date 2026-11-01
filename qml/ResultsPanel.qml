@@ -15,6 +15,29 @@ Rectangle {
     readonly property color text1: "#e8eaed"
     readonly property color text2: "#9aa0a6"
 
+    property string searchDataContext: cardDatabase.imageContext()
+
+    Connections {
+        target: cardDatabase
+
+        function onCardDataChanged() {
+            var context = cardDatabase.imageContext();
+
+            if (root.searchDataContext !== context)
+                bridge.clearFilter();
+
+            root.searchDataContext = context;
+
+            if (cardSearchPopup.visible)
+                cardSearchPopup.runSearch();
+
+            if (advSearchPopup.visible) {
+                advSearchPopup.reloadLists();
+                advSearchPopup.recount();
+            }
+        }
+    }
+
     component FilterCombo: ComboBox {
         id: fc
         Layout.fillWidth: true
@@ -758,6 +781,19 @@ Rectangle {
                                 delegateRoot.imageFallback = cardDatabase.imageUsesOtherRarity(c);
                             }
                         }
+                        function onCardDataChanged() {
+                            delegateRoot.dataLoading = false;
+                            delegateRoot.fetchFailed = false;
+                            delegateRoot.failReason = "";
+                            delegateRoot.imageLoaded = false;
+
+                            delegateRoot.imageFallback = cardDatabase.imageUsesOtherRarity(delegateRoot.code);
+
+                            delegateRoot.refreshCardData();
+
+                            if (delegateRoot.code)
+                                cardDatabase.ensureCardData(delegateRoot.code);
+                        }
                     }
 
                     RowLayout {
@@ -777,7 +813,10 @@ Rectangle {
                                 anchors.margins: 2
                                 fillMode: Image.PreserveAspectFit
                                 asynchronous: true
-                                source: deckCode ? "image://cardcache/" + encodeURIComponent(deckCode) : ""
+                                source: {
+                                    var revision = cardDatabase.dataRevision;
+                                    return cardDatabase.cardImageSource(deckCode);
+                                }
                                 cache: true
                                 visible: !delegateRoot.fetchFailed && status === Image.Ready
                             }
@@ -1208,7 +1247,10 @@ Rectangle {
                                 anchors.margins: 1
                                 fillMode: Image.PreserveAspectFit
                                 asynchronous: true
-                                source: "image://cardcache/" + encodeURIComponent(modelData.cardCode)
+                                source: {
+                                    var revision = cardDatabase.dataRevision;
+                                    return cardDatabase.cardImageSource(modelData.cardCode);
+                                }
                             }
                         }
                         ColumnLayout {
@@ -1268,6 +1310,30 @@ Rectangle {
         property var triggerModel: ["Any", "None"]
         property var traitList: []
 
+        function toggleCardType(code) {
+            if (code === "") {
+                selectedTypes = [];
+                scheduleRecount();
+                return;
+            }
+
+            if (["CH", "EV", "CX"].indexOf(code) < 0)
+                return;
+
+            var selected = selectedTypes.filter(function (value) {
+                return value === "CH" || value === "EV" || value === "CX";
+            });
+
+            var position = selected.indexOf(code);
+
+            if (position >= 0)
+                selected.splice(position, 1);
+            else
+                selected.push(code);
+
+            selectedTypes = selected;
+            scheduleRecount();
+        }
         function traitValue() {
             return fTrait.text.trim();
         }
@@ -1533,7 +1599,7 @@ Rectangle {
                             delegate: Rectangle {
                                 id: typeChip
                                 required property var modelData
-                                readonly property bool on: advSearchPopup.selectedTypes.indexOf(modelData.code) >= 0
+                                readonly property bool on: typeChip.modelData.code === "" ? advSearchPopup.selectedTypes.length === 0 : advSearchPopup.selectedTypes.indexOf(typeChip.modelData.code) >= 0
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 28
                                 radius: 6
@@ -1550,14 +1616,7 @@ Rectangle {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        var arr = advSearchPopup.selectedTypes.slice();
-                                        var i = arr.indexOf(typeChip.modelData.code);
-                                        if (i >= 0)
-                                            arr.splice(i, 1);
-                                        else
-                                            arr.push(typeChip.modelData.code);
-                                        advSearchPopup.selectedTypes = arr;
-                                        advSearchPopup.scheduleRecount();
+                                        advSearchPopup.toggleCardType(typeChip.modelData.code);
                                     }
                                 }
                             }

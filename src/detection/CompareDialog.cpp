@@ -1,6 +1,8 @@
 #include "CompareDialog.h"
 
+#include <QSaveFile>
 #include <QSqlQuery>
+#include <QUrl>
 #include <QtWidgets>
 
 #include "../browser/CardBrowserWidget.h"
@@ -114,6 +116,19 @@ CompareDialog::CompareDialog(const QImage& crop,
         accept();
     });
 
+    if (dbUtil_) {
+        connect(dbUtil_, &DatabaseUtil::cardDataChanged, this, [this] {
+            if (isVisible() && !cands_.empty())
+                showCandidate(cur_);
+        });
+    }
+
+    connect(this, &QDialog::finished, this, [this](int) {
+        ++imageGeneration_;
+        cancelImageRequest();
+        browserPanel_->stop();
+    });
+
     qApp->installEventFilter(this);
     showCandidate(startIndex >= 0 && startIndex < (int) cands_.size() ? startIndex : 0);
 
@@ -121,17 +136,36 @@ CompareDialog::CompareDialog(const QImage& crop,
     setFocus();
 }
 
+CompareDialog::~CompareDialog()
+{
+    ++imageGeneration_;
+    cancelImageRequest();
+}
+
+void CompareDialog::cancelImageRequest()
+{
+    const quint64 id = imageRequestId_;
+    imageRequestId_ = 0;
+
+    if (id)
+        NetGuard::instance().cancel(id);
+}
+
 void CompareDialog::tryNextImage(const QStringList &urls, int index, quint64 generation)
 {
-    if (generation != imageGeneration_)
+    if (generation != imageGeneration_ || !dbUtil_ || cur_ < 0 || cur_ >= int(cands_.size())) {
         return;
+    }
 
     const QString requestedCode = QString::fromStdString(cands_[cur_].card_id);
+
+    const int revision = dbUtil_->dataRevision();
+    const QString context = dbUtil_->imageContext();
 
     while (index < urls.size()) {
         const QString url = urls.at(index++);
 
-        if (!dbUtil_ || !dbUtil_->hasExactImageUrl(requestedCode, url)) {
+        if (!dbUtil_->hasExactImageUrl(requestedCode, url)) {
             showOfficialPage(requestedCode);
             return;
         }
@@ -141,77 +175,81 @@ void CompareDialog::tryNextImage(const QStringList &urls, int index, quint64 gen
         QImage cached(cachePath);
 
         if (!cached.isNull()) {
-            qDebug() << "[IMAGE][Compare][DISK]" << requestedCode << url;
-
             dbUtil_->reportLoadedImage(requestedCode, url);
+
             CardImageProvider::rememberImage(requestedCode, cached);
 
             showLoadedImage(requestedCode, cached);
             return;
         }
 
-        if (dbUtil_->imageRetryBlocked(url)) {
-            qDebug() << "[IMAGE][Compare][SKIP MISSING DB]" << requestedCode << url;
+        if (dbUtil_->imageRetryBlocked(url))
             continue;
-        }
 
         NetRequest request;
         request.url = QUrl(url);
         request.key = QStringLiteral("card-image:") + url;
         request.useCache = false;
         request.timeoutMs = 15000;
+        request.maxBodyBytes = 15LL * 1024 * 1024;
         request.retries = 0;
 
-        NetGuard::instance().get(request,
-                                 this,
-                                 [this, urls, index, generation, requestedCode, url, cachePath](
-                                     const NetResult &result) {
-                                     if (generation != imageGeneration_)
-                                         return;
+        imageRequestId_ = NetGuard::instance().get(
+            request,
+            this,
+            [this, urls, index, generation, revision, context, requestedCode, url, cachePath](
+                const NetResult &result) {
+                if (generation != imageGeneration_ || !dbUtil_
+                    || revision != dbUtil_->dataRevision() || context != dbUtil_->imageContext()) {
+                    return;
+                }
 
-                                     if (result.status == NetResult::Cancelled)
-                                         return;
+                imageRequestId_ = 0;
 
-                                     QImage image;
-                                     if (result.ok())
-                                         image.loadFromData(result.body);
+                if (result.status == NetResult::Cancelled)
+                    return;
 
-                                     if (!image.isNull()) {
-                                         CardImageProvider::rememberImage(requestedCode, image);
+                QImage image;
 
-                                         if (dbUtil_)
-                                             dbUtil_->reportLoadedImage(requestedCode, url);
+                if (result.ok())
+                    image.loadFromData(result.body);
 
-                                         QSaveFile file(cachePath);
+                if (!image.isNull()) {
+                    CardImageProvider::rememberImage(requestedCode, image);
 
-                                         if (!file.open(QIODevice::WriteOnly)) {
-                                             qWarning() << "Image cache open failed:" << cachePath
-                                                        << file.errorString();
-                                         } else if (file.write(result.body) != result.body.size()) {
-                                             qWarning() << "Image cache write failed:" << cachePath
-                                                        << file.errorString();
-                                             file.cancelWriting();
-                                         } else if (!file.commit()) {
-                                             qWarning() << "Image cache commit failed:" << cachePath
-                                                        << file.errorString();
-                                         }
+                    dbUtil_->reportLoadedImage(requestedCode, url);
 
-                                         showLoadedImage(requestedCode, image);
-                                         return;
-                                     }
+                    QSaveFile file(cachePath);
 
-                                     if (!result.blocked && result.status == NetResult::ClientError
-                                         && (result.http == 404 || result.http == 410) && dbUtil_) {
-                                         dbUtil_->recordImageFailure(url, result.http);
-                                     }
+                    if (!file.open(QIODevice::WriteOnly)) {
+                        qWarning() << "Image cache open failed:" << cachePath << file.errorString();
+                    } else if (file.write(result.body) != result.body.size()) {
+                        file.cancelWriting();
 
-                                     qWarning()
-                                         << "[IMAGE][Compare][FAILED]" << requestedCode << url
-                                         << (result.ok() ? QStringLiteral("Invalid image data")
-                                                         : result.message);
+                        qWarning()
+                            << "Image cache write failed:" << cachePath << file.errorString();
+                    } else if (!file.commit()) {
+                        qWarning()
+                            << "Image cache commit failed:" << cachePath << file.errorString();
+                    }
 
-                                     tryNextImage(urls, index, generation);
-                                 });
+                    imageMessage_.clear();
+                    showLoadedImage(requestedCode, image);
+                    return;
+                }
+
+                if (!result.blocked && result.status == NetResult::ClientError
+                    && (result.http == 404 || result.http == 410)) {
+                    dbUtil_->recordImageFailure(url, result.http);
+                }
+
+                imageMessage_ = result.ok() ? QStringLiteral("Invalid image data.")
+                                            : result.message;
+
+                qWarning() << "[IMAGE][Compare][FAILED]" << requestedCode << url << imageMessage_;
+
+                tryNextImage(urls, index, generation);
+            });
 
         return;
     }
@@ -223,38 +261,58 @@ void CompareDialog::showCandidate(int i)
 {
     if (cands_.empty())
         return;
+
     if (i < 0)
-        i = (int) cands_.size() - 1;
-    if (i >= (int) cands_.size())
+        i = int(cands_.size()) - 1;
+
+    if (i >= int(cands_.size()))
         i = 0;
+
     cur_ = i;
 
-    const Candidate &c = cands_[cur_];
-    candCaption_->setText(QString("%1   ·   score %2   ·   rank %3/%4")
-                              .arg(c.card_id)
-                              .arg(c.score, 0, 'f', 4)
-                              .arg(cur_ + 1)
-                              .arg(cands_.size()));
-    counterLabel_->setText(QString("Candidate %1 of %2").arg(cur_ + 1).arg(cands_.size()));
-
-    const QString code = QString::fromStdString(c.card_id);
-
+    // Invalidate the old callback before cancelling its waiter.
     const quint64 generation = ++imageGeneration_;
+    cancelImageRequest();
+
     browserPanel_->stop();
 
+    imageMessage_.clear();
     curCandImage_ = QImage();
     candLabel_->clear();
+
+    const Candidate &candidate = cands_[cur_];
+    const QString code = QString::fromStdString(candidate.card_id);
+    const QVariantMap data = dbUtil_ ? dbUtil_->cardDataFor(code) : QVariantMap();
+    const QString name = data.value("cardName").toString();
+    const QString source = dbUtil_ && dbUtil_->cardDataSource() == QStringLiteral("local")
+                               ? QStringLiteral("Local database")
+                               : QStringLiteral("EncoreDecks");
+
+    candCaption_->setTextFormat(Qt::PlainText);
+
+    QString caption = QString("%1   ·   score %2   ·   rank %3/%4")
+                          .arg(code)
+                          .arg(candidate.score, 0, 'f', 4)
+                          .arg(cur_ + 1)
+                          .arg(cands_.size());
+
+    candCaption_->setText(caption);
+
+    counterLabel_->setText(QString("Candidate %1 of %2").arg(cur_ + 1).arg(cands_.size()));
 
     if (requiresOfficialData(code)) {
         showOfficialPage(code);
         return;
     }
 
+    if (dbUtil_) {
+        CardImageProvider::setCacheNamespace(dbUtil_->imageContext() + QChar(0x1f)
+                                             + QString::number(dbUtil_->dataRevision()));
+    }
+
     const QImage memory = CardImageProvider::memoryImage(code);
 
     if (!memory.isNull()) {
-        qDebug() << "[IMAGE][Compare][MEMORY]" << code;
-
         showLoadedImage(code, memory);
         return;
     }
@@ -276,8 +334,10 @@ void CompareDialog::rescale()
         candLabel_->setPixmap(
             QPixmap::fromImage(curCandImage_)
                 .scaled(candLabel_->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    else if (!loading_)
-        candLabel_->setText("(no master image)");
+    else if (!loading_) {
+        candLabel_->setText(imageMessage_.isEmpty() ? QStringLiteral("(no master image)")
+                                                    : imageMessage_);
+    }
 }
 
 void CompareDialog::resizeEvent(QResizeEvent *e)
@@ -306,6 +366,22 @@ void CompareDialog::showOfficialPage(const QString &code)
 {
     loading_ = false;
     curCandImage_ = QImage();
+
+    if (dbUtil_ && dbUtil_->cardDataSource() == QStringLiteral("local")) {
+        browserPanel_->stop();
+        candStack_->setCurrentWidget(candLabel_);
+
+        if (imageMessage_.isEmpty()) {
+            imageMessage_ = QStringLiteral("No usable official image is available "
+                                           "for this card in the local database.");
+        }
+
+        candLabel_->setTextFormat(Qt::PlainText);
+
+        candLabel_->setText(code + QStringLiteral("\n\n") + imageMessage_);
+
+        return;
+    }
 
     candStack_->setCurrentWidget(browserPanel_);
 

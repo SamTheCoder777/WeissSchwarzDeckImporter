@@ -1,23 +1,29 @@
 #include "DatabaseUtil.h"
 
-#include "../core/Config.h"
-#include "../database/CardResolver.h"
-
 #include <QRegularExpression>
 #include <algorithm>
 
 #include <QDateTime>
 #include <QNetworkRequest>
 
+#include <QCoreApplication>
 #include <QDebug>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QSqlRecord>
 #include <QThread>
+#include <QTimer>
 #include <QUrl>
 #include <QUrlQuery>
+
+#include "../core/Config.h"
+#include "../database/CardResolver.h"
+#include "../images/CardImageProvider.h"
+#include "LocalCardStore.h"
 
 static qint64 intervalToSeconds(int interval)
 {
@@ -287,6 +293,114 @@ static bool hasCardData(const QJsonObject &card)
     return false;
 }
 
+static QString localDatabasePath()
+{
+    return QCoreApplication::applicationDirPath() + QStringLiteral("/weiss-db.sqlite");
+}
+static QString localEdition()
+{
+    return isEnMode() ? QStringLiteral("en") : QStringLiteral("jp");
+}
+
+static QSqlDatabase getLocalDb()
+{
+    return LocalCardStore::open(localDatabasePath());
+}
+
+DatabaseUtil::DatabaseUtil(QObject *parent)
+    : QObject(parent)
+{
+    cardDataSource_ = Config::instance().getCardDataSource();
+    lastImageContext_ = imageContext();
+
+    CardImageProvider::setCacheNamespace(lastImageContext_ + QChar(0x1f)
+                                         + QString::number(dataRevision_));
+
+    // Observe catalogue changes without assuming a Config signal name.
+    auto *watch = new QTimer(this);
+    watch->setInterval(500);
+
+    connect(watch, &QTimer::timeout, this, [this] {
+        if (lastImageContext_ != imageContext())
+            invalidateCardData();
+    });
+
+    watch->start();
+}
+
+QString DatabaseUtil::imageContext() const
+{
+    return localEdition() + QChar(0x1f) + cardDataSource_ + QChar(0x1f)
+           + (cardDataSource_ == QStringLiteral("local")
+                  ? localDatabasePath()
+                  : Config::instance().getCardListDatabasePath());
+}
+
+void DatabaseUtil::invalidateCardData()
+{
+    lastImageContext_ = imageContext();
+
+    imageFallback_.clear();
+    ++dataRevision_;
+
+    CardImageProvider::setCacheNamespace(lastImageContext_ + QChar(0x1f)
+                                         + QString::number(dataRevision_));
+
+    emit cardDataChanged();
+}
+
+QString DatabaseUtil::cardImageSource(const QString &cardCode) const
+{
+    if (cardCode.trimmed().isEmpty())
+        return {};
+
+    const QString stamp = imageContext() + QChar(0x1f) + QString::number(dataRevision_);
+
+    const QByteArray hash = QCryptographicHash::hash(stamp.toUtf8(), QCryptographicHash::Sha256)
+                                .toHex();
+
+    return QStringLiteral("image://cardcache/")
+           + QString::fromLatin1(QUrl::toPercentEncoding(cardCode)) + QStringLiteral("?context=")
+           + QString::fromLatin1(hash);
+}
+
+void DatabaseUtil::reloadCardData()
+{
+    LocalCardStore::close(localDatabasePath());
+    invalidateCardData();
+}
+
+QVariantMap DatabaseUtil::localCardDataFor(const QString &cardCode) const
+{
+    return LocalCardStore::card(localDatabasePath(), localEdition(), cardCode, locale_);
+}
+
+void DatabaseUtil::setCardDataSource(const QString &source)
+{
+    const QString selected = source.trimmed().toLower();
+
+    if (selected != QStringLiteral("encore") && selected != QStringLiteral("local")) {
+        return;
+    }
+
+    if (selected == cardDataSource_)
+        return;
+
+    if (selected == QStringLiteral("local")) {
+        const QSqlDatabase db = getLocalDb();
+
+        if (!db.isValid() || !db.isOpen())
+            return;
+    }
+
+    cardDataSource_ = selected;
+
+    Config::instance().setCardDataSource(selected);
+
+    invalidateCardData();
+    emit cardDataSourceChanged();
+}
+
 void DatabaseUtil::setLocale(const QString &loc)
 {
     QString v = (loc.compare("JP", Qt::CaseInsensitive) == 0) ? "JP" : "EN";
@@ -295,6 +409,7 @@ void DatabaseUtil::setLocale(const QString &loc)
     locale_ = v;
     Config::instance().setPreferredLocale(v);
     emit localeChanged();
+    emit cardDataChanged();
 }
 
 QString DatabaseUtil::imageUrlFor(const QString &cardCode) const
@@ -304,6 +419,12 @@ QString DatabaseUtil::imageUrlFor(const QString &cardCode) const
 
 QStringList DatabaseUtil::imageUrlsFor(const QString &cardCode) const
 {
+    if (cardDataSource_ == QStringLiteral("local")) {
+        const QString url = exactImageUrl(cardCode);
+
+        return url.isEmpty() ? QStringList() : QStringList{url};
+    }
+
     QStringList urls;
 
     for (const QJsonObject &candidate : encoreCandidates(cardCode)) {
@@ -316,8 +437,24 @@ QStringList DatabaseUtil::imageUrlsFor(const QString &cardCode) const
     return urls;
 }
 
+QString DatabaseUtil::exactImageUrl(const QString &cardCode) const
+{
+    if (cardDataSource_ == QStringLiteral("local")) {
+        return localCardDataFor(cardCode).value("picture").toString();
+    }
+
+    bool found = false;
+
+    const QJsonObject exact = fetchCardObject(cardCode, found);
+
+    return found ? CardResolver::imageUrl(exact) : QString();
+}
+
 QVariantMap DatabaseUtil::cardDataFor(const QString &cardCode) const
 {
+    if (cardDataSource_ == QStringLiteral("local"))
+        return localCardDataFor(cardCode);
+
     QVariantMap card;
     QJsonObject o;
 
@@ -612,10 +749,7 @@ void DatabaseUtil::reportLoadedImage(const QString &cardCode, const QString &url
         return;
     }
 
-    bool found = false;
-    const QJsonObject exact = fetchCardObject(cardCode, found);
-
-    const QString exactUrl = found ? CardResolver::imageUrl(exact) : QString();
+    const QString exactUrl = exactImageUrl(cardCode);
 
     const bool fallback = !url.isEmpty() && (exactUrl.isEmpty() || QUrl(url) != QUrl(exactUrl));
 
@@ -643,19 +777,17 @@ QString DatabaseUtil::officialCardPageUrl(const QString &cardCode) const
 
 bool DatabaseUtil::hasExactImageUrl(const QString &cardCode, const QString &url) const
 {
-    bool found = false;
-    const QJsonObject card = fetchCardObject(cardCode, found);
-
-    if (!found)
-        return false;
-
-    const QString exact = CardResolver::imageUrl(card);
+    const QString exact = exactImageUrl(cardCode);
 
     return !exact.isEmpty() && QUrl(exact) == QUrl(url);
 }
 
 QVariantList DatabaseUtil::searchCards(const QString &query, int limit) const
 {
+    if (cardDataSource_ == QStringLiteral("local")) {
+        return LocalCardStore::search(localDatabasePath(), localEdition(), query, limit);
+    }
+
     QVariantList out;
     const QString q = query.trimmed();
     if (q.size() < 2)
@@ -714,6 +846,10 @@ QVariantList DatabaseUtil::searchCards(const QString &query, int limit) const
 
 int DatabaseUtil::countAdvanced(const QVariantMap &filters) const
 {
+    if (cardDataSource_ == QStringLiteral("local")) {
+        return LocalCardStore::count(localDatabasePath(), localEdition(), filters);
+    }
+
     QString where;
     QVariantList binds;
     if (!buildAdvancedWhere(filters, where, binds))
@@ -735,6 +871,10 @@ int DatabaseUtil::countAdvanced(const QVariantMap &filters) const
 
 QStringList DatabaseUtil::advancedSearchCodes(const QVariantMap &filters) const
 {
+    if (cardDataSource_ == QStringLiteral("local")) {
+        return LocalCardStore::codes(localDatabasePath(), localEdition(), filters);
+    }
+
     QStringList out;
     QString where;
     QVariantList binds;
@@ -794,6 +934,10 @@ static QStringList distinctValues(const QString &sql, const QVariantList &binds)
 
 QStringList DatabaseUtil::distinctTraits(const QStringList &sets) const
 {
+    if (cardDataSource_ == QStringLiteral("local")) {
+        return LocalCardStore::traits(localDatabasePath(), localEdition(), sets);
+    }
+
     QVariantList binds;
     const QString condEn = setCondition(sets, binds);
     const QString condNp = setCondition(sets, binds);
@@ -814,6 +958,10 @@ QStringList DatabaseUtil::distinctTraits(const QStringList &sets) const
 
 QStringList DatabaseUtil::distinctTriggers(const QStringList &sets) const
 {
+    if (cardDataSource_ == QStringLiteral("local")) {
+        return LocalCardStore::triggers(localDatabasePath(), localEdition(), sets);
+    }
+
     QVariantList binds;
     const QString cond = setCondition(sets, binds);
     QStringList raw = distinctValues("SELECT DISTINCT UPPER(j.value) FROM cards, "

@@ -130,6 +130,11 @@ public:
     void clearCardListEtags();
     void clearCardListEtags(DetectLocaleMode m);
 
+    // --- Local DB Settings ---
+    QString getCardDataSource() const { return cardDataSource_; }
+
+    void setCardDataSource(const QString &source);
+
     // ---------------------------
 
     bool getModelNative() const {return native_;}
@@ -250,6 +255,9 @@ private:
     const QString enCardListDatabasePath_ = QDir(QCoreApplication::applicationDirPath())
                                                 .filePath("enCardList.db");
     QMap<QString, QString> enCardListEtag_;
+
+    // Local DB Settings
+    QString cardDataSource_ = QStringLiteral("local");
 
     // ---------------------------
 

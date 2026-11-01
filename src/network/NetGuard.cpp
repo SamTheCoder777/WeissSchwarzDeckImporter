@@ -18,10 +18,6 @@ namespace {
 qint64 nowMs() { return QDateTime::currentMSecsSinceEpoch(); }
 }
 
-// =====================================================================
-//  setup / helpers
-// =====================================================================
-
 NetGuard &NetGuard::instance()
 {
     // parented to qApp so it is destroyed before the event loop machinery
@@ -73,12 +69,7 @@ QString NetGuard::describe(NetResult::Status st, int http, const QString &err)
     return {};
 }
 
-// =====================================================================
 //  classification
-// =====================================================================
-
-// Turns "whatever Qt + HTTP gave us" into one Status. Check the HTTP code
-// BEFORE the Qt error: Qt reports 429 as a generic content error.
 NetResult::Status NetGuard::classify(QNetworkReply *reply, int http)
 {
     const auto error = reply->error();
@@ -137,12 +128,7 @@ qint64 NetGuard::serverWaitFor(QNetworkReply *reply, NetResult::Status status, q
         ? retryAfterMs(reply, now) : 0;
 }
 
-// =====================================================================
 //  backoff state machine
-// =====================================================================
-
-// Updates per-host state from one finished request and builds the verdict.
-// Shared by get() (high level) and noteReply() (low level / streaming).
 NetResult NetGuard::applyOutcome(const QUrl &url, QNetworkReply *reply,
     NetResult::Status status, int http, qint64 serverWait, qint64 now)
 {
@@ -224,10 +210,6 @@ void NetGuard::clearBackoff(const QString &host)
         hosts_.remove(host);
     saveState();
 }
-
-// =====================================================================
-//  public get(): the four gates
-// =====================================================================
 
 quint64 NetGuard::get(const NetRequest &input, QObject *context, Callback callback)
 {
@@ -355,12 +337,7 @@ void NetGuard::finish(const QString &key, const NetResult &result)
     QTimer::singleShot(0, this, &NetGuard::pump);
 }
 
-// =====================================================================
 //  sending + finishing
-// =====================================================================
-
-// Starts queued requests while there are free slots.
-// Called when a request is queued and whenever a slot is released.
 void NetGuard::pump()
 {
     while (running_ < qMax(1, policy_.maxConcurrent) && !pending_.isEmpty()) {
@@ -415,6 +392,7 @@ void NetGuard::send(const QString &key)
     }
     QNetworkReply *reply = request.method == NetRequest::Method::Head
         ? nam_.head(networkRequest) : nam_.get(networkRequest);
+    qDebug() << "[NETWORK] " << request.url;
     it->reply = reply;
     if (request.maxBodyBytes > 0) {
         reply->setReadBufferSize(request.maxBodyBytes + 1);
@@ -526,10 +504,7 @@ void NetGuard::onFinished(const QString &key, QNetworkReply *reply, quint64 seri
     finish(key, result);
 }
 
-// =====================================================================
 //  callbacks / cancel
-// =====================================================================
-
 void NetGuard::deliver(const QVector<Waiter> &ws, const NetResult &r)
 {
     for (const Waiter &w : ws) {
@@ -611,10 +586,7 @@ void NetGuard::cancel(quint64 id)
     }
 }
 
-// =====================================================================
 //  disk: cache + state
-// =====================================================================
-
 QString NetGuard::cachePath(const QString &key) const
 {
     const QByteArray h = QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Sha1).toHex();
