@@ -6,6 +6,8 @@
 *.onnx.*
 onnxruntime-*
 manifest.*
+*.sqlite
+*.db
 
 # C++ objects and libs
 *.slo
