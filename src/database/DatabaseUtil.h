@@ -36,6 +36,7 @@ public:
 
     Q_INVOKABLE int countAdvanced(const QVariantMap &filters) const;
     Q_INVOKABLE QStringList advancedSearchCodes(const QVariantMap &filters) const;
+    Q_INVOKABLE QVariantMap referenceSearch(const QString &kind, const QString &value) const;
 
     Q_INVOKABLE QStringList distinctTraits(const QStringList &sets = {}) const;
     Q_INVOKABLE QStringList distinctTriggers(const QStringList &sets = {}) const;

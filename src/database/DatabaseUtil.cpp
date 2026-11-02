@@ -897,6 +897,119 @@ QStringList DatabaseUtil::advancedSearchCodes(const QVariantMap &filters) const
     return out;
 }
 
+QVariantMap DatabaseUtil::referenceSearch(const QString &kind, const QString &value) const
+{
+    QVariantMap result;
+    result.insert("codes", QStringList{});
+    result.insert("error", QString());
+
+    const QString term = value.trimmed();
+
+    if (term.isEmpty())
+        return result;
+
+    if (kind != QStringLiteral("trait") && kind != QStringLiteral("name")
+        && kind != QStringLiteral("ability")) {
+        result["error"] = QStringLiteral("Unknown reference type.");
+        return result;
+    }
+
+    const bool local = cardDataSource_ == QStringLiteral("local");
+
+    QSqlDatabase db = local ? getLocalDb() : getCardDb();
+
+    if (!db.isValid() || !db.isOpen()) {
+        result["error"] = QStringLiteral("The selected card database is unavailable.");
+        return result;
+    }
+
+    QString sql;
+    QVariantList binds;
+
+    if (local) {
+        sql = QStringLiteral("SELECT DISTINCT card_number FROM cards "
+                             "WHERE set_edition = ? AND ");
+
+        binds << localEdition();
+
+        if (kind == QStringLiteral("trait")) {
+            sql += QStringLiteral("(feature1 = ? COLLATE NOCASE "
+                                  "OR feature2 = ? COLLATE NOCASE "
+                                  "OR feature3 = ? COLLATE NOCASE)");
+
+            binds << term << term << term;
+
+        } else if (kind == QStringLiteral("name")) {
+            sql += QStringLiteral("card_name LIKE ? ESCAPE '\\'");
+
+            binds << likeContains(term);
+
+        } else {
+            const QString ability = term;
+
+            // Strips out both regular spaces (' ') and full-width spaces (' ')
+            sql += QStringLiteral("(REPLACE(REPLACE(text, ' ', ''), ' ', '') LIKE "
+                                  "REPLACE(REPLACE(?, ' ', ''), ' ', '') ESCAPE '\\' "
+                                  "OR REPLACE(REPLACE(translated_text, ' ', ''), ' ', '') LIKE "
+                                  "REPLACE(REPLACE(?, ' ', ''), ' ', '') ESCAPE '\\')");
+
+            binds << likeContains(ability) << likeContains(ability);
+        }
+
+        sql += QStringLiteral(" ORDER BY card_number");
+
+    } else {
+        QVariantMap filters;
+
+        if (kind == QStringLiteral("trait")) {
+            filters.insert("trait", term);
+
+        } else if (kind == QStringLiteral("name")) {
+            filters.insert("name", term);
+
+        } else {
+            filters.insert("text", QStringLiteral("『") + term + QStringLiteral("』"));
+        }
+
+        QString where;
+
+        if (!buildAdvancedWhere(filters, where, binds)) {
+            result["error"] = QStringLiteral("Unable to build the reference search.");
+            return result;
+        }
+
+        sql = QStringLiteral("SELECT DISTINCT cardcode FROM cards WHERE ") + where
+              + QStringLiteral(" ORDER BY cardcode");
+    }
+
+    QSqlQuery query(db);
+
+    if (!query.prepare(sql)) {
+        qWarning() << "[ReferenceSearch] prepare:" << query.lastError().text();
+
+        result["error"] = QStringLiteral("Unable to prepare the reference search.");
+        return result;
+    }
+
+    for (const QVariant &bind : binds)
+        query.addBindValue(bind);
+
+    if (!query.exec()) {
+        qWarning() << "[ReferenceSearch] query:" << query.lastError().text();
+
+        result["error"] = QStringLiteral("Unable to search the selected card database.");
+        return result;
+    }
+
+    QStringList codes;
+
+    while (query.next())
+        codes.append(query.value(0).toString());
+
+    result["codes"] = codes;
+    return result;
+}
+
 static QString setCondition(const QStringList &sets, QVariantList &binds)
 {
     if (sets.isEmpty())

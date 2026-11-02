@@ -35,6 +35,9 @@ Item {
     }
 
     function rebuild() {
+        if (referencePopup.visible)
+            referencePopup.close();
+
         var items = [];
         for (var i = 0; i < selModel.rowCount(); ++i) {
             var cardId = selModel.dataAt(i, "cardId");
@@ -103,6 +106,69 @@ Item {
         }
     }
 
+    // gallery only search
+    function galleryReferenceCodes(kind, value) {
+        function normalized(text) {
+            return String(text || "").trim().toLowerCase();
+        }
+
+        var term = normalized(value);
+        var matches = [];
+        var seen = {};
+
+        if (!term)
+            return matches;
+
+        for (var s = 0; s < root.sections.length; ++s) {
+            var cards = root.sections[s].cards || [];
+
+            for (var c = 0; c < cards.length; ++c) {
+                var entry = cards[c];
+                var code = String(entry.cardId || "");
+
+                if (!code || seen[code])
+                    continue;
+
+                seen[code] = true;
+
+                // Search the data already displayed in the gallery.
+                var data = entry.data || {};
+                var matched = false;
+
+                if (kind === "trait") {
+                    matched =
+                        normalized(data.feature1) === term
+                        || normalized(data.feature2) === term
+                        || normalized(data.feature3) === term;
+
+                } else if (kind === "name") {
+                    matched =
+                        normalized(data.cardName).indexOf(term) !== -1;
+
+                } else if (kind === "ability") {
+                    var abilityTerm = normalizedAbility(value);
+
+                    matched = abilityTerm.length > 0
+                        && normalizedAbility(data.text)
+                            .indexOf(abilityTerm) !== -1;
+                }
+
+                if (matched)
+                    matches.push(code);
+            }
+        }
+
+        matches.sort();
+        return matches;
+    }
+
+    function normalizedAbility(text) {
+        return String(text || "")
+            .replace(/<[/\\]?\s*br\s*[\/\\]?>/gi, "\n")
+            .replace(/\s+/g, "")
+            .toLowerCase();
+    }
+
     // Update just one card's data when it arrives (does NOT re-run rebuild,
     // which would call ensureCardData again and loop forever).
     function patchCardData(code) {
@@ -155,6 +221,11 @@ Item {
             root.patchCardData(code);
         }
         function onCardDataChanged() {
+            referencePopup.close();
+
+            referencePopup.allCodes = [];
+            referencePopup.pageRows = [];
+
             root._requested = {};
             root.rebuild();
         }
@@ -192,18 +263,13 @@ Item {
                         ComboBox {
                             model: ["EncoreDecks", "Local database"]
 
-                            currentIndex:
-                                cardDatabase.cardDataSource === "local" ? 1 : 0
+                            currentIndex: cardDatabase.cardDataSource === "local" ? 1 : 0
 
                             onActivated: {
-                                cardDatabase.setCardDataSource(
-                                    index === 1 ? "local" : "encore"
-                                );
+                                cardDatabase.setCardDataSource(index === 1 ? "local" : "encore");
 
-                                currentIndex = Qt.binding(function() {
-                                    return cardDatabase.cardDataSource === "local"
-                                        ? 1
-                                        : 0;
+                                currentIndex = Qt.binding(function () {
+                                    return cardDatabase.cardDataSource === "local" ? 1 : 0;
                                 });
                             }
                         }
@@ -359,6 +425,9 @@ Item {
                 anchors.margins: 18
                 card: root.selectedCard
                 visible: root.hasSelection
+                onReferenceRequested: function (kind, value) {
+                    referencePopup.openReference(kind, value);
+                }
             }
             Label {
                 anchors.centerIn: parent
@@ -366,6 +435,293 @@ Item {
                 text: "Select a card to see details"
                 color: "#777"
                 font.pixelSize: 14
+            }
+        }
+    }
+    Popup {
+        id: referencePopup
+
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+
+        width: Math.max(1, Math.min(780, parent.width - 32))
+        height: Math.max(1, Math.min(650, parent.height - 32))
+
+        modal: true
+        focus: true
+        padding: 18
+
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        property string referenceKind: ""
+        property string referenceValue: ""
+        property string errorMessage: ""
+
+        property var allCodes: []
+        property var pageRows: []
+
+        property int pageIndex: 0
+        readonly property int pageSize: 30
+
+        readonly property int pageCount: Math.max(1, Math.ceil(allCodes.length / pageSize))
+
+        readonly property color accent: referenceKind === "trait" ? "#77d9a0" : referenceKind === "name" ? "#80baff" : "#efc779"
+
+        readonly property string category: referenceKind === "trait" ? "Trait" : referenceKind === "name" ? "Name contains" : "Ability reference"
+
+        function openReference(kind, value) {
+            referenceKind = kind;
+            referenceValue = value;
+            errorMessage = "";
+            allCodes = [];
+            pageRows = [];
+            pageIndex = 0;
+
+            allCodes = root.galleryReferenceCodes(kind, value);
+
+            loadPage();
+            open();
+        }
+
+        function loadPage() {
+            var rows = [];
+
+            var first = pageIndex * pageSize;
+            var last = Math.min(first + pageSize, allCodes.length);
+
+            for (var i = first; i < last; ++i) {
+                var code = String(allCodes[i]);
+                var data = cardDatabase.cardDataFor(code) || {};
+
+                rows.push({
+                    cardCode: code,
+                    name: data.cardName || code,
+                    rarity: data.rarity || ""
+                });
+            }
+
+            pageRows = rows;
+            referenceList.positionViewAtBeginning();
+        }
+
+        function showCard(code) {
+            var data = Object.assign({}, cardDatabase.cardDataFor(code) || {});
+
+            data.cardId = code;
+            data.cardCode = code;
+
+            root.selectedCard = data;
+            close();
+        }
+
+        background: Rectangle {
+            color: "#22252b"
+            radius: 12
+            border.color: "#414650"
+            border.width: 1
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Rectangle {
+                    width: 4
+                    height: 42
+                    radius: 2
+                    color: referencePopup.accent
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 3
+
+                    Label {
+                        Layout.fillWidth: true
+
+                        text: referencePopup.category + " · " + referencePopup.referenceValue
+
+                        textFormat: Text.PlainText
+                        color: referencePopup.accent
+                        font.pixelSize: 18
+                        font.bold: true
+                        wrapMode: Text.Wrap
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+
+                        text: "Current Gallery" + " · " + referencePopup.allCodes.length + (referencePopup.allCodes.length === 1 ? " matching card" : " matching cards")
+
+                        color: "#a7adb8"
+                        font.pixelSize: 12
+                    }
+                }
+
+                Button {
+                    text: "Close"
+                    onClicked: referencePopup.close()
+                }
+            }
+
+            Label {
+                Layout.fillWidth: true
+
+                text: "Select a result to view its card details."
+                color: "#a7adb8"
+                font.pixelSize: 12
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                height: 1
+                color: "#3a3f48"
+            }
+
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                ListView {
+                    id: referenceList
+
+                    anchors.fill: parent
+                    clip: true
+                    spacing: 6
+
+                    model: referencePopup.pageRows
+
+                    ScrollBar.vertical: ScrollBar {}
+
+                    delegate: ItemDelegate {
+                        id: resultDelegate
+
+                        required property var modelData
+
+                        width: referenceList.width
+                        height: 96
+                        hoverEnabled: true
+
+                        onClicked: referencePopup.showCard(modelData.cardCode)
+
+                        background: Rectangle {
+                            radius: 7
+
+                            color: resultDelegate.down ? "#374151" : resultDelegate.hovered ? "#303640" : "#292d34"
+
+                            border.color: resultDelegate.hovered ? referencePopup.accent : "#363c45"
+                        }
+
+                        contentItem: RowLayout {
+                            spacing: 14
+
+                            Rectangle {
+                                Layout.preferredWidth: 54
+                                Layout.preferredHeight: 76
+
+                                color: "#1b1e23"
+                                radius: 4
+
+                                Image {
+                                    anchors.fill: parent
+
+                                    source: {
+                                        var revision = cardDatabase.dataRevision;
+
+                                        return cardDatabase.cardImageSource(resultDelegate.modelData.cardCode);
+                                    }
+
+                                    asynchronous: true
+                                    fillMode: Image.PreserveAspectFit
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 6
+
+                                Label {
+                                    Layout.fillWidth: true
+
+                                    text: resultDelegate.modelData.name
+                                    textFormat: Text.PlainText
+
+                                    color: "#f0f2f5"
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                    elide: Text.ElideRight
+                                }
+
+                                Label {
+                                    Layout.fillWidth: true
+
+                                    text: resultDelegate.modelData.cardCode + (resultDelegate.modelData.rarity ? " · " + resultDelegate.modelData.rarity : "")
+
+                                    textFormat: Text.PlainText
+                                    color: "#a7adb8"
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+                            }
+
+                            Label {
+                                text: "View"
+                                color: referencePopup.accent
+                                font.pixelSize: 12
+                            }
+                        }
+                    }
+                }
+
+                Label {
+                    anchors.centerIn: parent
+                    width: parent.width - 24
+
+                    visible: referencePopup.errorMessage !== "" || referencePopup.allCodes.length === 0
+
+                    text: referencePopup.errorMessage !== "" ? referencePopup.errorMessage : "No matching cards in the current gallery."
+
+                    color: referencePopup.errorMessage !== "" ? "#ef9a9a" : "#a7adb8"
+
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Button {
+                    text: "Previous"
+                    enabled: referencePopup.pageIndex > 0
+
+                    onClicked: {
+                        referencePopup.pageIndex--;
+                        referencePopup.loadPage();
+                    }
+                }
+
+                Label {
+                    Layout.fillWidth: true
+
+                    text: "Page " + (referencePopup.pageIndex + 1) + " of " + referencePopup.pageCount
+
+                    color: "#b9bec8"
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                Button {
+                    text: "Next"
+
+                    enabled: referencePopup.pageIndex + 1 < referencePopup.pageCount
+
+                    onClicked: {
+                        referencePopup.pageIndex++;
+                        referencePopup.loadPage();
+                    }
+                }
             }
         }
     }
