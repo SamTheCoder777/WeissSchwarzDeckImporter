@@ -92,6 +92,11 @@ private:
 
     QString manifestCachePath(const QUrl &url) const;
     void applyManifest(const QJsonObject &manifest);
+    void startDownload(int row);
+    void finishManifestCheck(bool success);
+
+    QString pendingDownloadId_;
+    Row downloadPlan_;
 
     QNetworkAccessManager nam_;
     QNetworkReply* reply_ = nullptr;

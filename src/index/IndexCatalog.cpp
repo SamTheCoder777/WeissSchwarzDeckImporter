@@ -33,6 +33,8 @@ IndexCatalog::IndexCatalog(QObject *parent)
 
 void IndexCatalog::onLocaleModeChanged()
 {
+    pendingDownloadId_.clear();
+
     ++refreshGen_;
     activeId_.clear();
 
@@ -293,11 +295,14 @@ void IndexCatalog::refresh(bool manual)
     const qint64 waitMs = qMax(intervalWaitSeconds * 1000, serverWaitMs);
 
     if (waitMs > 0) {
-        if (!manual)
-            emit refreshFinished();
-
         setStatus(QString("Showing saved/local indexes · next check in %1")
                       .arg(NetGuard::minsText(waitMs)));
+
+        if (!pendingDownloadId_.isEmpty()) {
+            finishManifestCheck(cachedManifest.value("indexes").isArray());
+        } else if (!manual) {
+            emit refreshFinished();
+        }
 
         return;
     }
@@ -340,7 +345,7 @@ void IndexCatalog::refresh(bool manual)
         if (!outcome.ok()) {
             setStatus(outcome.message + " · showing saved/local indexes.");
 
-            emit refreshFinished();
+            finishManifestCheck(false);
             return;
         }
 
@@ -351,11 +356,12 @@ void IndexCatalog::refresh(bool manual)
 
         if (parseError.error != QJsonParseError::NoError || !document.isObject()
             || !document.object().value("indexes").isArray()) {
-            setStatus("Manifest is not valid index JSON.");
+            setStatus("Manifest must contain a valid indexes array.");
 
-            emit errorOccurred("Manifest must contain an indexes array.");
+            if (pendingDownloadId_.isEmpty())
+                emit errorOccurred(status_);
 
-            emit refreshFinished();
+            finishManifestCheck(false);
             return;
         }
 
@@ -373,7 +379,7 @@ void IndexCatalog::refresh(bool manual)
 
         applyManifest(document.object());
 
-        emit refreshFinished();
+        finishManifestCheck(true);
     });
 }
 
@@ -498,7 +504,102 @@ void IndexCatalog::useById(const QString &id)
         }
 }
 
+void IndexCatalog::finishManifestCheck(bool success)
+{
+    const QString requestedId = pendingDownloadId_;
+    pendingDownloadId_.clear();
+
+    if (requestedId.isEmpty()) {
+        emit refreshFinished();
+        return;
+    }
+
+    if (!success) {
+        emit errorOccurred(status_);
+        return;
+    }
+
+    // applyManifest may have changed the row order
+    for (int i = 0; i < rows_.size(); ++i) {
+        if (rows_[i].id == requestedId) {
+            startDownload(i);
+            return;
+        }
+    }
+
+    setStatus("This index is no longer available in the latest manifest.");
+    emit errorOccurred(status_);
+}
+
 void IndexCatalog::download(int row)
+{
+    if (reply_ || !dlId_.isEmpty() || !pendingDownloadId_.isEmpty() || row < 0
+        || row >= rows_.size()) {
+        return;
+    }
+
+    auto &config = Config::instance();
+
+    // Capture the ID before applying a manifest can reorder the model
+    const QString requestedId = rows_[row].id;
+    const QString requestedName = rows_[row].name;
+
+    // Preserve the existing cooldown for this individual index
+    const QString itemKey = QStringLiteral("item-download:faiss:")
+                            + (isEnMode() ? QStringLiteral("EN:") : QStringLiteral("JP:"))
+                            + requestedId;
+
+    const qint64 itemWaitSeconds = config.updateCheckWaitSeconds(itemKey, true);
+
+    if (itemWaitSeconds > 0) {
+        setStatus(QString("Download cooldown for %1 · try again in %2")
+                      .arg(requestedName, NetGuard::minsText(itemWaitSeconds * 1000)));
+        return;
+    }
+
+    const QUrl manifestUrl(config.getIndexManifestUrl());
+
+    // Use the same key as refresh
+    const QString manifestKey = QStringLiteral("manifest:")
+                                + (isEnMode() ? QStringLiteral("EN:") : QStringLiteral("JP:"))
+                                + manifestUrl.toString(QUrl::FullyEncoded);
+
+    const qint64 intervalWaitMs = config.updateCheckWaitSeconds(manifestKey, true) * 1000;
+
+    const qint64 serverWaitMs = NetGuard::instance().blockedForMs(manifestUrl);
+
+    const qint64 waitMs = qMax(intervalWaitMs, serverWaitMs);
+
+    if (waitMs > 0) {
+        // The manifest check on cd
+        const QJsonObject cached = readJsonFile(manifestCachePath(manifestUrl));
+
+        if (!cached.value("indexes").isArray()) {
+            setStatus(QString("No saved manifest is available · try again in %1")
+                          .arg(NetGuard::minsText(waitMs)));
+            return;
+        }
+
+        applyManifest(cached);
+
+        // Never reuse the old row number after applying a manifest
+        for (int i = 0; i < rows_.size(); ++i) {
+            if (rows_[i].id == requestedId) {
+                startDownload(i);
+                return;
+            }
+        }
+
+        setStatus("This index is no longer listed in the saved manifest.");
+        return;
+    }
+
+    // A fresh manifest check is allowed
+    pendingDownloadId_ = requestedId;
+    refresh(true);
+}
+
+void IndexCatalog::startDownload(int row)
 {
     if (reply_ || !dlId_.isEmpty() || row < 0 || row >= rows_.size()) {
         return;
@@ -524,6 +625,7 @@ void IndexCatalog::download(int row)
 
     dlCooldownKey_ = cooldownKey;
     dlAttemptStarted_ = false;
+    downloadPlan_ = rows_[row];
 
     dlRow_ = row;
     dlId_ = rows_[row].id;
@@ -548,16 +650,27 @@ void IndexCatalog::startNextFile()
     if (row < 0)
         return;
 
-    Row &r = rows_[row];
+    const Row &r = downloadPlan_;
 
     if (dlFile_ >= r.files.size()) {
-        r.installedVersion = r.version;
+        rows_[row].installedVersion = r.version;
+
         saveInstalledState();
+
         finishDownload(true, r.name + " installed (v" + r.version + ").");
         return;
     }
 
     const FileEntry &fe = r.files[dlFile_];
+    const qint64 blockedMs = NetGuard::instance().blockedForMs(QUrl(fe.url));
+
+    if (blockedMs > 0) {
+        finishDownload(false,
+                       QString("Download server cooldown · try again in %1")
+                           .arg(NetGuard::minsText(blockedMs)));
+        return;
+    }
+
     outFile_.setFileName(dlDir_ + "/" + fe.name + ".part");
     if (!outFile_.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         finishDownload(false, "Cannot write to " + dlDir_);
@@ -586,14 +699,16 @@ void IndexCatalog::startNextFile()
         if (row < 0)
             return;
         Row &r = rows_[row];
-        qint64 denom = r.totalSize > 0 ? r.totalSize
-                                       : (dlBytesBefore_ + std::max<qint64>(total, 1));
+        const qint64 denom = downloadPlan_.totalSize > 0
+                                 ? downloadPlan_.totalSize
+                                 : dlBytesBefore_ + std::max<qint64>(total, 1);
         r.progress = double(dlBytesBefore_ + got) / double(denom);
         if (r.progress > 1.0)
             r.progress = 1.0;
         touchRow(row);
     });
     connect(reply_, &QNetworkReply::finished, this, [this] {
+        NetGuard::instance().noteReply(reply_->url(), reply_);
         const bool aborted = (reply_->error() == QNetworkReply::OperationCanceledError);
         const bool ok = (reply_->error() == QNetworkReply::NoError);
         const QString err = reply_->errorString();
@@ -619,7 +734,7 @@ void IndexCatalog::startNextFile()
             finishDownload(false, "Index no longer present.");
             return;
         }
-        Row &r = rows_[row];
+        const Row &r = downloadPlan_;
         if (dlFile_ >= r.files.size()) {
             finishDownload(false, "Index changed during download.");
             return;
@@ -660,6 +775,7 @@ void IndexCatalog::finishDownload(bool ok, const QString &message)
     }
     dlRow_ = -1;
     dlId_.clear();
+    downloadPlan_ = Row{};
     dlCooldownKey_.clear();
     dlAttemptStarted_ = false;
     setStatus(message);
@@ -674,6 +790,8 @@ void IndexCatalog::finishDownload(bool ok, const QString &message)
 
 void IndexCatalog::cancel()
 {
+    pendingDownloadId_.clear();
+
     if (reply_)
         reply_->abort();
 }
