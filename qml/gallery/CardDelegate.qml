@@ -46,11 +46,24 @@ Rectangle {
     }
     clip: false
 
-    function refresh() {
-        var data = cardDatabase.cardDataFor(root.cardId) || {};
+    function refresh(forceDatabase) {
+        if (!root.cardId) {
+            root.fullData = {};
+            return;
+        }
 
-        data.cardId = root.cardId;
-        root.fullData = Object.assign({}, data);
+        var data;
+
+        if (!forceDatabase && root.preloaded !== undefined && root.preloaded !== null) {
+            data = root.preloaded;
+        } else {
+            data = cardDatabase.cardDataFor(root.cardId) || {};
+        }
+
+        var copy = Object.assign({}, data);
+        copy.cardId = root.cardId;
+
+        root.fullData = copy;
     }
 
     function loadCardData() {
@@ -77,8 +90,7 @@ Rectangle {
         function onCardReady(code) {
             if (code === root.cardId) {
                 root.fetchFailed = false;
-                root.failReason = "";
-                root.refresh();
+                root.refresh(true);
             }
         }
         function onCardFetchFailed(code, reason) {

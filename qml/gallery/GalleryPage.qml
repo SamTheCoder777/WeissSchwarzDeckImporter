@@ -8,9 +8,12 @@ Item {
 
     property var selectedCard: ({})
     readonly property bool hasSelection: selectedCard && Object.keys(selectedCard).length > 0
+    readonly property var windowOverlay: root.Overlay.overlay
 
     property var sections: []          // [{ title, cards: [ {cardId,label,qty,confirmed,data} ] }]
     property var _requested: ({})      // cardId -> true, so we ensureCardData ONCE
+    property var _cardDataCache: ({})
+    property bool _galleryDirty: true
 
     function powerNum(d) {
         var p = d && d.power !== undefined ? parseInt(d.power, 10) : NaN;
@@ -34,6 +37,46 @@ Item {
         return parseInt(lv, 10);
     }
 
+    function requestRebuild() {
+        root._galleryDirty = true;
+
+        if (root.visible)
+            galleryRebuildTimer.restart();
+    }
+
+    Timer {
+        id: galleryRebuildTimer
+
+        interval: 35
+        repeat: false
+
+        onTriggered: {
+            if (!root.visible)
+                return;
+
+            root._galleryDirty = false;
+            root.rebuild();
+        }
+    }
+
+    onVisibleChanged: {
+        if (root.visible && root._galleryDirty)
+            galleryRebuildTimer.restart();
+    }
+
+    function galleryCardData(code) {
+        if (!code)
+            return {};
+
+        if (Object.prototype.hasOwnProperty.call(root._cardDataCache, code))
+            return root._cardDataCache[code];
+
+        var data = cardDatabase.cardDataFor(code) || {};
+        root._cardDataCache[code] = data;
+
+        return data;
+    }
+
     function rebuild() {
         if (referencePopup.visible)
             referencePopup.close();
@@ -43,7 +86,7 @@ Item {
             var cardId = selModel.dataAt(i, "cardId");
             if (!cardId || cardId.length === 0)
                 continue;
-            var d = cardDatabase.cardDataFor(cardId);
+            var d = root.galleryCardData(cardId);
             if ((!d || d.cardName === undefined) && !root._requested[cardId]) {
                 root._requested[cardId] = true;      // ask only once, ever
                 cardDatabase.ensureCardData(cardId);
@@ -100,7 +143,7 @@ Item {
 
         if (root.hasSelection && root.selectedCard.cardId) {
             var oldId = root.selectedCard.cardId;
-            var fresh = Object.assign({}, cardDatabase.cardDataFor(oldId));
+            var fresh = Object.assign({}, root.galleryCardData(oldId));
             fresh.cardId = oldId; // Never lose the ID
             root.selectedCard = fresh;
         }
@@ -136,21 +179,13 @@ Item {
                 var matched = false;
 
                 if (kind === "trait") {
-                    matched =
-                        normalized(data.feature1) === term
-                        || normalized(data.feature2) === term
-                        || normalized(data.feature3) === term;
-
+                    matched = normalized(data.feature1) === term || normalized(data.feature2) === term || normalized(data.feature3) === term;
                 } else if (kind === "name") {
-                    matched =
-                        normalized(data.cardName).indexOf(term) !== -1;
-
+                    matched = normalized(data.cardName).indexOf(term) !== -1;
                 } else if (kind === "ability") {
                     var abilityTerm = normalizedAbility(value);
 
-                    matched = abilityTerm.length > 0
-                        && normalizedAbility(data.text)
-                            .indexOf(abilityTerm) !== -1;
+                    matched = abilityTerm.length > 0 && normalizedAbility(data.text).indexOf(abilityTerm) !== -1;
                 }
 
                 if (matched)
@@ -163,56 +198,52 @@ Item {
     }
 
     function normalizedAbility(text) {
-        return String(text || "")
-            .replace(/<[/\\]?\s*br\s*[\/\\]?>/gi, "\n")
-            .replace(/\s+/g, "")
-            .toLowerCase();
+        return String(text || "").replace(/<[/\\]?\s*br\s*[\/\\]?>/gi, "\n").replace(/\s+/g, "").toLowerCase();
     }
 
     // Update just one card's data when it arrives (does NOT re-run rebuild,
     // which would call ensureCardData again and loop forever).
     function patchCardData(code) {
-        var fresh = cardDatabase.cardDataFor(code);
-        if (!fresh || !fresh.cardName)
+        var cached = Object.prototype.hasOwnProperty.call(
+            root._cardDataCache,
+            code
+        );
+
+        var selected = root.selectedCard
+            && (root.selectedCard.cardId === code
+                || root.selectedCard.cardCode === code);
+
+        if (!cached && !selected)
             return;
-        if (!fresh || fresh.cardName === undefined)
-            return;                         // nothing usable yet; ignore
 
-        var changed = false;
-        var secs = root.sections;
-        for (var s2 = 0; s2 < secs.length; ++s2) {
-            var cards = secs[s2].cards;
-            for (var c = 0; c < cards.length; ++c) {
-                if (cards[c].cardId === code && (!cards[c].data || cards[c].data.cardName === undefined)) {
-                    cards[c].data = fresh;  // ONLY patch cards still missing data
-                    changed = true;
-                }
-            }
-        }
-        if (changed)
-            root.sections = secs.slice();
+        var fresh = cardDatabase.cardDataFor(code) || {};
+        root._cardDataCache[code] = fresh;
 
-        if (root.selectedCard && root.selectedCard.cardId === code && (!root.selectedCard.cardName)) {
-            var copy = Object.assign({}, fresh);
-            copy.cardId = code; // Never lose the ID
-            root.selectedCard = copy;
-        }
+        root.requestRebuild();
     }
 
-    Component.onCompleted: rebuild()
+    Component.onCompleted: root.requestRebuild()
     Connections {
         target: selModel
+
         function onModelReset() {
-            root.rebuild();
+            root.requestRebuild();
         }
+
         function onDataChanged() {
-            root.rebuild();
+            root.requestRebuild();
         }
+
         function onRowsInserted() {
-            root.rebuild();
+            root.requestRebuild();
         }
+
         function onRowsRemoved() {
-            root.rebuild();
+            root.requestRebuild();
+        }
+
+        function onRowsMoved() {
+            root.requestRebuild();
         }
     }
     Connections {
@@ -227,7 +258,9 @@ Item {
             referencePopup.pageRows = [];
 
             root._requested = {};
-            root.rebuild();
+            root._cardDataCache = {};
+
+            root.requestRebuild();
         }
     }
 
@@ -441,7 +474,7 @@ Item {
     Popup {
         id: referencePopup
 
-        parent: Overlay.overlay
+        parent: root.windowOverlay || root
         anchors.centerIn: parent
 
         width: Math.max(1, Math.min(780, parent.width - 32))
@@ -603,6 +636,159 @@ Item {
                         width: referenceList.width
                         height: 96
                         hoverEnabled: true
+
+                        ToolTip {
+                            id: cardPreview
+
+                            parent: resultDelegate
+
+                            visible: resultDelegate.hovered && referencePopup.visible && !referenceList.moving
+
+                            delay: 400
+                            timeout: -1
+
+                            width: Math.max(1, Math.min(360, (root.windowOverlay ? root.windowOverlay.width : root.width) - 24))
+                            padding: 14
+                            margins: 12
+
+                            // Prefer the right side of the result.
+                            // Popup margins constrain it to the window.
+                            x: resultDelegate.width + 8
+                            y: 0
+
+                            background: Rectangle {
+                                color: "#20242b"
+                                radius: 10
+                                border.color: "#596475"
+                                border.width: 1
+                            }
+
+                            contentItem: Loader {
+                                // Create the preview only when the tooltip actually opens.
+                                active: cardPreview.visible
+
+                                sourceComponent: ColumnLayout {
+                                    id: previewContent
+
+                                    spacing: 10
+
+                                    readonly property var cardData: cardDatabase.cardDataFor(resultDelegate.modelData.cardCode) || {}
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 12
+
+                                        Image {
+                                            Layout.preferredWidth: 100
+                                            Layout.preferredHeight: 140
+
+                                            asynchronous: true
+                                            fillMode: Image.PreserveAspectFit
+
+                                            source: {
+                                                var revision = cardDatabase.dataRevision;
+
+                                                return cardDatabase.cardImageSource(resultDelegate.modelData.cardCode);
+                                            }
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 6
+
+                                            Label {
+                                                Layout.fillWidth: true
+
+                                                text: previewContent.cardData.cardName || resultDelegate.modelData.name
+
+                                                textFormat: Text.PlainText
+                                                color: "#f0f2f5"
+                                                font.pixelSize: 15
+                                                font.bold: true
+                                                wrapMode: Text.Wrap
+                                            }
+
+                                            Label {
+                                                Layout.fillWidth: true
+
+                                                text: resultDelegate.modelData.cardCode
+                                                textFormat: Text.PlainText
+
+                                                color: "#a7adb8"
+                                                font.pixelSize: 11
+                                                wrapMode: Text.Wrap
+                                            }
+
+                                            Label {
+                                                Layout.fillWidth: true
+
+                                                text: [previewContent.cardData.cardKind, previewContent.cardData.color, previewContent.cardData.rarity].filter(function (value) {
+                                                    return value !== undefined && value !== null && String(value) !== "";
+                                                }).join(" · ")
+
+                                                textFormat: Text.PlainText
+                                                color: "#b9c1cf"
+                                                font.pixelSize: 11
+                                                wrapMode: Text.Wrap
+                                            }
+                                        }
+                                    }
+
+                                    Label {
+                                        Layout.fillWidth: true
+
+                                        text: "Level " + (previewContent.cardData.level || "0") + "   Cost " + (previewContent.cardData.cost || "0") + "   Power " + (previewContent.cardData.power || "—") + "   Soul " + (previewContent.cardData.soul || "—")
+
+                                        color: "#d4dae4"
+                                        font.pixelSize: 12
+                                        wrapMode: Text.Wrap
+                                    }
+
+                                    Label {
+                                        Layout.fillWidth: true
+
+                                        text: [previewContent.cardData.feature1, previewContent.cardData.feature2, previewContent.cardData.feature3].filter(function (value) {
+                                            return value && value !== "-";
+                                        }).join(" · ")
+
+                                        visible: text.length > 0
+
+                                        textFormat: Text.PlainText
+                                        color: "#77d9a0"
+                                        font.pixelSize: 12
+                                        wrapMode: Text.Wrap
+                                    }
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 1
+                                        color: "#3a414d"
+                                    }
+
+                                    Label {
+                                        Layout.fillWidth: true
+
+                                        text: String(previewContent.cardData.text || "").replace(/<br\s*\/?>/gi, "\n")
+
+                                        textFormat: Text.PlainText
+                                        color: "#e0e4eb"
+                                        font.pixelSize: 12
+                                        wrapMode: Text.Wrap
+
+                                        maximumLineCount: 12
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Label {
+                                        Layout.fillWidth: true
+
+                                        text: "Click the result to open full details"
+                                        color: "#929dad"
+                                        font.pixelSize: 11
+                                    }
+                                }
+                            }
+                        }
 
                         onClicked: referencePopup.showCard(modelData.cardCode)
 
