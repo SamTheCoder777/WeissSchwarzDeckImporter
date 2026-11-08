@@ -32,5 +32,22 @@
         <file>icon/logo.ico</file>
         <file>icon/langJp.svg</file>
         <file>icon/langUs.svg</file>
+        <file>qml/deckbuilder/DeckBuilderPage.qml</file>
+        <file>qml/shared/TriggerIconRow.qml</file>
+        <file>qml/shared/TriggerIcons.js</file>
+        <file>icon/triggers/bounce.gif</file>
+        <file>icon/triggers/choice.gif</file>
+        <file>icon/triggers/draw.gif</file>
+        <file>icon/triggers/focus.gif</file>
+        <file>icon/triggers/gate.gif</file>
+        <file>icon/triggers/salvage.gif</file>
+        <file>icon/triggers/shot.gif</file>
+        <file>icon/triggers/soul.gif</file>
+        <file>icon/triggers/standby.gif</file>
+        <file>icon/triggers/stock.gif</file>
+        <file>icon/triggers/treasure.gif</file>
+        <file>icon/triggers/chance.gif</file>
+        <file>icon/triggers/discovery.gif</file>
+        <file>qml/shared/ReferenceText.js</file>
     </qresource>
 </RCC>

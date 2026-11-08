@@ -6,6 +6,7 @@
 #include "../cardsIndex/SeriesRepository.h"
 #include "../core/Config.h"
 #include "../database/DatabaseUtil.h"
+#include "../deckbuilder/DeckBuilderPage.h"
 #include "../detection/DetectionPage.h"
 #include "../gallery/GalleryPage.h"
 #include "../index/FaissPage.h"
@@ -101,6 +102,7 @@ MainWindow::MainWindow(QWidget *parent)
     cards_ = new CardsPage(seriesCatalog_, this);
     gallery_ = new GalleryPage(dbUtil_, selModel_, bridge_, this);
     indexGen_ = new IndexGenerationPage(models_, this);
+    deckBuilder_ = new DeckBuilderPage(this);
 
     pages_ = new QStackedWidget(this);
     pages_->addWidget(detection_);
@@ -109,6 +111,7 @@ MainWindow::MainWindow(QWidget *parent)
     pages_->addWidget(gallery_);
     pages_->addWidget(cards_);
     pages_->addWidget(indexGen_);
+    pages_->addWidget(deckBuilder_);
     setCentralWidget(pages_);
     statusBar();
 
@@ -162,6 +165,7 @@ void MainWindow::buildSidebar()
 
     QAction *aDetect = addPage(QIcon(":/icon/magnifying.svg"), "Detection", 0);
     addPage(QIcon(":/icon/gallery.svg"), "Selected Gallery", 3);
+    addPage(QIcon(":/icon/gallery.svg"), "Deck Builder", 6);
     sideBar->addWidget(topSpacer);
     sideBar->addSeparator();
     sideBar->addWidget(topSpacer);
@@ -542,4 +546,14 @@ void MainWindow::downloadFile(const QUrl &url,
             bar->setValue(100);
         onSuccess();
     });
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (deckBuilder_ && !deckBuilder_->confirmClose()) {
+        event->ignore();
+        return;
+    }
+
+    QMainWindow::closeEvent(event);
 }

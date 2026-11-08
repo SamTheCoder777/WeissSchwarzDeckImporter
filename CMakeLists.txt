@@ -69,6 +69,10 @@ add_executable(WSDeckImporter WIN32
     src/core/AppUpdateController.cpp src/core/AppUpdateController.h
     src/database/LocalCardStore.cpp src/database/LocalCardStore.h
     src/database/LocalCardStore.cpp src/database/LocalCardStore.h
+    src/deckbuilder/DeckBuilderImages.cpp src/deckbuilder/DeckBuilderImages.h src/deckbuilder/DeckBuilderPage.cpp src/deckbuilder/DeckBuilderPage.h
+    qml/deckbuilder/DeckBuilderPage.qml
+    src/database/TriggerAliases.h
+    src/database/ReferenceSearch.h
 )
 
 set(APP_VERSION "")

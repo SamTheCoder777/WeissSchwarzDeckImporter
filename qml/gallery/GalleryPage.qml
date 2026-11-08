@@ -2,6 +2,8 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
+import "../shared/ReferenceText.js" as References
+
 Item {
     id: root
     anchors.fill: parent
@@ -156,6 +158,7 @@ Item {
         }
 
         var term = normalized(value);
+        var abilityPattern = kind === "ability" ? References.abilityPattern(value) : null;
         var matches = [];
         var seen = {};
 
@@ -174,18 +177,15 @@ Item {
 
                 seen[code] = true;
 
-                // Search the data already displayed in the gallery.
                 var data = entry.data || {};
                 var matched = false;
 
                 if (kind === "trait") {
                     matched = normalized(data.feature1) === term || normalized(data.feature2) === term || normalized(data.feature3) === term;
                 } else if (kind === "name") {
-                    matched = normalized(data.cardName).indexOf(term) !== -1;
+                    matched = References.nameMatches(value, data.cardName || "");
                 } else if (kind === "ability") {
-                    var abilityTerm = normalizedAbility(value);
-
-                    matched = abilityTerm.length > 0 && normalizedAbility(data.text).indexOf(abilityTerm) !== -1;
+                    matched = References.abilityMatchesPattern(abilityPattern, data.text || "") || References.abilityMatchesPattern(abilityPattern, data.originalText || "") || References.abilityMatchesPattern(abilityPattern, data.translatedText || "");
                 }
 
                 if (matched)
@@ -204,14 +204,9 @@ Item {
     // Update just one card's data when it arrives (does NOT re-run rebuild,
     // which would call ensureCardData again and loop forever).
     function patchCardData(code) {
-        var cached = Object.prototype.hasOwnProperty.call(
-            root._cardDataCache,
-            code
-        );
+        var cached = Object.prototype.hasOwnProperty.call(root._cardDataCache, code);
 
-        var selected = root.selectedCard
-            && (root.selectedCard.cardId === code
-                || root.selectedCard.cardCode === code);
+        var selected = root.selectedCard && (root.selectedCard.cardId === code || root.selectedCard.cardCode === code);
 
         if (!cached && !selected)
             return;
@@ -596,6 +591,18 @@ Item {
                 Button {
                     text: "Close"
                     onClicked: referencePopup.close()
+                }
+            }
+
+            ComboBox {
+                Layout.preferredWidth: 180
+                model: ["Name contains", "Trait", "Ability contains"]
+                currentIndex: ["name", "trait", "ability"].indexOf(referencePopup.referenceKind)
+                onActivated: function (index) {
+                    referencePopup.openReference(["name", "trait", "ability"][index], referencePopup.referenceValue);
+                    currentIndex = Qt.binding(function () {
+                        return ["name", "trait", "ability"].indexOf(referencePopup.referenceKind);
+                    });
                 }
             }
 

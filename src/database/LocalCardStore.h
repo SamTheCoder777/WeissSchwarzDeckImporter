@@ -1,4 +1,5 @@
 #pragma once
+#include <QJsonObject>
 #include <QSqlDatabase>
 #include <QStringList>
 #include <QVariantMap>
@@ -24,4 +25,18 @@ QString kind(QString value);
 QStringList icons(QString value);
 QString trigger(QString value);
 QString plainText(QString value);
+
+// deck specific
+QVariantMap deckTitles(const QString &path, const QString &edition);
+QVariantMap deckPage(const QString &path,
+                     const QString &edition,
+                     const QString &titleNumber,
+                     const QVariantMap &filters,
+                     const QString &language,
+                     int offset,
+                     int limit);
+QVariantMap deckGroups(const QString &path, const QString &edition, const QJsonObject &manifest);
+
+void releaseThreadConnection(const QString &path);
+
 } // namespace LocalCardStore

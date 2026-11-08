@@ -400,6 +400,28 @@ QString IndexCatalog::manifestCachePath(const QUrl &url) const
 
 void IndexCatalog::applyManifest(const QJsonObject &manifest)
 {
+    {
+        const QString edition = isEnMode() ? QStringLiteral("en") : QStringLiteral("jp");
+        const QString directory = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+                                  + "/manifests";
+        QDir().mkpath(directory);
+        const QJsonObject snapshot{{"edition", edition}, {"manifest", manifest}};
+        const QByteArray bytes = QJsonDocument(snapshot).toJson(QJsonDocument::Compact);
+        QSaveFile file(directory + "/deck-groups-" + edition + ".json");
+        if (file.open(QIODevice::WriteOnly)) {
+            if (file.write(bytes) == bytes.size()) {
+                if (!file.commit())
+                    qWarning() << "[IndexCatalog] Could not save deck group snapshot:"
+                               << file.errorString();
+            } else {
+                file.cancelWriting();
+            }
+        } else {
+            qWarning() << "[IndexCatalog] Could not open deck group snapshot:"
+                       << file.errorString();
+        }
+    }
+
     beginResetModel();
 
     rows_.clear();

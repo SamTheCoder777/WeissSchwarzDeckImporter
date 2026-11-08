@@ -24,6 +24,7 @@
 #include "../database/CardResolver.h"
 #include "../images/CardImageProvider.h"
 #include "LocalCardStore.h"
+#include "TriggerAliases.h"
 
 static qint64 intervalToSeconds(int interval)
 {
@@ -103,8 +104,7 @@ static bool buildAdvancedWhere(const QVariantMap &f, QString &where, QVariantLis
                 {"SOUL", {"SOUL"}},
                 {"STANDBY", {"STANDBY"}},
             };
-            const QString key = v.toUpper();
-            const QStringList terms = aliases.value(key, QStringList{key});
+            const QStringList terms = TriggerAliases::terms(v);
             QStringList ors;
             for (const QString &t : terms) {
                 ors << "UPPER(json_extract(data,'$.trigger')) LIKE ? ESCAPE '\\'";
@@ -500,7 +500,7 @@ QVariantMap DatabaseUtil::cardDataFor(const QString &cardCode) const
 
     QStringList trig;
     for (const QJsonValue &t : o.value("trigger").toArray())
-        trig << t.toString();
+        trig << TriggerAliases::canonical(t.toString());
     card["cardTrigger"] = trig.join(", ");
 
     card["picture"] = imageUrlFor(cardCode);
@@ -1083,29 +1083,9 @@ QStringList DatabaseUtil::distinctTriggers(const QStringList &sets) const
                                          + cond + " ORDER BY 1",
                                      binds);
 
-    static const QHash<QString, QString> canon = {
-        {"CHOICE", "CHOICE"},
-        {"COMEBACK", "COMEBACK"},
-        {"SALVAGE", "COMEBACK"},
-        {"DRAW", "DRAW"},
-        {"BOOK", "BOOK"},
-        {"FOCUS", "FOCUS"},
-        {"GATE", "GATE"},
-        {"PANTS", "GATE"},
-        {"POOL", "POOL"},
-        {"BAG", "POOL"},
-        {"RETURN", "RETURN"},
-        {"BOUNCE", "RETURN"},
-        {"SHOT", "SHOT"},
-        {"SOUL", "SOUL"},
-        {"STANDBY", "STANDBY"},
-        {"TREASURE", "TREASURE"},
-        {"BAR", "TREASURE"},
-    };
-
     QStringList out;
     for (const QString &t : raw) {
-        const QString c = canon.value(t, t);
+        const QString c = TriggerAliases::canonical(t);
         if (!out.contains(c))
             out.append(c);
     }

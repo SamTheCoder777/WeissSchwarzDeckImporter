@@ -3,6 +3,7 @@
 #include <QDebug>
 #include <QFileInfo>
 #include <QHash>
+#include <QJsonArray>
 #include <QRegularExpression>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -10,35 +11,38 @@
 #include <QUrl>
 #include <algorithm>
 
+#include "ReferenceSearch.h"
+#include "TriggerAliases.h"
+
 namespace LocalCardStore {
 static const char *projection = R"SQL(
-WITH c AS (
- SELECT *,
-    CASE UPPER(TRIM(COALESCE(CAST(card_kind AS TEXT), '')))
-    WHEN '1' THEN 'CH'
-    WHEN '2' THEN 'CH'
-    WHEN '3' THEN 'EV'
-    WHEN '4' THEN 'CX'
-
-    WHEN 'CHARACTER' THEN 'CH'
-    WHEN 'CH' THEN 'CH'
-    WHEN 'キャラ' THEN 'CH'
-
-    WHEN 'EVENT' THEN 'EV'
-    WHEN 'EV' THEN 'EV'
-    WHEN 'イベント' THEN 'EV'
-
-    WHEN 'CLIMAX' THEN 'CX'
-    WHEN 'CX' THEN 'CX'
-    WHEN 'クライマックス' THEN 'CX'
-
-    ELSE UPPER(TRIM(COALESCE(CAST(card_kind AS TEXT), '')))
-    END AS kind_code,
-  UPPER(REPLACE(COALESCE(color,''),CHAR(92),'')) AS color_icons,
-  UPPER(REPLACE(COALESCE(card_trigger,''),CHAR(92),'')) AS trigger_icons
- FROM cards WHERE set_edition = ?
-)
-)SQL";
+    WITH c AS (
+     SELECT *,
+        CASE UPPER(TRIM(COALESCE(CAST(card_kind AS TEXT), '')))
+        WHEN '1' THEN 'CH'
+        WHEN '2' THEN 'CH'
+        WHEN '3' THEN 'EV'
+        WHEN '4' THEN 'CX'
+    
+        WHEN 'CHARACTER' THEN 'CH'
+        WHEN 'CH' THEN 'CH'
+        WHEN 'キャラ' THEN 'CH'
+    
+        WHEN 'EVENT' THEN 'EV'
+        WHEN 'EV' THEN 'EV'
+        WHEN 'イベント' THEN 'EV'
+    
+        WHEN 'CLIMAX' THEN 'CX'
+        WHEN 'CX' THEN 'CX'
+        WHEN 'クライマックス' THEN 'CX'
+    
+        ELSE UPPER(TRIM(COALESCE(CAST(card_kind AS TEXT), '')))
+        END AS kind_code,
+      UPPER(REPLACE(COALESCE(color,''),CHAR(92),'')) AS color_icons,
+      UPPER(REPLACE(COALESCE(card_trigger,''),CHAR(92),'')) AS trigger_icons
+     FROM cards WHERE set_edition = ?
+    )
+    )SQL";
 static QString cte()
 {
     return QString::fromUtf8(projection);
@@ -48,6 +52,15 @@ static QString contains(QString text)
     text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     return "%" + text + "%";
 }
+static QString deckSetCodeSql()
+{
+    return QStringLiteral(
+        "UPPER(TRIM(CASE "
+        "WHEN INSTR(card_number,'/')>0 THEN SUBSTR(card_number,1,INSTR(card_number,'/')-1) "
+        "WHEN INSTR(card_number,'-')>0 THEN SUBSTR(card_number,1,INSTR(card_number,'-')-1) "
+        "ELSE CAST(title_number AS TEXT) END))");
+}
+
 void close(const QString &path)
 {
     const QString name = "local_cards_"
@@ -133,13 +146,7 @@ QStringList icons(QString value)
 }
 QString trigger(QString value)
 {
-    value = value.trimmed().toUpper();
-    static const QHash<QString, QString> aliases = {{"SALVAGE", "COMEBACK"},
-                                                    {"PANTS", "GATE"},
-                                                    {"BAG", "POOL"},
-                                                    {"BOUNCE", "RETURN"},
-                                                    {"BAR", "TREASURE"}};
-    return aliases.value(value, value);
+    return TriggerAliases::canonical(value);
 }
 QString plainText(QString value)
 {
@@ -306,15 +313,9 @@ static QString where(const QVariantMap &f, QVariantList &binds, bool &filtered)
         if (tr.compare("none", Qt::CaseInsensitive) == 0)
             terms << "TRIM(COALESCE(card_trigger,'')) IN ('','-')";
         else {
-            static const QHash<QString, QStringList> aliases = {{"COMEBACK",
-                                                                 {"COMEBACK", "SALVAGE"}},
-                                                                {"GATE", {"GATE", "PANTS"}},
-                                                                {"POOL", {"POOL", "BAG"}},
-                                                                {"RETURN", {"RETURN", "BOUNCE"}},
-                                                                {"TREASURE", {"TREASURE", "BAR"}}};
             QStringList ors;
             const QString canonical = trigger(tr);
-            for (const QString &t : aliases.value(canonical, QStringList{canonical})) {
+            for (const QString &t : TriggerAliases::terms(canonical)) {
                 ors << "INSTR(trigger_icons,?)>0";
                 binds << "[[" + t + ".GIF]]";
             }
@@ -469,4 +470,400 @@ QStringList triggers(const QString &path, const QString &edition, const QStringL
     out.sort();
     return out;
 }
+
+// deck specific
+QVariantMap deckTitles(const QString &path, const QString &edition)
+{
+    QVariantMap result{{"titles", QVariantList{}}, {"error", QString()}};
+    if (edition != "jp" && edition != "en") {
+        result["error"] = "Invalid edition.";
+        return result;
+    }
+    QString error;
+    QSqlDatabase db = open(path, &error);
+    if (!db.isOpen()) {
+        result["error"] = error;
+        return result;
+    }
+    QSqlQuery query(db);
+    query.prepare("SELECT TRIM(CAST(title_number AS TEXT)) AS title_id, "
+                  "GROUP_CONCAT(DISTINCT NULLIF(TRIM(set_name),'')), COUNT(*) "
+                  "FROM cards WHERE set_edition=? AND title_number IS NOT NULL "
+                  "AND TRIM(CAST(title_number AS TEXT))<>'' "
+                  "GROUP BY TRIM(CAST(title_number AS TEXT)) "
+                  "ORDER BY title_id COLLATE NOCASE");
+    query.addBindValue(edition);
+    if (!query.exec()) {
+        result["error"] = query.lastError().text();
+        return result;
+    }
+    QVariantList titles;
+    while (query.next()) {
+        const QString id = query.value(0).toString();
+        const QString names = query.value(1).toString();
+        titles.append(QVariantMap{{"titleNumber", id},
+                                  {"setNames", names},
+                                  {"cardCount", query.value(2).toInt()},
+                                  {"label", id + " · " + names}});
+    }
+    result["titles"] = titles;
+    return result;
+}
+
+static QString deckNumberValid(const QString &column)
+{
+    const QString text = "TRIM(COALESCE(CAST(" + column + " AS TEXT),''))";
+    return "(" + text + "<>'' AND " + text + " NOT GLOB '*[^0-9]*')";
+}
+
+static QString deckColorRank()
+{
+    QStringList present;
+    const QString tokens = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(color_icons,CHAR(9),','),"
+                           "CHAR(10),','),CHAR(13),','),' ',','),'/',',')";
+    for (const QString &color :
+         {QString("RED"), QString("YELLOW"), QString("GREEN"), QString("BLUE")})
+        present << "(INSTR(color_icons,'[[" + color
+                       + ".GIF]]')>0 OR "
+                         "INSTR(','||"
+                       + tokens + "||',','," + color + ",')>0)";
+    return "CASE WHEN (" + present.join("+")
+           + ")>1 THEN 4 "
+             "WHEN "
+           + present[0] + " THEN 0 WHEN " + present[1]
+           + " THEN 1 "
+             "WHEN "
+           + present[2] + " THEN 2 WHEN " + present[3] + " THEN 3 ELSE 5 END";
+}
+
+static QString deckOrder(const QVariantMap &filters, QString &groupKey, QString &groupLabel)
+{
+    const QString sort = filters.value("_deckSort", "code").toString();
+    const bool composite = sort == "colorLevelCostPower" || sort == "levelPowerColor";
+    QString group = filters.value("_deckGroup", "none").toString();
+    if (composite)
+        group = "color";
+    const QString direction = filters.value("_deckDescending", false).toBool() ? " DESC" : " ASC";
+    QStringList order;
+    groupKey = "''";
+    groupLabel = "''";
+    if (group == "color") {
+        const QString rank = "(" + deckColorRank() + ")";
+        order << rank + " ASC";
+        groupKey = "CAST(" + rank + " AS TEXT)";
+        groupLabel = "CASE " + rank
+                     + " WHEN 0 THEN 'Red' WHEN 1 THEN 'Yellow' "
+                       "WHEN 2 THEN 'Green' WHEN 3 THEN 'Blue' WHEN 4 THEN 'Multicolor' ELSE "
+                       "'Other colors' END";
+    } else if (group == "level") {
+        const QString valid = deckNumberValid("level");
+        order << "CASE WHEN kind_code='CX' THEN 2 WHEN " + valid + " THEN 0 ELSE 1 END ASC";
+        order << "CASE WHEN kind_code<>'CX' AND " + valid + " THEN CAST(level AS INTEGER) END"
+                     + direction;
+        groupKey = "CASE WHEN kind_code='CX' THEN 'climax' WHEN " + valid
+                   + " THEN 'level:'||CAST(CAST(level AS INTEGER) AS TEXT) ELSE 'other' END";
+        groupLabel
+            = "CASE WHEN kind_code='CX' THEN 'Climax' WHEN " + valid
+              + " THEN 'Level '||CAST(CAST(level AS INTEGER) AS TEXT) ELSE 'Other levels' END";
+    }
+    auto number = [&](const QString &column) {
+        order << "CASE WHEN " + deckNumberValid(column) + " THEN 0 ELSE 1 END ASC";
+        order << "CAST(" + column + " AS INTEGER)" + direction;
+    };
+    if (sort == "level" || composite)
+        number("level");
+    if (composite)
+        number("cost");
+    if (sort == "power" || composite)
+        number("power");
+    if (sort == "name")
+        order << "card_name COLLATE NOCASE" + direction;
+    if (sort == "code")
+        order << "card_number COLLATE NOCASE" + direction;
+    order << "card_number COLLATE NOCASE ASC"; // Stable tie-breaker across pages.
+    return order.join(", ");
+}
+
+QVariantMap deckPage(const QString &path,
+                     const QString &edition,
+                     const QString &titleNumber,
+                     const QVariantMap &filters,
+                     const QString &language,
+                     int offset,
+                     int limit)
+{
+    QVariantMap result{{"cards", QVariantList{}}, {"total", 0}, {"error", QString()}};
+    if ((edition != "jp" && edition != "en")
+        || (!filters.value("_deckReferenceDeckOnly").toBool() && titleNumber.trimmed().isEmpty()))
+        return result;
+    offset = qMax(0, offset);
+    limit = qBound(1, limit, 100);
+    QString error;
+    QSqlDatabase db = open(path, &error);
+    if (!db.isOpen()) {
+        result["error"] = error;
+        return result;
+    }
+    QVariantList values{edition};
+    bool filtered = false;
+    QString conditions = where(filters, values, filtered);
+    const QString quickSearch = filters.value("_deckQuickSearch").toString().trimmed();
+    if (!quickSearch.isEmpty()) {
+        conditions += " AND (card_name LIKE ? ESCAPE '\\' OR card_number LIKE ? ESCAPE '\\')";
+        values << contains(quickSearch) << contains(quickSearch);
+    }
+    QRegularExpression referenceAbilityPattern;
+    bool abilityReference = false;
+    bool nameReference = false;
+    QString referenceName;
+    const QString referenceKind = filters.value("_deckReferenceKind").toString();
+    QString referenceTerm = filters.value("_deckReferenceTerm").toString().trimmed();
+    if (!referenceKind.isEmpty()) {
+        if (referenceTerm.isEmpty()) {
+            conditions += " AND 0";
+        } else if (referenceKind == "trait") {
+            conditions += " AND (feature1=? COLLATE NOCASE OR feature2=? COLLATE NOCASE "
+                          "OR feature3=? COLLATE NOCASE)";
+            values << referenceTerm << referenceTerm << referenceTerm;
+        } else if (referenceKind == "name") {
+            referenceName = ReferenceSearch::compactName(referenceTerm);
+            nameReference = true;
+        } else if (referenceKind == "ability") {
+            referenceAbilityPattern = ReferenceSearch::abilityPattern(referenceTerm);
+            abilityReference = true;
+        } else {
+            conditions += " AND 0";
+        }
+    }
+    const QStringList setCodes = filters.value("_deckSetCodes").toStringList();
+    if (filters.value("_deckReferenceDeckOnly").toBool()) {
+        const QStringList codes = filters.value("_deckReferenceCodes").toStringList();
+        if (codes.isEmpty()) {
+            conditions += " AND 0"; // Empty deck must never fall back to a full-set query.
+        } else {
+            QStringList marks;
+            for (const QString &code : codes) {
+                marks << "?";
+                values << code;
+            }
+            conditions += " AND card_number IN (" + marks.join(',') + ")";
+        }
+    } else if (!setCodes.isEmpty()) {
+        QStringList marks;
+        for (const QString &code : setCodes) {
+            marks << "?";
+            values << code.trimmed().toUpper();
+        }
+        conditions += " AND " + deckSetCodeSql() + " IN (" + marks.join(',') + ")";
+    } else {
+        // Compatibility for older callers that still pass one DB title_number.
+        conditions += " AND TRIM(CAST(title_number AS TEXT))=?";
+        values << titleNumber.trimmed();
+    }
+
+    const bool textReference = abilityReference || nameReference;
+    if (!textReference) {
+        QSqlQuery countQuery(db);
+        countQuery.prepare(cte() + "SELECT COUNT(*) FROM c WHERE " + conditions);
+        for (const QVariant &value : values)
+            countQuery.addBindValue(value);
+        if (!countQuery.exec() || !countQuery.next()) {
+            result["error"] = countQuery.lastError().text();
+            return result;
+        }
+        result["total"] = countQuery.value(0).toInt();
+    }
+    QString groupKey, groupLabel;
+    const QString ordering = deckOrder(filters, groupKey, groupLabel);
+    QSqlQuery query(db);
+    QString sql = cte() + "SELECT card_number," + groupKey + "," + groupLabel;
+    if (abilityReference)
+        sql += ",text,translated_text";
+    else if (nameReference)
+        sql += ",card_name,NULL";
+    sql += " FROM c WHERE " + conditions + " ORDER BY " + ordering;
+    if (!textReference)
+        sql += " LIMIT ? OFFSET ?";
+    query.prepare(sql);
+    for (const QVariant &value : values)
+        query.addBindValue(value);
+    if (!textReference) {
+        query.addBindValue(limit);
+        query.addBindValue(offset);
+    }
+    if (!query.exec()) {
+        result["error"] = query.lastError().text();
+        return result;
+    }
+    struct Hit
+    {
+        QString code, group, label;
+    };
+    QVector<Hit> hits;
+    int exactTotal = 0;
+    while (query.next()) {
+        if (textReference) {
+            if (nameReference
+                && !ReferenceSearch::matchesName(referenceName, query.value(3).toString()))
+                continue;
+            if (abilityReference
+                && !ReferenceSearch::matchesAbility(referenceAbilityPattern,
+                                                    query.value(3).toString())
+                && !ReferenceSearch::matchesAbility(referenceAbilityPattern,
+                                                    query.value(4).toString()))
+                continue;
+            const int matchIndex = exactTotal++;
+            if (matchIndex < offset || hits.size() >= limit)
+                continue;
+        }
+        hits.append(
+            Hit{query.value(0).toString(), query.value(1).toString(), query.value(2).toString()});
+    }
+    if (query.lastError().isValid()) {
+        result["error"] = query.lastError().text();
+        return result;
+    }
+    query.finish();
+    if (textReference)
+        result["total"] = exactTotal;
+    QVariantList cards;
+    for (const Hit &hit : hits) {
+        QVariantMap data = card(path, edition, hit.code, language);
+        if (data.isEmpty()) {
+            result["error"] = "A card changed or became unavailable during the search. Try again.";
+            return result;
+        }
+        data["deckGroup"] = hit.group;
+        data["deckGroupLabel"] = hit.label;
+        cards.append(data);
+    }
+    result["cards"] = cards;
+    return result;
+}
+
+static QStringList deckDescriptionCodes(const QString &description)
+{
+    static const QRegularExpression pattern(QStringLiteral(R"(\bFor\s+sets\s*:\s*\[([^\[\]]*)\])"),
+                                            QRegularExpression::CaseInsensitiveOption);
+
+    const auto match = pattern.match(description);
+    if (!match.hasMatch())
+        return {};
+
+    QStringList codes;
+    QSet<QString> seen;
+
+    for (const QString &part : match.captured(1).split(',', Qt::SkipEmptyParts)) {
+        const QString code = part.trimmed().toUpper();
+
+        if (!code.isEmpty() && !seen.contains(code)) {
+            seen.insert(code);
+            codes.append(code);
+        }
+    }
+
+    return codes;
+}
+
+QVariantMap deckGroups(const QString &path, const QString &edition, const QJsonObject &manifest)
+{
+    QVariantMap result{{"titles", QVariantList{}}, {"error", QString()}, {"notice", QString()}};
+    if (edition != "jp" && edition != "en") {
+        result["error"] = "Invalid edition.";
+        return result;
+    }
+    QString error;
+    QSqlDatabase db = open(path, &error);
+    if (!db.isOpen()) {
+        result["error"] = error;
+        return result;
+    }
+    QSqlQuery query(db);
+    query.prepare("SELECT " + deckSetCodeSql()
+                  + " AS set_code, COUNT(*) "
+                    "FROM cards WHERE set_edition=? GROUP BY set_code ORDER BY set_code");
+    query.addBindValue(edition);
+    if (!query.exec()) {
+        result["error"] = query.lastError().text();
+        return result;
+    }
+    QMap<QString, int> counts;
+    while (query.next()) {
+        const QString code = query.value(0).toString();
+        if (!code.isEmpty())
+            counts.insert(code, query.value(1).toInt());
+    }
+    query.finish();
+    QVariantList groups;
+    QSet<QString> mapped, ids;
+    for (const QJsonValue &value : manifest.value("indexes").toArray()) {
+        if (!value.isObject())
+            continue;
+        const QJsonObject object = value.toObject();
+        const QString entryEdition = object.value("edition").toString().trimmed().toLower();
+        if (!entryEdition.isEmpty() && entryEdition != edition)
+            continue;
+        const QString id = object.value("id").toString().trimmed();
+        if (id.isEmpty() || ids.contains(id))
+            continue;
+        const QStringList codes = deckDescriptionCodes(object.value("description").toString());
+        if (codes.isEmpty())
+            continue;
+        int count = 0;
+        for (const QString &code : codes)
+            count += counts.value(code);
+        if (!count)
+            continue;
+        ids.insert(id);
+        for (const QString &code : codes)
+            mapped.insert(code);
+        QString name = object.value("name").toString(id).trimmed();
+        if (name.isEmpty())
+            name = id;
+        groups.append(QVariantMap{{"titleNumber", "manifest:" + id},
+                                  {"setNames", name},
+                                  {"setCodes", codes},
+                                  {"cardCount", count},
+                                  {"label", name + " · " + codes.join(" / ")},
+                                  {"mapped", true}});
+    }
+    std::sort(groups.begin(), groups.end(), [](const QVariant &left, const QVariant &right) {
+        return QString::localeAwareCompare(left.toMap().value("setNames").toString(),
+                                           right.toMap().value("setNames").toString())
+               < 0;
+    });
+    int unmapped = 0;
+    for (auto it = counts.cbegin(); it != counts.cend(); ++it) {
+        if (mapped.contains(it.key()))
+            continue;
+        ++unmapped;
+        const QString name = "Unmapped · " + it.key();
+        groups.append(QVariantMap{{"titleNumber", "code:" + it.key()},
+                                  {"setNames", name},
+                                  {"setCodes", QStringList{it.key()}},
+                                  {"cardCount", it.value()},
+                                  {"label", name},
+                                  {"mapped", false}});
+    }
+    result["titles"] = groups;
+    if (!manifest.value("indexes").isArray())
+        result["notice"]
+            = "No saved FAISS manifest for this edition. Check FAISS updates, then reload sets.";
+    else if (unmapped)
+        result["notice"] = QString("%1 local codes have no named manifest group.").arg(unmapped);
+    return result;
+}
+
+void releaseThreadConnection(const QString &path)
+{
+    const QString name = "local_cards_"
+                         + QString::fromLatin1(
+                             QCryptographicHash::hash(QFileInfo(path).absoluteFilePath().toUtf8(),
+                                                      QCryptographicHash::Sha256)
+                                 .toHex())
+                         + "_" + QString::number(quintptr(QThread::currentThreadId()));
+    if (QSqlDatabase::contains(name))
+        QSqlDatabase::removeDatabase(name);
+}
+
 } // namespace LocalCardStore

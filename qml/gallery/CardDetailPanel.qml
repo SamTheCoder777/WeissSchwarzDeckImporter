@@ -2,9 +2,15 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
+import "../shared" as Shared
+import "../shared/TriggerIcons.js" as Triggers
+import "../shared/ReferenceText.js" as References
+
 ScrollView {
     id: root
     property var card: ({})
+    property bool requestCardData: true
+    property var imageSourceOverride: undefined
     clip: true
     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
@@ -16,54 +22,7 @@ ScrollView {
     }
 
     function referenceHtml(value, hoveredReference) {
-        var input = String(value || "").replace(/<[/\\]?\s*br\s*[\/\\]?>/gi, "\n");
-
-        var pattern = /《([^《》\r\n]+)》|「([^「」\r\n]+)」|『([^『』\r\n]+)』/g;
-
-        var output = "";
-        var previous = 0;
-        var match;
-
-        while ((match = pattern.exec(input)) !== null) {
-            output += escapeHtml(input.slice(previous, match.index));
-
-            var kind;
-            var term;
-            var color;
-
-            if (match[1] !== undefined) {
-                kind = "trait";
-                term = match[1];
-                color = "#77d9a0";
-            } else if (match[2] !== undefined) {
-                kind = "name";
-                term = match[2];
-                color = "#80baff";
-            } else {
-                kind = "ability";
-                term = match[3];
-                color = "#efc779";
-            }
-
-            var link = "cardref:" + kind + ":" + encodeURIComponent(term);
-
-            var hovered = link === hoveredReference;
-
-            var background = kind === "trait" ? "#294638" : kind === "name" ? "#293e56" : "#49402b";
-
-            var style = "color:" + color + "; text-decoration:none;";
-
-            if (hovered)
-                style += " background-color:" + background + ";";
-
-            output += '<a href="' + escapeHtml(link) + '"' + ' style="' + style + '">' + escapeHtml(match[0]) + "</a>";
-
-            previous = pattern.lastIndex;
-        }
-
-        output += escapeHtml(input.slice(previous));
-
-        return output.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n/g, "<br>");
+        return References.referenceHtml(value, hoveredReference);
     }
 
     function activateReference(link) {
@@ -89,13 +48,13 @@ ScrollView {
 
     Component.onCompleted: {
         var id = card.cardCode || card.cardId;
-        if (id)
+        if (root.requestCardData && id)
             cardDatabase.ensureCardData(id);
     }
 
     onCardChanged: {
         var id = card.cardCode || card.cardId;
-        if (id && card.localeAvailable === undefined)
+        if (root.requestCardData && id && card.localeAvailable === undefined)
             cardDatabase.ensureCardData(id);
     }
 
@@ -124,6 +83,9 @@ ScrollView {
             Image {
                 anchors.fill: parent
                 source: {
+                    if (root.imageSourceOverride !== undefined)
+                        return root.imageSourceOverride;
+
                     var revision = cardDatabase.dataRevision;
 
                     return cardDatabase.cardImageSource(root.card.cardCode || root.card.cardId || "");
@@ -203,7 +165,8 @@ ScrollView {
             }
             SelText {
                 Layout.fillWidth: true
-                text: root.card.soul || "-"
+                textFormat: TextEdit.RichText
+                text: Triggers.inlineText(root.card.soul || "-", 14)
                 color: "#e6e6e6"
                 font.pixelSize: 12
             }
@@ -213,11 +176,10 @@ ScrollView {
                 color: "#888"
                 font.pixelSize: 12
             }
-            SelText {
+            Shared.TriggerIconRow {
                 Layout.fillWidth: true
-                text: root.card.cardTrigger || "-"
-                color: "#e6e6e6"
-                font.pixelSize: 12
+                value: root.card.cardTrigger || ""
+                iconSize: 14
             }
 
             Label {
