@@ -60,6 +60,12 @@ public:
     QString getDismissedReleaseTag() const { return dismissedReleaseTag_; }
     void setDismissedReleaseTag(const QString &tag);
 
+    // Local db
+    QString localDatabaseVersionUrl_ = QStringLiteral(
+        "https://ws-db.deckimporter.workers.dev/version.json");
+    QString localDatabaseDownloadUrl_ = QStringLiteral(
+        "https://ws-db.deckimporter.workers.dev/db.zip");
+
     // ----- Dataset config ------
 
     // seriest list
@@ -207,6 +213,25 @@ public:
     // --- Hardware acceleration settings ---
     bool getUseAcceleration() const { return useAcceleration_; }
     void setUseAcceleration(bool use);
+    bool getLoadModelsOnStartup() const { return loadModelsOnStartup_; }
+    void setLoadModelsOnStartup(bool enabled);
+
+    // local db
+    QString getLocalDatabaseHash() const { return localDatabaseHash_; }
+    void setLocalDatabaseHash(const QString &hash);
+
+    qint64 getLocalDatabaseLastCheckUtc() const { return localDatabaseLastCheckUtc_; }
+    void setLocalDatabaseLastCheckUtc(qint64 timestamp);
+
+    qint64 getLocalDatabaseLastManualCheckUtc() const { return localDatabaseLastManualCheckUtc_; }
+    void setLocalDatabaseLastManualCheckUtc(qint64 timestamp);
+
+    bool getLocalDatabaseUpdatePending() const { return localDatabaseUpdatePending_; }
+    void setLocalDatabaseUpdatePending(bool pending);
+
+    // gallery settings
+    int getGalleryCardScalePercent() const { return galleryCardScalePercent_; }
+    void setGalleryCardScalePercent(int percent);
 
 signals:
     void detectLocaleModeChanged();
@@ -286,6 +311,17 @@ private:
 
     // --- Hardware acceleration settings ---
     bool useAcceleration_ = true;
+    bool loadModelsOnStartup_ = true;
+
+    // --- Local db ---
+    QString localDatabaseHash_;
+    qint64 localDatabaseLastCheckUtc_ = 0;
+
+    qint64 localDatabaseLastManualCheckUtc_ = 0;
+    bool localDatabaseUpdatePending_ = false;
+
+    // --- Gallery settings ---
+    int galleryCardScalePercent_ = 120;
 };
 
 

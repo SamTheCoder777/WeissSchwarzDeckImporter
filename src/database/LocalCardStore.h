@@ -5,6 +5,11 @@
 #include <QVariantMap>
 
 namespace LocalCardStore {
+QVariantMap cardByCode(const QString &path,
+                       const QString &code,
+                       const QString &language,
+                       QString *error = nullptr);
+
 void close(const QString &path);
 QSqlDatabase open(const QString &path, QString *error = nullptr);
 

@@ -43,9 +43,19 @@ static const char *projection = R"SQL(
      FROM cards WHERE set_edition = ?
     )
     )SQL";
-static QString cte()
+static QString cte(bool allEditions = false)
 {
-    return QString::fromUtf8(projection);
+    QString sql = QString::fromUtf8(projection);
+
+    if (allEditions) {
+        static const QRegularExpression editionCondition(QStringLiteral(
+                                                             R"(\bWHERE\s+set_edition\s*=\s*\?)"),
+                                                         QRegularExpression::CaseInsensitiveOption);
+
+        sql.remove(editionCondition);
+    }
+
+    return sql;
 }
 static QString contains(QString text)
 {
@@ -244,6 +254,74 @@ QVariantMap card(const QString &path,
     m["localPictureReference"] = f("picture");
     m["picture"] = officialImage(f("picture"), edition);
     return m;
+}
+QVariantMap cardByCode(const QString &path,
+                       const QString &code,
+                       const QString &language,
+                       QString *error)
+{
+    if (error)
+        error->clear();
+
+    const auto fail = [error](const QString &message) -> QVariantMap {
+        if (error)
+            *error = message;
+
+        return {};
+    };
+
+    const QString normalizedCode = code.trimmed().toUpper();
+
+    if (normalizedCode.isEmpty())
+        return fail("Card code is empty.");
+
+    QString databaseError;
+    QSqlDatabase db = open(path, &databaseError);
+
+    if (!db.isOpen())
+        return fail(databaseError);
+
+    QSqlQuery query(db);
+
+    if (!query.prepare("SELECT set_edition, card_number "
+                       "FROM cards "
+                       "WHERE card_number = ? COLLATE NOCASE "
+                       "LIMIT 2")) {
+        return fail(query.lastError().text());
+    }
+
+    query.addBindValue(normalizedCode);
+
+    if (!query.exec())
+        return fail(query.lastError().text());
+
+    if (!query.next()) {
+        return fail("Card not found in the local database: " + normalizedCode);
+    }
+
+    const QString actualEdition = query.value(0).toString();
+    const QString storedCode = query.value(1).toString();
+
+    if (query.next()) {
+        return fail("Duplicate card code in the local database: " + normalizedCode);
+    }
+
+    if (query.lastError().isValid())
+        return fail(query.lastError().text());
+
+    query.finish();
+
+    QVariantMap result = card(path, actualEdition, storedCode, language);
+
+    if (result.isEmpty()) {
+        return fail("Could not load card details: " + normalizedCode);
+    }
+
+    result.insert("cardCode", normalizedCode);
+    result.insert("cardId", normalizedCode);
+    result.insert("setEdition", actualEdition);
+
+    return result;
 }
 QVariantList search(const QString &path, const QString &edition, const QString &input, int limit)
 {
@@ -604,7 +682,14 @@ QVariantMap deckPage(const QString &path,
         result["error"] = error;
         return result;
     }
-    QVariantList values{edition};
+    const bool deckOnly = filters.value("_deckReferenceDeckOnly").toBool();
+
+    const QString queryPrefix = cte(deckOnly);
+
+    QVariantList values;
+
+    if (!deckOnly)
+        values << edition;
     bool filtered = false;
     QString conditions = where(filters, values, filtered);
     const QString quickSearch = filters.value("_deckQuickSearch").toString().trimmed();
@@ -646,7 +731,7 @@ QVariantMap deckPage(const QString &path,
                 marks << "?";
                 values << code;
             }
-            conditions += " AND card_number IN (" + marks.join(',') + ")";
+            conditions += " AND card_number COLLATE NOCASE IN (" + marks.join(',') + ")";
         }
     } else if (!setCodes.isEmpty()) {
         QStringList marks;
@@ -664,7 +749,7 @@ QVariantMap deckPage(const QString &path,
     const bool textReference = abilityReference || nameReference;
     if (!textReference) {
         QSqlQuery countQuery(db);
-        countQuery.prepare(cte() + "SELECT COUNT(*) FROM c WHERE " + conditions);
+        countQuery.prepare(queryPrefix + "SELECT COUNT(*) FROM c WHERE " + conditions);
         for (const QVariant &value : values)
             countQuery.addBindValue(value);
         if (!countQuery.exec() || !countQuery.next()) {
@@ -676,7 +761,7 @@ QVariantMap deckPage(const QString &path,
     QString groupKey, groupLabel;
     const QString ordering = deckOrder(filters, groupKey, groupLabel);
     QSqlQuery query(db);
-    QString sql = cte() + "SELECT card_number," + groupKey + "," + groupLabel;
+    QString sql = queryPrefix + "SELECT card_number," + groupKey + "," + groupLabel;
     if (abilityReference)
         sql += ",text,translated_text";
     else if (nameReference)
@@ -728,7 +813,20 @@ QVariantMap deckPage(const QString &path,
         result["total"] = exactTotal;
     QVariantList cards;
     for (const Hit &hit : hits) {
-        QVariantMap data = card(path, edition, hit.code, language);
+        QVariantMap data;
+
+        if (deckOnly) {
+            QString lookupError;
+
+            data = cardByCode(path, hit.code, language, &lookupError);
+
+            if (data.isEmpty()) {
+                result["error"] = lookupError;
+                return result;
+            }
+        } else {
+            data = card(path, edition, hit.code, language);
+        }
         if (data.isEmpty()) {
             result["error"] = "A card changed or became unavailable during the search. Try again.";
             return result;

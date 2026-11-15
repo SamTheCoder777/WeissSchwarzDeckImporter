@@ -5,6 +5,7 @@ import QtQuick.Layouts 1.15
 import "../gallery"
 import "../shared" as Shared
 import "../shared/TriggerIcons.js" as Triggers
+import "../shared/CollectionTools.js" as CollectionTools
 
 Rectangle {
     id: root
@@ -25,6 +26,151 @@ Rectangle {
     readonly property string referenceGroupMode: referenceSortOverride ? referenceSortOverride.group : groupMode
     readonly property string referenceSortMode: referenceSortOverride ? referenceSortOverride.sort : sortMode
     readonly property bool referenceDescending: referenceSortOverride ? referenceSortOverride.descending : descending
+    property var drawerCollapsedGroups: ({})
+    property int drawerRestoreSerial: 0
+
+    ListModel {
+        id: drawerRowsModel
+        Component.onCompleted: Qt.callLater(root.syncDrawerRows)
+    }
+
+    Connections {
+        target: deckBuilder
+
+        function onDeckChanged() {
+            root.syncDrawerRows();
+        }
+    }
+
+    function syncDrawerRows() {
+        if (!drawerList || !drawerRowsModel)
+            return;
+
+        drawerList.forceLayout();
+
+        var top = -1;
+        for (var probe = 1; probe <= 7 && top < 0; ++probe)
+            top = drawerList.indexAt(1, drawerList.contentY + probe);
+
+        var oldKeys = [];
+        for (var i = 0; i < drawerRowsModel.count; ++i)
+            oldKeys.push(drawerRowsModel.get(i).rowKey);
+
+        var topItem = top >= 0 ? drawerList.itemAtIndex(top) : null;
+        var offset = topItem ? topItem.y - drawerList.contentY : 0;
+
+        var rows = CollectionTools.visualRows(deckBuilder.deckRows, "level", "composite", true, 1, root.drawerCollapsedGroups);
+
+        var next = [];
+
+        for (i = 0; i < rows.length; ++i) {
+            var row = rows[i];
+            var card = row.header ? {} : Object.assign({}, row.cards[0]);
+
+            card.cardCode = String(card.cardCode || "");
+            card.cardName = String(card.cardName || card.cardCode);
+            card.picture = String(card.picture || "");
+            card.copies = Number(card.copies || 0);
+
+            next.push({
+                rowKey: row.header ? "group:" + row.key : "card:" + deckBuilder.edition + ":" + card.cardCode,
+                rowHeader: !!row.header,
+                rowTitle: String(row.label || ""),
+                rowGroupKey: String(row.key),
+                rowCount: Number(row.count || 0),
+                rowJson: JSON.stringify(card)
+            });
+        }
+
+        var structural = false;
+        var wanted = {};
+
+        for (i = 0; i < next.length; ++i)
+            wanted[next[i].rowKey] = true;
+
+        for (i = drawerRowsModel.count - 1; i >= 0; --i) {
+            if (!wanted[drawerRowsModel.get(i).rowKey]) {
+                drawerRowsModel.remove(i);
+                structural = true;
+            }
+        }
+
+        for (i = 0; i < next.length; ++i) {
+            var found = -1;
+
+            for (var j = i; j < drawerRowsModel.count; ++j) {
+                if (drawerRowsModel.get(j).rowKey === next[i].rowKey) {
+                    found = j;
+                    break;
+                }
+            }
+
+            if (found < 0) {
+                drawerRowsModel.insert(i, next[i]);
+                structural = true;
+            } else {
+                if (found !== i) {
+                    drawerRowsModel.move(found, i, 1);
+                    structural = true;
+                }
+
+                for (var role in next[i]) {
+                    if (drawerRowsModel.get(i)[role] !== next[i][role])
+                        drawerRowsModel.setProperty(i, role, next[i][role]);
+                }
+            }
+        }
+
+        if (drawerRowsModel.count > next.length) {
+            drawerRowsModel.remove(next.length, drawerRowsModel.count - next.length);
+            structural = true;
+        }
+
+        if (!structural)
+            return;
+
+        var serial = ++root.drawerRestoreSerial;
+        var anchor = "";
+
+        for (i = Math.max(0, top); i < oldKeys.length && !anchor; ++i) {
+            for (j = 0; j < next.length; ++j) {
+                if (oldKeys[i] === next[j].rowKey) {
+                    anchor = oldKeys[i];
+                    break;
+                }
+            }
+        }
+
+        if (!anchor)
+            return;
+
+        Qt.callLater(function () {
+            if (serial !== root.drawerRestoreSerial)
+                return;
+
+            for (var index = 0; index < drawerRowsModel.count; ++index) {
+                if (drawerRowsModel.get(index).rowKey !== anchor)
+                    continue;
+
+                drawerList.cancelFlick();
+                drawerList.positionViewAtIndex(index, ListView.Beginning);
+                drawerList.forceLayout();
+
+                var item = drawerList.itemAtIndex(index);
+
+                if (item) {
+                    var minimum = drawerList.originY;
+                    var maximum = Math.max(minimum, minimum + drawerList.contentHeight - drawerList.height);
+
+                    drawerList.contentY = Math.max(minimum, Math.min(item.y - offset, maximum));
+                }
+
+                break;
+            }
+        });
+    }
+
+    onDrawerCollapsedGroupsChanged: syncDrawerRows()
     property var collapsedGroups: ({})
     property var referenceCollapsedGroups: ({})
     property bool previewOpenFromClick: false
@@ -54,7 +200,7 @@ Rectangle {
     }
     readonly property string deckStatsText: {
         var s = deckBuilder.deckStats;
-        return "Character: " + s.character + " · Event: " + s.event + " · Climax: " + s.climax + " · Soul trigger icons: " + s.soulTriggers + "\nLv 0: " + s.level0 + " · Lv 1: " + s.level1 + " · Lv 2: " + s.level2 + " · Lv 3: " + s.level3;
+        return "Total: " + deckBuilder.totalCards + " / 50" + " · Character: " + s.character + " · Event: " + s.event + " · Climax: " + s.climax + " · Soul trigger icons: " + s.soulTriggers + "\nLv 0: " + s.level0 + " · Lv 1: " + s.level1 + " · Lv 2: " + s.level2 + " · Lv 3: " + s.level3;
     }
     readonly property string bottomDeckStatsText: root.deckStatsText.replace(/ · Soul trigger icons: [^\n]*/, "")
     readonly property string deckStatsHtml: root.deckStatsText.replace("Soul trigger icons:", "Trigger icons:").replace(/\n/g, "<br>")
@@ -99,6 +245,21 @@ Rectangle {
             cursorShape: Qt.PointingHandCursor
         }
     }
+    component DeckNameLabel: Label {
+        text: deckBuilder.deckName + (deckBuilder.dirty ? " •" : "")
+        textFormat: Text.PlainText
+        color: renameArea.containsMouse ? "#80baff" : "#e6e6e6"
+        font.bold: true
+        elide: Text.ElideRight
+        MouseArea {
+            id: renameArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: deckBuilder.renameDeck()
+        }
+    }
+
     component DarkField: Basic.TextField {
         id: control
         implicitHeight: 32
@@ -116,75 +277,7 @@ Rectangle {
             border.color: control.activeFocus ? root.accent : root.line
         }
     }
-    component DarkCombo: Basic.ComboBox {
-        id: control
-        implicitHeight: 32
-        leftPadding: 11
-        rightPadding: 27
-        font.family: "Segoe UI"
-        font.pixelSize: 12
-        hoverEnabled: true
-        opacity: enabled ? 1 : 0.45
-        contentItem: Text {
-            text: control.displayText
-            font: control.font
-            color: root.ink
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
-        }
-        indicator: Text {
-            x: control.width - width - 10
-            y: (control.height - height) / 2
-            text: "▾"
-            color: root.muted
-        }
-        background: Rectangle {
-            radius: 7
-            color: control.hovered ? "#30353d" : "#262a30"
-            border.color: control.activeFocus ? root.accent : root.line
-        }
-        delegate: Basic.ItemDelegate {
-            id: option
-            required property var modelData
-            required property int index
-            width: control.width
-            implicitHeight: 32
-            contentItem: Text {
-                text: String(option.modelData)
-                color: option.highlighted ? "#80baff" : root.ink
-                font.pixelSize: 12
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-            }
-            highlighted: control.highlightedIndex === option.index
-            background: Rectangle {
-                color: option.highlighted || option.hovered ? "#353c48" : "transparent"
-                radius: 4
-            }
-        }
-        popup: Basic.Popup {
-            y: control.height + 5
-            width: control.width
-            padding: 5
-            implicitHeight: Math.min(280, contentItem.implicitHeight + 10)
-            contentItem: ListView {
-                clip: true
-                implicitHeight: contentHeight
-                model: control.popup.visible ? control.delegateModel : null
-                currentIndex: control.highlightedIndex
-                Basic.ScrollBar.vertical: Basic.ScrollBar {}
-            }
-            background: Rectangle {
-                color: "#282d35"
-                border.color: "#4a5260"
-                radius: 8
-            }
-        }
-        HoverHandler {
-            enabled: control.enabled
-            cursorShape: Qt.PointingHandCursor
-        }
-    }
+    component DarkCombo: Shared.DarkCombo {}
     component DarkCheck: Basic.CheckBox {
         id: control
         implicitHeight: 32
@@ -248,163 +341,13 @@ Rectangle {
             Layout.minimumWidth: 34
             Layout.maximumWidth: 34
             implicitHeight: 32
-            enabled: !!stepper.code
+            enabled: !!stepper.code && deckBuilder.totalCards < 50
             onClicked: deckBuilder.addCard(stepper.card)
         }
     }
-    component PreviewDetails: Column {
-        id: detailsColumn
-        width: parent.width
-        spacing: 8
-        readonly property bool artworkPending: previewArtworkView.source.toString().length > 0 && previewArtworkView.status !== Image.Ready && previewArtworkView.status !== Image.Error
-        RowLayout {
-            width: parent.width
-            spacing: 10
-            Image {
-                id: previewArtworkView
-                Layout.preferredWidth: 70
-                Layout.preferredHeight: 98
-                Layout.maximumHeight: 98
-                source: root.previewCard.picture ? deckBuilder.imageSource(root.previewCard.picture) : ""
-                asynchronous: true
-                fillMode: Image.PreserveAspectFit
-            }
-            ColumnLayout {
-                Layout.fillWidth: true
-                Layout.minimumWidth: 0
-                spacing: 4
-                Label {
-                    Layout.fillWidth: true
-                    text: root.previewCard.cardName || ""
-                    textFormat: Text.PlainText
-                    color: root.ink
-                    font.bold: true
-                    font.pixelSize: 13
-                    wrapMode: Text.Wrap
-                    clip: true
-                }
-                Label {
-                    Layout.fillWidth: true
-                    text: root.previewCard.cardCode || ""
-                    textFormat: Text.PlainText
-                    color: root.muted
-                    font.pixelSize: 10
-                    wrapMode: Text.Wrap
-                    clip: true
-                }
-                Label {
-                    Layout.fillWidth: true
-                    text: [root.previewCard.cardKind, root.previewCard.color, root.previewCard.rarity].filter(function (value) {
-                        return !!value;
-                    }).join(" · ")
-                    textFormat: Text.PlainText
-                    color: "#aabbd2"
-                    font.pixelSize: 10
-                    wrapMode: Text.Wrap
-                    clip: true
-                }
-            }
-        }
-        GridLayout {
-            width: parent.width
-            columns: 2
-            columnSpacing: 10
-            rowSpacing: 4
-            Label {
-                text: "Level:"
-                color: root.muted
-                font.pixelSize: 11
-            }
-            Label {
-                Layout.fillWidth: true
-                Layout.minimumWidth: 0
-                text: root.previewCard.level === undefined || root.previewCard.level === "" ? "—" : String(root.previewCard.level)
-                color: root.ink
-                font.pixelSize: 11
-                wrapMode: Text.Wrap
-                clip: true
-            }
-            Label {
-                text: "Cost:"
-                color: root.muted
-                font.pixelSize: 11
-            }
-            Label {
-                Layout.fillWidth: true
-                Layout.minimumWidth: 0
-                text: root.previewCard.cost === undefined || root.previewCard.cost === "" ? "—" : String(root.previewCard.cost)
-                color: root.ink
-                font.pixelSize: 11
-                wrapMode: Text.Wrap
-                clip: true
-            }
-            Label {
-                text: "Power:"
-                color: root.muted
-                font.pixelSize: 11
-            }
-            Label {
-                Layout.fillWidth: true
-                Layout.minimumWidth: 0
-                text: root.previewCard.power || "—"
-                color: root.ink
-                font.pixelSize: 11
-                wrapMode: Text.Wrap
-                clip: true
-            }
-            Label {
-                text: "Soul:"
-                color: root.muted
-                font.pixelSize: 11
-            }
-            Label {
-                Layout.fillWidth: true
-                Layout.minimumWidth: 0
-                text: Triggers.inlineText(root.previewCard.soul || "—", 14)
-                textFormat: Text.RichText
-                color: root.ink
-                font.pixelSize: 11
-                wrapMode: Text.Wrap
-                clip: true
-            }
-            Label {
-                text: "Trigger:"
-                color: root.muted
-                font.pixelSize: 11
-            }
-            Shared.TriggerIconRow {
-                Layout.fillWidth: true
-                Layout.minimumWidth: 0
-                value: root.previewCard.cardTrigger || ""
-                iconSize: 14
-            }
-        }
-        Label {
-            width: parent.width
-            text: [root.previewCard.feature1, root.previewCard.feature2, root.previewCard.feature3].filter(function (value) {
-                return !!value && value !== "-";
-            }).join(" · ")
-            visible: text.length > 0
-            textFormat: Text.PlainText
-            color: "#77d9a0"
-            font.pixelSize: 11
-            wrapMode: Text.Wrap
-            clip: true
-        }
-        Rectangle {
-            width: parent.width
-            height: 1
-            color: root.line
-        }
-        Label {
-            width: parent.width
-            text: Triggers.inlineText(root.previewCard.text || "", 14)
-            textFormat: Text.RichText
-            color: root.ink
-            font.pixelSize: 11
-            wrapMode: Text.Wrap
-            clip: true
-        }
+    component PreviewDetails: Shared.CardPreviewBody {
+        card: root.previewCard
+        imageSource: root.previewCard.picture ? deckBuilder.imageSource(root.previewCard.picture) : ""
     }
 
     component CardTile: Rectangle {
@@ -846,16 +789,20 @@ Rectangle {
                 onClicked: root.resetFilters()
             }
             DarkCombo {
+                id: editionPicker
                 Layout.preferredWidth: 92
                 model: ["JP cards", "EN cards"]
+                enabled: !deckBuilder.editionChangePending && !deckBuilder.exporting
                 currentIndex: deckBuilder.edition === "en" ? 1 : 0
                 onActivated: function (index) {
-                    deckBuilder.setEdition(index === 1 ? "en" : "jp");
+                    var target = index === 1 ? "en" : "jp";
                     currentIndex = Qt.binding(function () {
                         return deckBuilder.edition === "en" ? 1 : 0;
                     });
+                    deckBuilder.requestEdition(target);
                 }
             }
+
             DarkCombo {
                 Layout.preferredWidth: 125
                 model: ["English text", "Japanese text"]
@@ -871,13 +818,6 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             spacing: 7
-            DarkField {
-                Layout.preferredWidth: 155
-                Layout.maximumWidth: 180
-                text: deckBuilder.deckName
-                placeholderText: "Deck name"
-                onTextEdited: deckBuilder.deckName = text
-            }
             Label {
                 text: "Group"
                 color: root.muted
@@ -977,6 +917,33 @@ Rectangle {
                         spacing: 12
                         reuseItems: true
                         Basic.ScrollBar.vertical: Basic.ScrollBar {}
+
+                        WheelHandler {
+                            target: null
+                            acceptedDevices: PointerDevice.Mouse
+
+                            onWheel: function (event) {
+                                const view = browser;
+
+                                // Preserve pixel-based input; increase ordinary wheel scrolling.
+                                const distance = event.pixelDelta.y !== 0 ? event.pixelDelta.y : (event.angleDelta.y / 120) * 90;
+
+                                if (distance === 0) {
+                                    event.accepted = false;
+                                    return;
+                                }
+
+                                const minimum = view.originY;
+                                const maximum = Math.max(minimum, minimum + view.contentHeight - view.height);
+
+                                view.cancelFlick();
+
+                                view.contentY = Math.max(minimum, Math.min(maximum, view.contentY - distance));
+
+                                event.accepted = true;
+                            }
+                        }
+
                         delegate: Item {
                             id: cardRow
                             required property string rowType
@@ -1159,13 +1126,13 @@ Rectangle {
                     color: "#80baff"
                     font.pixelSize: 20
                 }
-                Label {
+                DeckNameLabel {
                     Layout.preferredWidth: 150
                     Layout.maximumWidth: 210
                     Layout.minimumWidth: 0
-                    text: deckBuilder.deckName + (deckBuilder.dirty ? " •" : "")
+
                     textFormat: Text.PlainText
-                    color: "#f0f4fb"
+
                     font.pixelSize: 12
                     font.bold: true
                     elide: Text.ElideRight
@@ -1687,7 +1654,7 @@ Rectangle {
         parent: root.overlayItem || root
         z: referencePreview.z + 2
         width: 190
-        height: 92
+        height: contentItem.implicitHeight + topPadding + bottomPadding
         padding: 8
         modal: false
         focus: true
@@ -1699,6 +1666,15 @@ Rectangle {
         }
         contentItem: ColumnLayout {
             spacing: 4
+            DarkButton {
+                text: "Copy deck code"
+                Layout.fillWidth: true
+                enabled: !deckBuilder.exporting && deckBuilder.totalCards > 0 && deckBuilder.totalCards <= 50
+                onClicked: {
+                    exportMenu.close();
+                    deckBuilder.copyDeckCode();
+                }
+            }
             DarkButton {
                 text: "Export as .txt"
                 Layout.fillWidth: true
@@ -1756,12 +1732,11 @@ Rectangle {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 3
-                    Label {
-                        text: deckBuilder.deckName + (deckBuilder.dirty ? " •" : "")
+                    DeckNameLabel {
+
                         textFormat: Text.PlainText
                         font.pixelSize: 21
                         font.bold: true
-                        color: root.ink
                     }
                     Label {
                         Layout.fillWidth: true
@@ -1783,12 +1758,37 @@ Rectangle {
                     onClicked: deckBuilder.newDeck()
                 }
                 DarkButton {
-                    text: "Open TXT"
+                    text: "Import code"
+                    enabled: !deckBuilder.exporting
+                    onClicked: {
+                        root.hideReferencePreview();
+                        deckDrawer.close();
+                        deckBuilder.importDeckCode();
+                    }
+                }
+                DarkButton {
+                    text: "Import .txt"
                     enabled: !deckBuilder.exporting
                     onClicked: deckBuilder.openText()
                 }
                 Item {
                     Layout.fillWidth: true
+                }
+                DarkButton {
+                    text: "Undo"
+                    enabled: deckBuilder.canUndo && !deckBuilder.exporting && !deckBuilder.editionChangePending
+                    onClicked: deckBuilder.undoDeckEdit()
+                }
+                DarkButton {
+                    text: "Redo"
+                    enabled: deckBuilder.canRedo && !deckBuilder.exporting && !deckBuilder.editionChangePending
+                    onClicked: deckBuilder.redoDeckEdit()
+                }
+                Rectangle {
+                    width: 1
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 4
+                    color: "#cccccc"
                 }
                 DarkButton {
                     text: "Cancel export"
@@ -1816,30 +1816,89 @@ Rectangle {
                 font.pixelSize: 11
             }
             ListView {
+                id: drawerList
+
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                model: deckBuilder.deckModel
+
+                model: drawerRowsModel
+                currentIndex: -1
                 onContentYChanged: root.hideReferencePreview()
                 clip: true
                 spacing: 6
                 Basic.ScrollBar.vertical: Basic.ScrollBar {}
+                WheelHandler {
+                    target: null
+                    acceptedDevices: PointerDevice.Mouse
+
+                    onWheel: function(event) {
+                        const view = drawerList;
+
+                        // Preserve pixel-based input; increase ordinary wheel scrolling.
+                        const distance = event.pixelDelta.y !== 0
+                            ? event.pixelDelta.y
+                            : (event.angleDelta.y / 120) * 90;
+
+                        if (distance === 0) {
+                            event.accepted = false;
+                            return;
+                        }
+
+                        const minimum = view.originY;
+                        const maximum = Math.max(
+                            minimum,
+                            minimum + view.contentHeight - view.height);
+
+                        view.cancelFlick();
+
+                        view.contentY = Math.max(
+                            minimum,
+                            Math.min(maximum, view.contentY - distance));
+
+                        event.accepted = true;
+                    }
+                }
                 delegate: Rectangle {
                     id: deckRow
-                    required property var cardData
-                    required property int copies
+                    required property bool rowHeader
+                    required property string rowTitle
+                    required property string rowGroupKey
+                    required property int rowCount
+                    required property string rowJson
+
+                    readonly property var cardData: rowJson ? JSON.parse(rowJson) : ({})
+                    readonly property int copies: Number(cardData.copies || 0)
                     width: ListView.view.width
                     x: 0
                     Component.onDestruction: {
                         if (root.previewAnchor === deckInfoArea)
                             root.hideReferencePreview();
                     }
-                    height: 90
-                    color: deckInfoHover.hovered ? "#303843" : "#2a3039"
+                    height: rowHeader ? 34 : 90
+                    color: rowHeader ? "transparent" : deckInfoHover.hovered ? "#303843" : "#2a3039"
                     radius: 8
+                    Shared.CollectionHeader {
+                        anchors.fill: parent
+                        visible: deckRow.rowHeader
+
+                        title: deckRow.rowTitle
+                        cardCount: deckRow.rowCount
+                        collapsed: !!root.drawerCollapsedGroups[deckRow.rowGroupKey]
+                        markerColor: "#8494ab"
+
+                        onClicked: {
+                            root.hideReferencePreview();
+
+                            var next = Object.assign({}, root.drawerCollapsedGroups);
+                            next[deckRow.rowGroupKey] = !next[deckRow.rowGroupKey];
+                            root.drawerCollapsedGroups = next;
+                        }
+                    }
                     RowLayout {
                         anchors.fill: parent
                         anchors.margins: 12
                         spacing: 16
+                        visible: !deckRow.rowHeader
                         Item {
                             id: deckInfoArea
                             Layout.fillWidth: true
@@ -1884,7 +1943,7 @@ Rectangle {
                                     spacing: 4
                                     Label {
                                         Layout.fillWidth: true
-                                        text: deckRow.cardData.cardName
+                                        text: String(deckRow.cardData.cardName || deckRow.cardData.cardCode || "")
                                         textFormat: Text.PlainText
                                         color: root.ink
                                         font.pixelSize: 13
@@ -1893,7 +1952,7 @@ Rectangle {
                                     }
                                     Label {
                                         Layout.fillWidth: true
-                                        text: deckRow.cardData.cardCode
+                                        text: String(deckRow.cardData.cardCode || "")
                                         color: root.muted
                                         font.pixelSize: 11
                                         elide: Text.ElideRight

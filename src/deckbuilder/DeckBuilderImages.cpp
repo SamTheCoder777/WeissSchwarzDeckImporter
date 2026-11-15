@@ -1,8 +1,4 @@
 #include "DeckBuilderImages.h"
-#include <utility>
-#include "../database/LocalCardStore.h"
-#include "../images/CardImageProvider.h"
-#include "../network/NetGuard.h"
 #include <QBuffer>
 #include <QCoreApplication>
 #include <QDebug>
@@ -13,8 +9,30 @@
 #include <QSaveFile>
 #include <QTimer>
 #include <QUrl>
+#include "../database/LocalCardStore.h"
+#include "../images/CardImageProvider.h"
+#include "../network/NetGuard.h"
+#include <utility>
 
 namespace {
+QString imageUrlForDownload(const QString &reference)
+{
+    const QString value = reference.trimmed();
+    if (value.isEmpty())
+        return {};
+
+    const QUrl url(value);
+    if (url.isRelative())
+        return LocalCardStore::officialImage(value, QStringLiteral("jp"));
+
+    const QString scheme = url.scheme().toLower();
+    if (!url.isValid() || (scheme != "https" && scheme != "http") || url.host().isEmpty()
+        || !url.userInfo().isEmpty() || url.hasFragment())
+        return {};
+
+    return url.toString(QUrl::FullyEncoded);
+}
+
 QImage decode(const QByteArray &bytes)
 {
     QBuffer buffer;
@@ -26,7 +44,7 @@ QImage decode(const QByteArray &bytes)
         return {};
     return reader.read();
 }
-}
+} // namespace
 
 QString DeckBuilderImages::source(const QString &officialUrl)
 {
@@ -38,12 +56,12 @@ QString DeckBuilderImages::source(const QString &officialUrl)
 
 quint64 DeckBuilderImages::load(const QString &officialUrl, QObject *context, Callback callback)
 {
-    // Main-thread entry point. Full JP and EN URLs are both validated by officialImage().
-    const QString url = LocalCardStore::officialImage(officialUrl, QStringLiteral("jp"));
+    const QString url = imageUrlForDownload(officialUrl);
     if (url.isEmpty()) {
-        QTimer::singleShot(0, context, [callback] { callback({}, "No valid official image URL."); });
+        QTimer::singleShot(0, context, [callback] { callback({}, "No valid image URL."); });
         return 0;
     }
+
     const QString path = CardImageProvider::cacheFilePath(url);
     QImage cached(path);
     if (!cached.isNull()) {
@@ -57,48 +75,54 @@ quint64 DeckBuilderImages::load(const QString &officialUrl, QObject *context, Ca
     request.timeoutMs = 15000;
     request.maxBodyBytes = 15LL * 1024 * 1024;
     request.retries = 0;
-    return NetGuard::instance().get(request, context,
-        [callback, path](const NetResult &result) {
-            if (!result.ok()) {
-                callback({}, result.message);
-                return;
+    return NetGuard::instance().get(request, context, [callback, path](const NetResult &result) {
+        if (!result.ok()) {
+            callback({}, result.message);
+            return;
+        }
+        const QImage image = decode(result.body);
+        if (image.isNull()) {
+            callback({}, "The server did not return a valid card image.");
+            return;
+        }
+        QSaveFile file(path);
+        if (file.open(QIODevice::WriteOnly)) {
+            if (file.write(result.body) == result.body.size()) {
+                if (!file.commit())
+                    qWarning() << "[DeckBuilder] Image cache commit failed:" << path;
+            } else {
+                file.cancelWriting();
             }
-            const QImage image = decode(result.body);
-            if (image.isNull()) {
-                callback({}, "The server did not return a valid card image.");
-                return;
-            }
-            QSaveFile file(path);
-            if (file.open(QIODevice::WriteOnly)) {
-                if (file.write(result.body) == result.body.size()) {
-                    if (!file.commit())
-                        qWarning() << "[DeckBuilder] Image cache commit failed:" << path;
-                } else {
-                    file.cancelWriting();
-                }
-            }
-            callback(image, {});
-        });
+        }
+        callback(image, {});
+    });
 }
 
 namespace {
-class Response final : public QQuickImageResponse {
+class Response final : public QQuickImageResponse
+{
 public:
-    Response(QString url, QSize size) : url_(std::move(url)), size_(size)
+    Response(QString url, QSize size)
+        : url_(std::move(url))
+        , size_(size)
     {
         moveToThread(QCoreApplication::instance()->thread());
-        QMetaObject::invokeMethod(this, [this] {
-            if (done_)
-                return;
-            id_ = DeckBuilderImages::load(url_, this,
-                [this](const QImage &image, const QString &) {
-                    id_ = 0;
-                    if (done_)
-                        return;
-                    image_ = image;
-                    finish();
-                });
-        }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(
+            this,
+            [this] {
+                if (done_)
+                    return;
+                id_ = DeckBuilderImages::load(url_,
+                                              this,
+                                              [this](const QImage &image, const QString &) {
+                                                  id_ = 0;
+                                                  if (done_)
+                                                      return;
+                                                  image_ = image;
+                                                  finish();
+                                              });
+            },
+            Qt::QueuedConnection);
     }
     QQuickTextureFactory *textureFactory() const override
     {
@@ -109,28 +133,38 @@ public:
     }
     void cancel() override
     {
-        QMetaObject::invokeMethod(this, [this] {
-            if (done_)
-                return;
-            const quint64 id = id_;
-            id_ = 0;
-            if (id)
-                NetGuard::instance().cancel(id);
-            finish();
-        }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(
+            this,
+            [this] {
+                if (done_)
+                    return;
+                const quint64 id = id_;
+                id_ = 0;
+                if (id)
+                    NetGuard::instance().cancel(id);
+                finish();
+            },
+            Qt::QueuedConnection);
     }
+
 private:
-    void finish() { if (!done_) { done_ = true; emit finished(); } }
+    void finish()
+    {
+        if (!done_) {
+            done_ = true;
+            emit finished();
+        }
+    }
     QString url_;
     QSize size_;
     QImage image_;
     quint64 id_ = 0;
     bool done_ = false;
 };
-}
+} // namespace
 
-QQuickImageResponse *DeckBuilderImageProvider::requestImageResponse(
-    const QString &id, const QSize &requestedSize)
+QQuickImageResponse *DeckBuilderImageProvider::requestImageResponse(const QString &id,
+                                                                    const QSize &requestedSize)
 {
     return new Response(QUrl::fromPercentEncoding(id.toUtf8()), requestedSize);
 }

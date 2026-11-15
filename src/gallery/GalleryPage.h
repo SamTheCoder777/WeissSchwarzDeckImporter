@@ -1,23 +1,25 @@
 #pragma once
-
-#include "../database/DatabaseUtil.h"
-#include "../viewmodels/Models.h"
-#include "../viewmodels/UiBridge.h"
-
 #include <QWidget>
 
-class GalleryPage: public QWidget {
-    Q_OBJECT
+class DatabaseUtil;
+class SelectionModel;
+class UiBridge;
+class DeckBuilderController;
+class GalleryController;
+class QQuickWidget;
 
+class GalleryPage : public QWidget
+{
+    Q_OBJECT
 public:
-    explicit GalleryPage(DatabaseUtil* dbUtil,SelectionModel* selModel, UiBridge* bridge,
-                           QWidget* parent = nullptr);
+    explicit GalleryPage(DatabaseUtil *database,
+                         SelectionModel *selection,
+                         UiBridge *bridge,
+                         DeckBuilderController *deck,
+                         QWidget *parent = nullptr);
+    void showDeck();
 
 private:
-    void buildUi();
-
-    DatabaseUtil* dbUtil_;
-    SelectionModel* selModel_;
-    UiBridge* bridge_;
+    QQuickWidget *view_;
+    GalleryController *controller_;
 };
-

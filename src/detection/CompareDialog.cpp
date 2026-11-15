@@ -1,11 +1,11 @@
 #include "CompareDialog.h"
 
+#include <QDesktopServices>
 #include <QSaveFile>
 #include <QSqlQuery>
 #include <QUrl>
 #include <QtWidgets>
 
-#include "../browser/CardBrowserWidget.h"
 #include "../database/DatabaseUtil.h"
 #include "../images/CardImageProvider.h"
 #include "../network/NetGuard.h"
@@ -67,8 +67,57 @@ CompareDialog::CompareDialog(const QImage& crop,
     bl->addLayout(barRow);
     bl->addStretch();
     candStack_->addWidget(busyPage);
-    browserPanel_ = new CardBrowserWidget(candStack_);
-    candStack_->addWidget(browserPanel_);
+    officialPage_ = new QWidget(candStack_);
+
+    auto *officialLayout = new QVBoxLayout(officialPage_);
+    officialLayout->setContentsMargins(24, 24, 24, 24);
+    officialLayout->setSpacing(16);
+
+    officialLayout->addStretch();
+
+    officialPageLabel_ = new QLabel(officialPage_);
+    officialPageLabel_->setTextFormat(Qt::PlainText);
+    officialPageLabel_->setWordWrap(true);
+    officialPageLabel_->setAlignment(Qt::AlignCenter);
+    officialPageLabel_->setStyleSheet("color:#9aa0a6;"
+                                      "font-size:14px;");
+
+    officialLayout->addWidget(officialPageLabel_);
+
+    officialPageButton_ = new QPushButton("Open official page", officialPage_);
+
+    officialPageButton_->setCursor(Qt::PointingHandCursor);
+    officialPageButton_->setMinimumHeight(36);
+    officialPageButton_->setAutoDefault(false);
+    officialPageButton_->setDefault(false);
+
+    officialPageButton_->setStyleSheet("QPushButton {"
+                                       " background:#2e3238;"
+                                       " color:#e8eaed;"
+                                       " border:none;"
+                                       " border-radius:7px;"
+                                       " padding:10px 18px;"
+                                       "}"
+                                       "QPushButton:hover { background:#3a3f46; }"
+                                       "QPushButton:disabled { color:#737983; }");
+
+    officialLayout->addWidget(officialPageButton_, 0, Qt::AlignHCenter);
+
+    officialLayout->addStretch();
+
+    candStack_->addWidget(officialPage_);
+
+    connect(officialPageButton_, &QPushButton::clicked, this, [this] {
+        if (!officialPageUrl_.isValid() || officialPageUrl_.host().isEmpty()
+            || (officialPageUrl_.scheme() != QStringLiteral("https")
+                && officialPageUrl_.scheme() != QStringLiteral("http"))) {
+            return;
+        }
+
+        if (!QDesktopServices::openUrl(officialPageUrl_)) {
+            QMessageBox::warning(this, "Official card page", "Could not open your web browser.");
+        }
+    });
 
     rightCol->addWidget(candCaption_);
     rightCol->addWidget(candStack_, 1);
@@ -126,7 +175,6 @@ CompareDialog::CompareDialog(const QImage& crop,
     connect(this, &QDialog::finished, this, [this](int) {
         ++imageGeneration_;
         cancelImageRequest();
-        browserPanel_->stop();
     });
 
     qApp->installEventFilter(this);
@@ -274,8 +322,6 @@ void CompareDialog::showCandidate(int i)
     const quint64 generation = ++imageGeneration_;
     cancelImageRequest();
 
-    browserPanel_->stop();
-
     imageMessage_.clear();
     curCandImage_ = QImage();
     candLabel_->clear();
@@ -367,27 +413,21 @@ void CompareDialog::showOfficialPage(const QString &code)
     loading_ = false;
     curCandImage_ = QImage();
 
-    if (dbUtil_ && dbUtil_->cardDataSource() == QStringLiteral("local")) {
-        browserPanel_->stop();
-        candStack_->setCurrentWidget(candLabel_);
+    officialPageUrl_ = dbUtil_ ? QUrl(dbUtil_->officialCardPageUrl(code)) : QUrl();
 
-        if (imageMessage_.isEmpty()) {
-            imageMessage_ = QStringLiteral("No usable official image is available "
-                                           "for this card in the local database.");
-        }
+    const bool validUrl = officialPageUrl_.isValid() && !officialPageUrl_.host().isEmpty()
+                          && (officialPageUrl_.scheme() == QStringLiteral("https")
+                              || officialPageUrl_.scheme() == QStringLiteral("http"));
 
-        candLabel_->setTextFormat(Qt::PlainText);
+    officialPageLabel_->setText(validUrl ? QString("An exact card image is unavailable.\n\n"
+                                                   "Open the official page to inspect %1.")
+                                               .arg(code)
+                                         : QString("An exact card image and official page URL "
+                                                   "are unavailable for %1.")
+                                               .arg(code));
 
-        candLabel_->setText(code + QStringLiteral("\n\n") + imageMessage_);
-
-        return;
-    }
-
-    candStack_->setCurrentWidget(browserPanel_);
-
-    if (dbUtil_) {
-        browserPanel_->loadCard(QUrl(dbUtil_->officialCardPageUrl(code)));
-    }
+    officialPageButton_->setEnabled(validUrl);
+    candStack_->setCurrentWidget(officialPage_);
 }
 
 void CompareDialog::showLoadedImage(const QString &code, const QImage &image)

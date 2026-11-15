@@ -31,9 +31,9 @@ class CardsPage;
 class GalleryPage;
 class QStackedWidget;
 class QSortFilterProxyModel;
-class CardBrowserDialog;
 class DeckBuilderPage;
 class QCloseEvent;
+class DeckBuilderController;
 
 QString toDeckCode(const std::string &cardId); // defined in Models.cpp
 
@@ -84,8 +84,8 @@ private:
     ModelService *models_ = nullptr;
     SelectionModel *selModel_ = nullptr; // shared: detection writes, gallery reads
     UiBridge *bridge_ = nullptr;         // shared
-    CardBrowserDialog *cardBrowserDialog_ = nullptr;
     DeckBuilderPage *deckBuilder_ = nullptr;
+    DeckBuilderController *deckController_ = nullptr;
 
     // pages
     QStackedWidget *pages_ = nullptr;

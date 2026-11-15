@@ -1,11 +1,11 @@
 #include "MainWindow.h"
 
-#include "../browser/CardBrowserDialog.h"
 #include "../cardsIndex/CardsPage.h"
 #include "../cardsIndex/SeriesCatalog.h"
 #include "../cardsIndex/SeriesRepository.h"
 #include "../core/Config.h"
 #include "../database/DatabaseUtil.h"
+#include "../deckbuilder/DeckBuilderController.h"
 #include "../deckbuilder/DeckBuilderPage.h"
 #include "../detection/DetectionPage.h"
 #include "../gallery/GalleryPage.h"
@@ -20,6 +20,7 @@
 #include "../viewmodels/Models.h"
 #include "../viewmodels/UiBridge.h"
 
+#include <QCoreApplication>
 #include <QFutureWatcher>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -86,23 +87,19 @@ MainWindow::MainWindow(QWidget *parent)
     selModel_ = new SelectionModel(this);
     bridge_ = new UiBridge(this);
 
-    cardBrowserDialog_ = new CardBrowserDialog(this);
-
     // pages
-    detection_ = new DetectionPage(models_,
-                                   dbUtil_,
-                                   selModel_,
-                                   bridge_,
-                                   catalog_,
-                                   installedProxy_,
-                                   cardBrowserDialog_,
-                                   this);
+    detection_
+        = new DetectionPage(models_, dbUtil_, selModel_, bridge_, catalog_, installedProxy_, this);
     settings_ = new SettingsPage(models_, seriesRepo_, catalog_, dbUtil_, this);
     faiss_ = new FaissPage(models_, catalog_, this);
     cards_ = new CardsPage(seriesCatalog_, this);
-    gallery_ = new GalleryPage(dbUtil_, selModel_, bridge_, this);
+
+    const QString deckDatabasePath = QCoreApplication::applicationDirPath() + "/weiss-db.sqlite";
+    deckController_ = new DeckBuilderController(deckDatabasePath, this);
+    gallery_ = new GalleryPage(dbUtil_, selModel_, bridge_, deckController_, this);
+
     indexGen_ = new IndexGenerationPage(models_, this);
-    deckBuilder_ = new DeckBuilderPage(this);
+    deckBuilder_ = new DeckBuilderPage(deckController_, this);
 
     pages_ = new QStackedWidget(this);
     pages_->addWidget(detection_);
@@ -112,6 +109,13 @@ MainWindow::MainWindow(QWidget *parent)
     pages_->addWidget(cards_);
     pages_->addWidget(indexGen_);
     pages_->addWidget(deckBuilder_);
+
+    deckController_->setParent(pages_);
+    connect(deckController_, &DeckBuilderController::galleryRequested, this, [this] {
+        gallery_->showDeck();
+        pages_->setCurrentWidget(gallery_);
+    });
+
     setCentralWidget(pages_);
     statusBar();
 
@@ -170,13 +174,33 @@ void MainWindow::buildSidebar()
     sideBar->addSeparator();
     sideBar->addWidget(topSpacer);
     addPage(QIcon(":/icon/indexes_dl.svg"), "Faiss Indexes", 2);
-    addPage(QIcon(":/icon/cards_dl.svg"), "Card Indexes", 4);
-    addPage(QIcon(":/icon/add_diamond.svg"), "Index Generator", 5);
+    auto *cardsAction = addPage(QIcon(":/icon/cards_dl.svg"), "Card Indexes", 4);
+    // Disable index gen Page
+    auto *indexGeneratorAction = addPage(QIcon(":/icon/add_diamond.svg"), "Index Generator", 5);
+    indexGeneratorAction->setVisible(false);
+    indexGeneratorAction->setEnabled(false);
     sideBar->addWidget(topSpacer);
     sideBar->addSeparator();
     sideBar->addWidget(topSpacer);
     settingsAction_ = addPage(QIcon(":/icon/settings.svg"), "Settings", 1);
     aDetect->setChecked(true);
+    auto updateCardIndexesVisibility = [this, cardsAction, aDetect] {
+        const bool useEncore = dbUtil_->cardDataSource() == QStringLiteral("encore");
+
+        // Leave the hidden page if the source changes while it is open.
+        if (!useEncore && pages_->currentWidget() == cards_) {
+            pages_->setCurrentWidget(detection_);
+            aDetect->setChecked(true);
+        }
+
+        cardsAction->setEnabled(useEncore);
+        cardsAction->setVisible(useEncore);
+    };
+
+    connect(dbUtil_, &DatabaseUtil::cardDataSourceChanged, this, updateCardIndexesVisibility);
+
+    // Apply the saved source when the app starts.
+    updateCardIndexesVisibility();
 
     connect(settingsAction_, &QAction::triggered, this, [this] {
         seriesUpdateAvailable_ = false;
@@ -411,7 +435,14 @@ void MainWindow::downloadModel(ModelRow idRow,
 
     auto finishIfDone = [this, dlgGuard, pending, failed, onDone] {
         if (*pending == 0 && !*failed) {
-            QTimer::singleShot(0, this, [this]() { models_->load(true); });
+            if (Config::instance().getLoadModelsOnStartup()) {
+                QTimer::singleShot(0, this, [this] {
+                    if (Config::instance().getLoadModelsOnStartup() && !models_->isLoading()
+                        && !models_->tcgCore()) {
+                        models_->load(true);
+                    }
+                });
+            }
             if (dlgGuard)
                 onDone();
         }
@@ -550,7 +581,7 @@ void MainWindow::downloadFile(const QUrl &url,
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    if (deckBuilder_ && !deckBuilder_->confirmClose()) {
+    if (deckController_ && !deckController_->confirmDiscard()) {
         event->ignore();
         return;
     }

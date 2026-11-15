@@ -1,6 +1,7 @@
 #include "SettingsPage.h"
 
 #include <QButtonGroup>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
 #include <QElapsedTimer>
@@ -14,9 +15,18 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QStyle>
 #include <QTimer>
 #include <QVBoxLayout>
+
+#include <QCoreApplication>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QRegularExpression>
+#include <QTimer>
+#include <algorithm>
 
 #include <QDesktopServices>
 #include <QLocale>
@@ -26,6 +36,7 @@
 
 #include "../core/AppUpdateController.h"
 #include "../core/Config.h"
+#include "../network/NetGuard.h"
 
 SettingsPage::SettingsPage(ModelService *models,
                            SeriesRepository *seriesRepository,
@@ -410,9 +421,29 @@ void SettingsPage::buildUi()
     yoloEdit_->setText(yoloModelPathLoaded ? Config::instance().getCurYoloModelPath() : "");
     yoloEdit_->setReadOnly(true);
 
-    if (modelPathLoaded && yoloModelPathLoaded) {
-        QTimer::singleShot(0, this, [this]() { models_->load(true); });
+    if (modelPathLoaded && yoloModelPathLoaded && Config::instance().getLoadModelsOnStartup()) {
+        QTimer::singleShot(0, this, [this] {
+            if (Config::instance().getLoadModelsOnStartup() && !models_->isLoading()
+                && !models_->tcgCore()) {
+                models_->load(true);
+            }
+        });
     }
+
+    auto *startupModelsCheck = new QCheckBox("Load recognition models automatically at startup",
+                                             modelGroup);
+    startupModelsCheck->setChecked(Config::instance().getLoadModelsOnStartup());
+    modelOuter->addWidget(startupModelsCheck);
+
+    connect(startupModelsCheck, &QCheckBox::toggled, this, [](bool enabled) {
+        Config::instance().setLoadModelsOnStartup(enabled);
+    });
+
+    auto *startupModelsHint
+        = new QLabel("When disabled, models load when you open or paste an image.", modelGroup);
+    startupModelsHint->setWordWrap(true);
+    startupModelsHint->setStyleSheet("color:#9aa0a6; font-size:12px;");
+    modelOuter->addWidget(startupModelsHint);
 
     auto* loadBtn = new QPushButton("Load models", modelGroup);
     loadBtn->setObjectName("actionPrimary");
@@ -568,15 +599,127 @@ void SettingsPage::buildUi()
     datasetHeading->setObjectName("sectionHeading");
     groupLayout->addWidget(datasetHeading);
 
+    // Dataset selection setting
+    auto *sourceRow = new QHBoxLayout();
+    sourceRow->setContentsMargins(0, 0, 0, 0);
+    sourceRow->setSpacing(12);
+    sourceRow->addWidget(new QLabel("Card data source", datasetGroup));
+
+    auto *sourceCombo = new QComboBox(datasetGroup);
+    sourceCombo->addItem("EncoreDecks", QStringLiteral("encore"));
+    sourceCombo->addItem("Local database", QStringLiteral("local"));
+    sourceCombo->setMinimumWidth(180);
+    sourceRow->addWidget(sourceCombo);
+    sourceRow->addStretch(1);
+    groupLayout->addLayout(sourceRow);
+
+    auto syncCardSource = [this, sourceCombo] {
+        const QSignalBlocker blocker(sourceCombo);
+        sourceCombo->setCurrentIndex(sourceCombo->findData(dbUtil_->cardDataSource()));
+    };
+    syncCardSource();
+
+    connect(dbUtil_, &DatabaseUtil::cardDataSourceChanged, sourceCombo, syncCardSource);
+
+    connect(sourceCombo,
+            QOverload<int>::of(&QComboBox::activated),
+            this,
+            [this, sourceCombo, syncCardSource](int index) {
+                const QString requested = sourceCombo->itemData(index).toString();
+                dbUtil_->setCardDataSource(requested);
+                syncCardSource();
+                if (dbUtil_->cardDataSource() != requested) {
+                    QMessageBox::warning(this,
+                                         "Card data source unavailable",
+                                         "The local card database could not be opened. "
+                                         "Check that it is installed and available.");
+                }
+            });
+
+    auto *localHeading = new QLabel("WSDeckImporter Local database", datasetGroup);
+
+    localHeading->setObjectName("sectionHeading");
+    groupLayout->addWidget(localHeading);
+
+    auto *localRow = new QHBoxLayout;
+    localRow->setContentsMargins(0, 0, 0, 0);
+    localRow->setSpacing(12);
+
+    localDatabaseStatus_ = new QLabel(datasetGroup);
+    localDatabaseStatus_->setWordWrap(true);
+    localDatabaseStatus_->setTextFormat(Qt::PlainText);
+    localDatabaseStatus_->setStyleSheet("color:#9aa0a6; font-size:12px;");
+
+    const QFileInfo localFile(QCoreApplication::applicationDirPath() + "/weiss-db.sqlite");
+
+    if (Config::instance().getLocalDatabaseUpdatePending()) {
+        localDatabaseStatus_->setText("Update available. Close and reopen the app to install.");
+    } else if (!localFile.isFile() || localFile.size() == 0) {
+        localDatabaseStatus_->setText("Not installed. Check for updates to prepare installation.");
+    } else {
+        localDatabaseStatus_->setText("Installed. Automatic checks run at startup every 3 hours.");
+    }
+
+    localDatabaseCheckButton_ = new QPushButton("Check for updates", datasetGroup);
+
+    localDatabaseCheckButton_->setObjectName("actionPrimary");
+    localDatabaseCheckButton_->setCursor(Qt::PointingHandCursor);
+    localDatabaseCheckButton_->setMinimumHeight(34);
+
+    localDatabaseCheckButton_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+
+    localRow->addWidget(localDatabaseStatus_, 1);
+    localRow->addWidget(localDatabaseCheckButton_, 0, Qt::AlignVCenter);
+
+    groupLayout->addLayout(localRow);
+
+    connect(localDatabaseCheckButton_,
+            &QPushButton::clicked,
+            this,
+            &SettingsPage::checkLocalDatabaseUpdate);
+
+    auto *localCheckTimer = new QTimer(this);
+    localCheckTimer->setInterval(1000);
+
+    connect(localCheckTimer, &QTimer::timeout, this, &SettingsPage::updateLocalDatabaseCheckButton);
+
+    localCheckTimer->start();
+    updateLocalDatabaseCheckButton();
+
+    auto *encoreToggle = new QPushButton("▸ EncoreDecks database maintenance", datasetGroup);
+
+    encoreToggle->setCheckable(true);
+    encoreToggle->setChecked(false);
+    encoreToggle->setObjectName("actionGhost");
+    encoreToggle->setCursor(Qt::PointingHandCursor);
+
+    groupLayout->addWidget(encoreToggle, 0, Qt::AlignLeft);
+
+    auto *encoreContent = new QWidget(datasetGroup);
+
+    auto *encoreLayout = new QVBoxLayout(encoreContent);
+    encoreLayout->setContentsMargins(0, 0, 0, 0);
+    encoreLayout->setSpacing(12);
+
+    encoreContent->setVisible(false);
+    groupLayout->addWidget(encoreContent);
+
+    connect(encoreToggle, &QPushButton::toggled, this, [encoreToggle, encoreContent](bool expanded) {
+        encoreContent->setVisible(expanded);
+
+        encoreToggle->setText(expanded ? "▾ EncoreDecks database maintenance"
+                                       : "▸ EncoreDecks database maintenance");
+    });
+
     auto *datasetDesc = new QLabel("Series lists are stored separately for each card language. "
                                    "Detection uses the one matching Detect Language.",
                                    datasetGroup);
     datasetDesc->setWordWrap(true);
     datasetDesc->setStyleSheet("color:#9aa0a6; font-size:12px;");
-    groupLayout->addWidget(datasetDesc);
+    encoreLayout->addWidget(datasetDesc);
 
-    groupLayout->addWidget(buildDatasetRow(Region::JP, datasetGroup));
-    groupLayout->addWidget(buildDatasetRow(Region::EN, datasetGroup));
+    encoreLayout->addWidget(buildDatasetRow(Region::JP, encoreContent));
+    encoreLayout->addWidget(buildDatasetRow(Region::EN, encoreContent));
 
     pbDataset_ = new QProgressBar(datasetGroup);
     pbDataset_->setRange(0, 100);
@@ -584,13 +727,13 @@ void SettingsPage::buildUi()
     pbDataset_->setTextVisible(true);
     pbDataset_->setFixedHeight(16);
     pbDataset_->setVisible(false);
-    groupLayout->addWidget(pbDataset_);
+    encoreLayout->addWidget(pbDataset_);
 
     lblDatasetStatus_ = new QLabel("", datasetGroup);
     lblDatasetStatus_->setObjectName("statusLabel");
     lblDatasetStatus_->setWordWrap(true);
     lblDatasetStatus_->setVisible(false);
-    groupLayout->addWidget(lblDatasetStatus_);
+    encoreLayout->addWidget(lblDatasetStatus_);
 
     outer->addWidget(datasetGroup);
 
@@ -705,7 +848,22 @@ void SettingsPage::buildUi()
     btnPurgeMissing->setObjectName("actionGhost");
     missingForm->addRow("Reset cache", btnPurgeMissing);
 
-    connect(btnPurgeMissing, &QPushButton::clicked, this, [this] { dbUtil_->purgeMissingCards(); });
+    connect(btnPurgeMissing, &QPushButton::clicked, this, [this] {
+        const auto answer = QMessageBox::warning(
+            this,
+            "Clear card cache?",
+            "Use this only when card images or details are broken and restarting "
+            "the app has not fixed the problem.\n\n"
+            "This clears cached images and remembered missing-card records. "
+            "Images will be fetched again when viewed.\n\n"
+            "Clear the cache now?",
+            QMessageBox::Yes | QMessageBox::Cancel,
+            QMessageBox::Cancel);
+
+        if (answer != QMessageBox::Yes)
+            return;
+        dbUtil_->purgeMissingCards();
+    });
 
     outer->addWidget(missingGroup);
 
@@ -1012,4 +1170,141 @@ void SettingsPage::updateModelPaths()
                                && !Config::instance().getCurYoloModelPath().isEmpty();
     yoloEdit_->setText(yoloModelPathLoaded ? Config::instance().getCurYoloModelPath() : "");
     yoloEdit_->setReadOnly(true);
+}
+
+void SettingsPage::updateLocalDatabaseCheckButton()
+{
+    if (!localDatabaseCheckButton_)
+        return;
+
+    if (localDatabaseCheckBusy_) {
+        localDatabaseCheckButton_->setEnabled(false);
+        localDatabaseCheckButton_->setText("Checking…");
+        return;
+    }
+
+    const auto &config = Config::instance();
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+
+    // Both startup and manual checks count toward the 15-minute
+    // minimum gap before another manual request.
+    const auto remainingFrom = [now](qint64 timestamp) -> qint64 {
+        if (timestamp <= 0 || timestamp > now)
+            return 0;
+
+        return std::max<qint64>(0, 15 * 60 - (now - timestamp));
+    };
+
+    const qint64 remaining = std::max(remainingFrom(config.getLocalDatabaseLastCheckUtc()),
+                                      remainingFrom(config.getLocalDatabaseLastManualCheckUtc()));
+
+    localDatabaseCheckButton_->setEnabled(remaining == 0);
+
+    if (remaining > 0) {
+        localDatabaseCheckButton_->setText(QString("Check in %1:%2")
+                                               .arg(remaining / 60)
+                                               .arg(remaining % 60, 2, 10, QLatin1Char('0')));
+    } else {
+        localDatabaseCheckButton_->setText("Check for updates");
+    }
+}
+
+void SettingsPage::checkLocalDatabaseUpdate()
+{
+    if (localDatabaseCheckBusy_)
+        return;
+
+    updateLocalDatabaseCheckButton();
+
+    // Enforce the cooldown here too, not only through the UI.
+    if (!localDatabaseCheckButton_ || !localDatabaseCheckButton_->isEnabled()) {
+        return;
+    }
+
+    auto &config = Config::instance();
+
+    const QUrl manifestUrl(config.localDatabaseVersionUrl_);
+
+    if (!manifestUrl.isValid() || manifestUrl.scheme() != QStringLiteral("https")
+        || manifestUrl.host().isEmpty() || !manifestUrl.userInfo().isEmpty()
+        || manifestUrl.hasFragment()) {
+        localDatabaseStatus_->setText("Set a valid HTTPS database version URL in Config.h.");
+        return;
+    }
+
+    // Save before requesting so repeated failures/restarts
+    // cannot bypass the manual cooldown.
+    config.setLocalDatabaseLastManualCheckUtc(QDateTime::currentSecsSinceEpoch());
+
+    localDatabaseCheckBusy_ = true;
+    localDatabaseStatus_->setText("Checking for database updates…");
+    updateLocalDatabaseCheckButton();
+
+    NetRequest request;
+    request.url = manifestUrl;
+    request.key = QStringLiteral("local-database-version:") + manifestUrl.toString();
+
+    request.useCache = false;
+    request.timeoutMs = 15000;
+    request.retries = 0;
+
+    NetGuard::instance().get(request, this, [this](const NetResult &result) {
+        localDatabaseCheckBusy_ = false;
+        updateLocalDatabaseCheckButton();
+
+        if (!result.ok()) {
+            localDatabaseStatus_->setText(QString("Could not check: %1").arg(result.message)
+                                          + (Config::instance().getLocalDatabaseUpdatePending()
+                                                 ? "\nA previously found update is still pending."
+                                                 : ""));
+            return;
+        }
+
+        if (result.body.size() > 64 * 1024) {
+            localDatabaseStatus_->setText("The database version JSON is too large.");
+            return;
+        }
+
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(result.body, &parseError);
+
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            localDatabaseStatus_->setText("The database version JSON is invalid.");
+            return;
+        }
+
+        const QString remoteHash = document.object().value("hash").toString().trimmed().toLower();
+
+        static const QRegularExpression hashPattern(QStringLiteral("^[0-9a-f]{64}$"));
+
+        if (!hashPattern.match(remoteHash).hasMatch()) {
+            localDatabaseStatus_->setText("version.json must contain a 64-character SHA-256 hash.");
+            return;
+        }
+
+        auto &config = Config::instance();
+
+        const QFileInfo file(QCoreApplication::applicationDirPath() + "/weiss-db.sqlite");
+
+        const bool installed = file.isFile() && file.size() > 0;
+
+        const bool updateAvailable = !installed
+                                     || remoteHash
+                                            != config.getLocalDatabaseHash().trimmed().toLower();
+
+        config.setLocalDatabaseUpdatePending(updateAvailable);
+        config.setLocalDatabaseLastCheckUtc(QDateTime::currentSecsSinceEpoch());
+
+        if (updateAvailable) {
+            localDatabaseStatus_->setText(installed
+                                              ? "Update available. Close and reopen the app "
+                                                "to download and install it."
+                                              : "Database available. Close and reopen the app "
+                                                "to download and install it.");
+        } else {
+            localDatabaseStatus_->setText("Local database is up to date.");
+        }
+
+        updateLocalDatabaseCheckButton();
+    });
 }

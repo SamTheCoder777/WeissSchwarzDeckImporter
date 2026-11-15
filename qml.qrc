@@ -49,5 +49,18 @@
         <file>icon/triggers/chance.gif</file>
         <file>icon/triggers/discovery.gif</file>
         <file>qml/shared/ReferenceText.js</file>
+        <file>qml/shared/DarkCombo.qml</file>
+        <file>qml/shared/ActionMenuItem.qml</file>
+        <file>qml/shared/QuantityButtons.qml</file>
+        <file>qml/shared/CardPreviewBody.qml</file>
+        <file>qml/shared/CardHoverPreview.qml</file>
+        <file>qml/shared/CollectionTools.js</file>
+        <file>qml/shared/CollectionGrid.qml</file>
+        <file>qml/shared/ReferenceResultsPopup.qml</file>
+        <file>qml/shared/CollectionPane.qml</file>
+        <file>qml/gallery/GalleryWorkspace.qml</file>
+        <file>qml/shared/ActionButton.qml</file>
+        <file>qml/shared/GalleryToolbar.qml</file>
+        <file>qml/shared/CollectionHeader.qml</file>
     </qresource>
 </RCC>

@@ -562,6 +562,7 @@ Rectangle {
                         Repeater {
                             model: 4
                             Rectangle {
+                                required property int index
                                 width: 32
                                 height: 28
                                 radius: 6
@@ -585,6 +586,29 @@ Rectangle {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: bridge.setQuantity(index + 1)
                                 }
+                            }
+                        }
+                        Rectangle {
+                            width: 64
+                            height: 28
+                            radius: 6
+                            opacity: bridge.isConfirmed ? 1 : 0.3
+                            color: bridge.quantity > 4 ? root.accent : customQuantityMouse.containsMouse ? "#3b424d" : "#2e3238"
+                            border.color: "#48515e"
+                            Label {
+                                anchors.centerIn: parent
+                                text: bridge.quantity > 4 ? "×" + bridge.quantity : "Custom"
+                                color: bridge.quantity > 4 ? "white" : root.text1
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
+                            MouseArea {
+                                id: customQuantityMouse
+                                anchors.fill: parent
+                                enabled: bridge.isConfirmed && bridge.currentIndex >= 0
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: quantityPopup.showForSelection()
                             }
                         }
                     }
@@ -1872,6 +1896,109 @@ Rectangle {
                         bridge.searchFiltered(advSearchPopup.filters(), advSearchPopup.summary());
                         advSearchPopup.close();
                     }
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: quantityPopup
+        parent: root.Overlay.overlay || root
+        anchors.centerIn: parent
+        popupType: Popup.Item
+        width: Math.min(280, parent.width - 24)
+        height: contentItem.implicitHeight + topPadding + bottomPadding
+        padding: 16
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        property int selectionIndex: -1
+        property string selectionLabel: ""
+
+        function showForSelection() {
+            if (!bridge.isConfirmed || bridge.currentIndex < 0)
+                return;
+            selectionIndex = bridge.currentIndex;
+            selectionLabel = bridge.confirmedText;
+            quantityInput.text = String(bridge.quantity);
+            open();
+        }
+        function acceptQuantity() {
+            if (!quantityInput.acceptableInput)
+                return;
+            if (!bridge.isConfirmed || bridge.currentIndex !== selectionIndex || bridge.confirmedText !== selectionLabel) {
+                close();
+                return;
+            }
+            bridge.setQuantity(Number(quantityInput.text));
+            close();
+        }
+        onOpened: Qt.callLater(function () {
+            if (quantityPopup.visible) {
+                quantityInput.forceActiveFocus();
+                quantityInput.selectAll();
+            }
+        })
+        Connections {
+            target: bridge
+            function onStateChanged() {
+                if (quantityPopup.visible && (!bridge.isConfirmed || bridge.currentIndex !== quantityPopup.selectionIndex || bridge.confirmedText !== quantityPopup.selectionLabel)) {
+                    quantityPopup.close();
+                }
+            }
+        }
+        background: Rectangle {
+            color: "#242a33"
+            radius: 10
+            border.color: "#4b586a"
+        }
+        contentItem: ColumnLayout {
+            spacing: 10
+            Label {
+                text: "Number of copies"
+                color: root.text1
+                font.pixelSize: 14
+                font.bold: true
+            }
+            TextField {
+                id: quantityInput
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                color: root.text1
+                font.pixelSize: 16
+                horizontalAlignment: Text.AlignHCenter
+                selectByMouse: true
+                inputMethodHints: Qt.ImhDigitsOnly
+                validator: IntValidator {
+                    bottom: 1
+                    top: 999
+                }
+                onAccepted: quantityPopup.acceptQuantity()
+                background: Rectangle {
+                    color: "#1b2028"
+                    radius: 6
+                    border.color: quantityInput.activeFocus ? root.accent : "#48515e"
+                }
+            }
+            Label {
+                text: "1–999 · Enter to confirm · Esc to cancel"
+                color: root.text2
+                font.pixelSize: 10
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Item {
+                    Layout.fillWidth: true
+                }
+                SmallButton {
+                    text: "Cancel"
+                    onClicked: quantityPopup.close()
+                }
+                SmallButton {
+                    text: "Apply"
+                    primary: true
+                    enabled: quantityInput.acceptableInput
+                    onClicked: quantityPopup.acceptQuantity()
                 }
             }
         }
