@@ -2,10 +2,12 @@
 
 #include <QCryptographicHash>
 #include <QDir>
+#include <QEventLoop>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
+#include <QProgressDialog>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QTimer>
@@ -385,17 +387,180 @@ void IndexCatalog::refresh(bool manual)
 
 QString IndexCatalog::manifestCachePath(const QUrl &url) const
 {
+    return manifestCachePathForEdition(url,
+                                       isEnMode() ? QStringLiteral("en") : QStringLiteral("jp"));
+}
+
+QString IndexCatalog::manifestCachePathForEdition(const QUrl &url, const QString &edition)
+{
     const QString directory = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
                               + "/manifests";
 
     QDir().mkpath(directory);
 
-    const QByteArray identity = (isEnMode() ? QByteArray("EN:") : QByteArray("JP:"))
+    const QByteArray identity = (edition == QStringLiteral("en") ? QByteArray("EN:")
+                                                                 : QByteArray("JP:"))
                                 + url.toEncoded();
 
     const QByteArray hash = QCryptographicHash::hash(identity, QCryptographicHash::Sha256).toHex();
 
     return directory + "/" + QString::fromLatin1(hash) + ".json";
+}
+
+void IndexCatalog::prepareStartupManifests(QWidget *parent)
+{
+    auto &config = Config::instance();
+    auto &guard = NetGuard::instance();
+
+    struct Job
+    {
+        QUrl url;
+        QString edition;
+        QString checkKey;
+        QString cachePath;
+    };
+
+    QVector<Job> jobs;
+
+    for (int i = 0; i < 2; ++i) {
+        const bool english = i == 1;
+
+        const auto mode = english ? Config::DetectLocaleMode::EN : Config::DetectLocaleMode::JP;
+
+        const QString edition = english ? QStringLiteral("en") : QStringLiteral("jp");
+
+        const QUrl url(config.getIndexManifestUrl(mode));
+
+        if (!url.isValid()
+            || (url.scheme() != QStringLiteral("https") && url.scheme() != QStringLiteral("http"))) {
+            qWarning() << "[Startup manifests] Invalid URL:" << edition << url;
+            continue;
+        }
+
+        // Same key used by IndexCatalog::refresh().
+        const QString checkKey = QStringLiteral("manifest:")
+                                 + (english ? QStringLiteral("EN:") : QStringLiteral("JP:"))
+                                 + url.toString(QUrl::FullyEncoded);
+
+        // Respect the saved automatic cooldown and host backoff.
+        if (config.updateCheckWaitSeconds(checkKey, false) > 0 || guard.blockedForMs(url) > 0) {
+            qDebug() << "[Startup manifests] Using saved cache:" << edition;
+            continue;
+        }
+
+        jobs.append(Job{url, edition, checkKey, manifestCachePathForEdition(url, edition)});
+    }
+
+    // Both checks were skipped. Continue startup using saved caches.
+    if (jobs.isEmpty())
+        return;
+
+    QProgressDialog progress(QStringLiteral("Checking JP and EN set catalogues…"),
+                             QString(),
+                             0,
+                             0,
+                             parent);
+
+    progress.setWindowTitle(QStringLiteral("WSDeckImporter"));
+    progress.setCancelButton(nullptr);
+    progress.setWindowModality(Qt::ApplicationModal);
+    progress.setMinimumDuration(0);
+    progress.setAutoClose(false);
+    progress.setAutoReset(false);
+    progress.show();
+
+    QEventLoop loop;
+    QTimer deadline;
+    deadline.setSingleShot(true);
+
+    QVector<quint64> requestIds;
+    int remaining = int(jobs.size());
+    bool finished = false;
+
+    // Destroy this context before the captured local state goes away.
+    QObject callbackContext;
+
+    QObject::connect(&deadline, &QTimer::timeout, &callbackContext, [&] {
+        qWarning() << "[Startup manifests] Startup deadline reached;"
+                   << "continuing with saved caches.";
+
+        finished = true;
+        loop.quit();
+    });
+
+    for (const Job &job : jobs) {
+        // Record attempts, including failed attempts, as refresh() does.
+        config.recordUpdateCheck(job.checkKey);
+
+        NetRequest request;
+        request.url = job.url;
+        request.key = job.checkKey;
+        request.useCache = false;
+        request.timeoutMs = 15000;
+        request.retries = 0;
+
+        const quint64 id = guard.get(request, &callbackContext, [&, job](const NetResult &result) {
+            if (finished)
+                return;
+
+            if (!result.ok()) {
+                qWarning() << "[Startup manifests] Check failed:" << job.edition << result.message;
+            } else {
+                QJsonParseError parseError;
+
+                const QJsonDocument document = QJsonDocument::fromJson(result.body, &parseError);
+
+                const bool valid = parseError.error == QJsonParseError::NoError
+                                   && document.isObject()
+                                   && document.object().value("indexes").isArray();
+
+                if (!valid) {
+                    qWarning() << "[Startup manifests] Invalid manifest:" << job.edition;
+                } else {
+                    QSaveFile file(job.cachePath);
+
+                    if (!file.open(QIODevice::WriteOnly)) {
+                        qWarning() << "[Startup manifests] Cannot open cache:" << job.edition
+                                   << file.errorString();
+                    } else if (file.write(result.body) != result.body.size()) {
+                        qWarning() << "[Startup manifests] Cache write failed:" << job.edition
+                                   << file.errorString();
+
+                        file.cancelWriting();
+                    } else if (!file.commit()) {
+                        qWarning() << "[Startup manifests] Cache commit failed:" << job.edition
+                                   << file.errorString();
+                    } else {
+                        qDebug() << "[Startup manifests] Saved:" << job.edition;
+                    }
+                }
+            }
+
+            --remaining;
+
+            if (remaining == 0) {
+                finished = true;
+                loop.quit();
+            }
+        });
+
+        requestIds.append(id);
+    }
+
+    // Bound the startup wait, including any NetGuard queue time.
+    deadline.start(35000);
+
+    if (!finished)
+        loop.exec();
+
+    deadline.stop();
+    finished = true;
+
+    // Cancel any requests still waiting when the deadline expired.
+    for (quint64 id : requestIds)
+        guard.cancel(id);
+
+    progress.hide();
 }
 
 void IndexCatalog::applyManifest(const QJsonObject &manifest)

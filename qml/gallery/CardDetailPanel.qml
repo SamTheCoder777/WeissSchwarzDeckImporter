@@ -11,6 +11,8 @@ ScrollView {
     property var card: ({})
     property bool requestCardData: true
     property var imageSourceOverride: undefined
+
+    contentWidth: availableWidth
     clip: true
     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
@@ -70,7 +72,7 @@ ScrollView {
     }
 
     ColumnLayout {
-        width: root.width
+        width: root.availableWidth
         spacing: 12
 
         Rectangle {

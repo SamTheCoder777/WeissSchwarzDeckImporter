@@ -155,11 +155,14 @@ public:
         : indexInstallPath_;
     }
     void setIndexInstallPath(const QString& p);
-    QString getIndexManifestUrl() const {
-        return curDetectLocaleMode_ == DetectLocaleMode::JP
+    QString getIndexManifestUrl(DetectLocaleMode mode) const
+    {
+        return mode == DetectLocaleMode::JP
                    ? (indexManifestUrl_.isEmpty() ? kDefaultManifestUrl : indexManifestUrl_)
                    : (enIndexManifestUrl_.isEmpty() ? kEnDefaultManifestUrl : enIndexManifestUrl_);
     }
+
+    QString getIndexManifestUrl() const { return getIndexManifestUrl(curDetectLocaleMode_); }
     void setIndexManifestUrl(const QString& u);
     // check if index name is valid
     Q_INVOKABLE bool isValidIndexName(const QString &name);

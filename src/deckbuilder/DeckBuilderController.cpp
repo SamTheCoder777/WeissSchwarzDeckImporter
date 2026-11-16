@@ -42,6 +42,7 @@
 
 #include "../core/Config.h"
 #include "../database/LocalCardStore.h"
+#include "../index/IndexCatalog.h"
 #include "../network/NetGuard.h"
 #include "DeckBuilderImages.h"
 #include "DeckCode.h"
@@ -162,39 +163,32 @@ static QStringList deckPngPaths(const QString &path, int pages)
 // Reuse only saved catalogues. Opening the builder never starts a manifest GET.
 static QJsonObject deckManifestForEdition(const QString &edition)
 {
-    auto read = [](const QString &path) {
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly))
-            return QJsonObject{};
-        return QJsonDocument::fromJson(file.readAll()).object();
-    };
-
-    const QString directory = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
-                              + "/manifests";
-    auto &config = Config::instance();
-    const QString activeEdition = config.getCurDetectLocaleMode() == Config::DetectLocaleMode::EN
-                                      ? "en"
-                                      : "jp";
-
-    if (activeEdition == edition) {
-        const QUrl url(config.getIndexManifestUrl());
-        const QByteArray identity = (edition == "en" ? QByteArray("EN:") : QByteArray("JP:"))
-                                    + url.toEncoded();
-        const QString hash = QString::fromLatin1(
-            QCryptographicHash::hash(identity, QCryptographicHash::Sha256).toHex());
-        const QJsonObject cached = read(directory + "/" + hash + ".json");
-        if (cached.value("indexes").isArray())
-            return cached;
+    if (edition != QStringLiteral("jp") && edition != QStringLiteral("en")) {
+        return {};
     }
 
-    // IndexCatalog writes this edition-qualified snapshot whenever it applies a manifest.
-    const QJsonObject snapshot = read(directory + "/deck-groups-" + edition + ".json");
-    const QJsonObject manifest = snapshot.value("manifest").toObject();
+    const auto mode = edition == QStringLiteral("en") ? Config::DetectLocaleMode::EN
+                                                      : Config::DetectLocaleMode::JP;
 
-    if (snapshot.value("edition").toString() == edition && manifest.value("indexes").isArray())
-        return manifest;
+    const QUrl url(Config::instance().getIndexManifestUrl(mode));
 
-    return {};
+    const QString path = IndexCatalog::manifestCachePathForEdition(url, edition);
+
+    QFile file(path);
+
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+
+    QJsonParseError parseError;
+
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
+
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()
+        || !document.object().value("indexes").isArray()) {
+        return {};
+    }
+
+    return document.object();
 }
 
 int DeckBuilderDeckModel::rowCount(const QModelIndex &parent) const

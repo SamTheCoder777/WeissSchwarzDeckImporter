@@ -49,6 +49,8 @@ MainWindow::MainWindow(QWidget *parent)
     qDebug() << "Cache Location:"
              << QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
 
+    IndexCatalog::prepareStartupManifests(this);
+
     dbUtil_ = new DatabaseUtil(this);
     dbUtil_->setLocale(Config::instance().getPreferredLocale());
     dbUtil_->cleanupExpiredMissing();
