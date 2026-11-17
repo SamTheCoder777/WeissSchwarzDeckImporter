@@ -4,6 +4,7 @@
 
 #include "src/app/MainWindow.h"
 #include "src/core/AppUpdateController.h"
+#include "src/database/LocalDatabaseUpdater.h"
 #include "src/network/NetGuard.h"
 
 int main(int argc, char** argv) {
@@ -291,6 +292,9 @@ int main(int argc, char** argv) {
 
     guard.setStorageDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
                         + "/network");
+
+    // Update/Download local db
+    LocalDatabaseUpdater::runBeforeMainWindow();
 
     MainWindow w;
     w.show();

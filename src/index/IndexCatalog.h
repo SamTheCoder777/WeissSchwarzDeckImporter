@@ -6,7 +6,10 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QString>
+#include <QUrl>
 #include <QVector>
+
+class QWidget;
 
 class IndexCatalog : public QAbstractListModel {
     Q_OBJECT
@@ -33,6 +36,12 @@ public:
     bool    busy()   const { return reply_ != nullptr; }
     QString installRoot() const;
     QString activeIndexId() const { return activeId_; }
+
+    // Shared cache naming for the catalogue and deck builder.
+    static QString manifestCachePathForEdition(const QUrl &url, const QString &edition);
+
+    // Call once during startup, before constructing application pages.
+    static void prepareStartupManifests(QWidget *parent = nullptr);
 
     // called from QML
     Q_INVOKABLE void refresh(bool manual = false); // fetch the manifest
@@ -92,6 +101,11 @@ private:
 
     QString manifestCachePath(const QUrl &url) const;
     void applyManifest(const QJsonObject &manifest);
+    void startDownload(int row);
+    void finishManifestCheck(bool success);
+
+    QString pendingDownloadId_;
+    Row downloadPlan_;
 
     QNetworkAccessManager nam_;
     QNetworkReply* reply_ = nullptr;

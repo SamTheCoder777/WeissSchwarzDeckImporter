@@ -2,36 +2,63 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
+import "../shared" as Shared
+import "../shared/TriggerIcons.js" as Triggers
+import "../shared/ReferenceText.js" as References
+
 ScrollView {
     id: root
     property var card: ({})
+    property bool requestCardData: true
+    property var imageSourceOverride: undefined
+
+    contentWidth: availableWidth
     clip: true
     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
+    signal referenceRequested(string kind, string value)
+
+    // for ref highlighting
+    function escapeHtml(value) {
+        return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+
+    function referenceHtml(value, hoveredReference) {
+        return References.referenceHtml(value, hoveredReference);
+    }
+
+    function activateReference(link) {
+        var match = /^cardref:(trait|name|ability):(.*)$/.exec(link);
+
+        if (!match)
+            return;
+
+        var value;
+
+        try {
+            value = decodeURIComponent(match[2]).trim();
+        } catch (error) {
+            return;
+        }
+
+        if (value.length === 0)
+            return;
+
+        root.referenceRequested(match[1], value);
+    }
+    // ----------End of Ref Highlighting----------
+
     Component.onCompleted: {
         var id = card.cardCode || card.cardId;
-        if (id)
+        if (root.requestCardData && id)
             cardDatabase.ensureCardData(id);
     }
 
     onCardChanged: {
         var id = card.cardCode || card.cardId;
-        if (id && card.localeAvailable === undefined)
+        if (root.requestCardData && id && card.localeAvailable === undefined)
             cardDatabase.ensureCardData(id);
     }
-
-    // Connections {
-    //     target: cardDatabase
-    //     function onCardReady(code) {
-    //         if (code === root.card.cardCode || code === root.card.cardId)
-    //             root.card = cardDatabase.cardDataFor(code);
-    //     }
-    //     function onLocaleChanged() {
-    //         var id = root.card.cardCode || root.card.cardId;
-    //         if (id)
-    //             root.card = cardDatabase.cardDataFor(id);
-    //     }
-    // }
 
     component SelText: TextEdit {
         readOnly: true
@@ -45,7 +72,7 @@ ScrollView {
     }
 
     ColumnLayout {
-        width: root.width
+        width: root.availableWidth
         spacing: 12
 
         Rectangle {
@@ -57,7 +84,14 @@ ScrollView {
             clip: true
             Image {
                 anchors.fill: parent
-                source: root.card.cardCode ? "image://cardcache/" + encodeURIComponent(root.card.cardCode) : ""
+                source: {
+                    if (root.imageSourceOverride !== undefined)
+                        return root.imageSourceOverride;
+
+                    var revision = cardDatabase.dataRevision;
+
+                    return cardDatabase.cardImageSource(root.card.cardCode || root.card.cardId || "");
+                }
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
             }
@@ -133,7 +167,8 @@ ScrollView {
             }
             SelText {
                 Layout.fillWidth: true
-                text: root.card.soul || "-"
+                textFormat: TextEdit.RichText
+                text: Triggers.inlineText(root.card.soul || "-", 14)
                 color: "#e6e6e6"
                 font.pixelSize: 12
             }
@@ -143,11 +178,10 @@ ScrollView {
                 color: "#888"
                 font.pixelSize: 12
             }
-            SelText {
+            Shared.TriggerIconRow {
                 Layout.fillWidth: true
-                text: root.card.cardTrigger || "-"
-                color: "#e6e6e6"
-                font.pixelSize: 12
+                value: root.card.cardTrigger || ""
+                iconSize: 14
             }
 
             Label {
@@ -204,11 +238,30 @@ ScrollView {
             visible: (root.card.text || "") !== ""
         }
         SelText {
+            id: abilityText
+
             Layout.fillWidth: true
-            text: root.card.text || ""
+
+            readonly property string referenceUnderPointer: referenceHover.hovered ? abilityText.linkAt(referenceHover.point.position.x, referenceHover.point.position.y) : ""
+
+            textFormat: TextEdit.RichText
+
+            text: root.referenceHtml(root.card.text || "", abilityText.referenceUnderPointer)
+
             color: "#e6e6e6"
             font.pixelSize: 13
+
             visible: (root.card.text || "") !== ""
+
+            onLinkActivated: function (link) {
+                root.activateReference(link);
+            }
+
+            HoverHandler {
+                id: referenceHover
+
+                cursorShape: abilityText.referenceUnderPointer !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor
+            }
         }
 
         Item {

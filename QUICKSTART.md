@@ -78,7 +78,9 @@ Before importing a decklist, you need to download data for the specific set you'
    ![Download and Use button](docs/quickFaissUse.png)
 
 ---
-
+<details>
+<summary style="font-size: 20px;"><b>2b) Skip this step if after v1.1.0</b></summary>
+<br>
 ### Card Index Data
 
 4. Navigate to the **Cards Index** page.
@@ -100,7 +102,7 @@ Before importing a decklist, you need to download data for the specific set you'
 
 > [!TIP]
 >  Both the Faiss Index and Card Index data need to be downloaded for a set before it can be detected properly — missing either one can cause incomplete results later.
-
+</details>
 ---
 
 ## 3. Detecting a Decklist

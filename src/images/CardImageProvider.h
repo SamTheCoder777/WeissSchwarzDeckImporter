@@ -15,8 +15,10 @@ class DatabaseUtil;
 class CardImageResponse : public QQuickImageResponse {
     Q_OBJECT
 public:
-    CardImageResponse(const QString& cardCode, const QSize& requestedSize,
-                      DatabaseUtil* dbUtil);
+    CardImageResponse(const QString &cardCode,
+                      const QSize &requestedSize,
+                      DatabaseUtil *dbUtil,
+                      const QString &expectedStamp = {});
 
     QQuickTextureFactory* textureFactory() const override;
 
@@ -28,11 +30,15 @@ private:
     quint64 requestId_ = 0;
     QString cachePath_;
     QString cardCode_;
+    int dataRevision_ = -1;
+    QString dataContext_;
+    QString expectedStamp_;
 
     QStringList urls_;
     int nextUrl_ = 0;
     bool completed_ = false;
 
+    bool currentDataContext() const;
     void tryNextImage();
     void complete();
 
@@ -51,6 +57,7 @@ public:
     static bool clearImageCaches();
     static QImage memoryImage(const QString &cardCode);
     static void rememberImage(const QString &cardCode, const QImage &image);
+    static void setCacheNamespace(const QString &value);
 
 private:
     DatabaseUtil *dbUtil_;

@@ -46,10 +46,24 @@ Rectangle {
     }
     clip: false
 
-    function refresh() {
-        var d = preloaded && preloaded.cardName !== undefined ? Object.assign({}, preloaded) : (cardDatabase.cardDataFor(cardId) || {});
-        d.cardId = cardId;
-        fullData = Object.assign({}, d);
+    function refresh(forceDatabase) {
+        if (!root.cardId) {
+            root.fullData = {};
+            return;
+        }
+
+        var data;
+
+        if (!forceDatabase && root.preloaded !== undefined && root.preloaded !== null) {
+            data = root.preloaded;
+        } else {
+            data = cardDatabase.cardDataFor(root.cardId) || {};
+        }
+
+        var copy = Object.assign({}, data);
+        copy.cardId = root.cardId;
+
+        root.fullData = copy;
     }
 
     function loadCardData() {
@@ -76,19 +90,26 @@ Rectangle {
         function onCardReady(code) {
             if (code === root.cardId) {
                 root.fetchFailed = false;
-                root.refresh();
+                root.refresh(true);
             }
-        }
-        function onLocaleChanged() {
-            var d = cardDatabase.cardDataFor(root.cardId) || {};
-            d.cardId = root.cardId;
-            root.fullData = Object.assign({}, d);
         }
         function onCardFetchFailed(code, reason) {
             if (code === root.cardId) {
                 root.fetchFailed = true;
                 root.failReason = reason;
             }
+        }
+        function refreshFromDatabase() {
+            var d = cardDatabase.cardDataFor(root.cardId) || {};
+            d.cardId = root.cardId;
+
+            root.fullData = Object.assign({}, d);
+        }
+        function onCardDataChanged() {
+            root.fetchFailed = false;
+            root.failReason = "";
+
+            root.loadCardData();
         }
     }
 
@@ -108,7 +129,10 @@ Rectangle {
             Image {
                 id: img
                 anchors.fill: parent
-                source: root.loaded && root.fullData.cardCode ? "image://cardcache/" + encodeURIComponent(root.fullData.cardCode) : ""
+                source: {
+                    var revision = cardDatabase.dataRevision;
+                    return cardDatabase.cardImageSource(root.cardId);
+                }
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
                 cache: true

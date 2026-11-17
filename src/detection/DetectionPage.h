@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../browser/CardBrowserDialog.h"
 #include "../index/IndexCatalog.h"
 #include "../services/ModelService.h"
 #include "../viewmodels/Models.h"
@@ -8,6 +7,7 @@
 #include "ImageCanvas.h"
 
 #include <QFutureWatcher>
+#include <QImage>
 #include <QLabel>
 #include <QPushButton>
 #include <QQuickWidget>
@@ -26,7 +26,6 @@ public:
                            UiBridge *bridge,
                            IndexCatalog *catalog,
                            QSortFilterProxyModel *installedProxy,
-                           CardBrowserDialog *cardBrowserDialog,
                            QWidget *parent = nullptr);
 
     Q_INVOKABLE void openOfficialCard(const QString &cardCode);
@@ -40,7 +39,6 @@ private:
     IndexCatalog *catalog_;
     QSortFilterProxyModel *installedProxy_;
     QSortFilterProxyModel *installedSearchProxy_;
-    CardBrowserDialog *cardBrowserDialog_;
 
     QPushButton *rectBtn_;
     QPushButton *polyBtn_;
@@ -56,6 +54,8 @@ private:
 
     cv::Mat sourceBgr_;
     QString sourcePath_;
+    QImage pendingImage_;
+    QString pendingImagePath_;
 
     QMap<int, int> selRotations_;
 
@@ -76,6 +76,9 @@ private:
     int currentSel_ = -1;
 
     bool detecting_ = false;
+
+    void requestImage(const QImage &image, const QString &path = QString());
+    void finishPendingImage();
 
     void onModelLoaded(bool);
     void buildUi();

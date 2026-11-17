@@ -1,19 +1,23 @@
 #include "DetectionPage.h"
 
 #include <QApplication>
+#include <QDateTime>
+#include <QDesktopServices>
+#include <QImageReader>
+#include <QMessageBox>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickWidget>
 #include <QShortcut>
-#include <QWebEnginePage>
-#include <QWebEngineProfile>
-#include <QWebEngineView>
+#include <QTimer>
+#include <QUrl>
 #include <QtConcurrent>
 #include <QtWidgets>
+#include <exception>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
-#include "../browser/CardBrowserDialog.h"
+#include "../core/Config.h"
 #include "../database/DatabaseUtil.h"
 #include "../images/CardImageProvider.h"
 #include "../index/IndexCatalog.h"
@@ -57,7 +61,6 @@ DetectionPage::DetectionPage(ModelService *models,
                              UiBridge *bridge,
                              IndexCatalog *catalog,
                              QSortFilterProxyModel *installedProxy,
-                             CardBrowserDialog *cardBrowserDialog,
                              QWidget *parent)
     : QWidget(parent)
     , models_(models)
@@ -66,51 +69,136 @@ DetectionPage::DetectionPage(ModelService *models,
     , bridge_(bridge)
     , catalog_(catalog)
     , installedProxy_(installedProxy)
-    , cardBrowserDialog_(cardBrowserDialog)
 {
     buildUi();
 
     bridge_->setSetCodesProvider([this] { return models_->indexSetCodes(); });
 
-    connect(models_, &ModelService::loaded, this, [this](bool, const QString&){
-        onModelLoaded(true);
+    connect(models_, &ModelService::loaded, this, [this](bool ok, const QString &) {
+        onModelLoaded(ok);
+
+        if (pendingImage_.isNull())
+            return;
+
+        if (!ok) {
+            pendingImage_ = QImage();
+            pendingImagePath_.clear();
+            return;
+        }
+
+        QTimer::singleShot(0, this, [this] { finishPendingImage(); });
     });
     candModel_->setDatabaseUtil(dbUtil_);
 
     QShortcut *pasteShortcut = new QShortcut(QKeySequence::Paste, this);
-    connect(pasteShortcut, &QShortcut::activated, this, [this]{
-        QImage pasted = handlePasteImage();
-        if (pasted.isNull()) return;
-        if (models_->isLoading()) {
-            QMessageBox::information(this, "Please wait", "The model is still loading.\nCheck status in settings.");
-            return;
-        }
-        if (detecting_){
-            QMessageBox::information(this, "Please wait", "Detection is running.");
-            return;
-        }
-        if (!models_->tcgCore()) {
-            QMessageBox::information(this, "No model", "Load a model in Settings first.");
-            return;
-        }
-        QImage rgb = pasted.convertToFormat(QImage::Format_RGB888);
-        if (rgb.isNull()) { QMessageBox::warning(this, "Error", "Unsupported clipboard image format."); return; }
-        cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
-                    const_cast<uchar*>(rgb.bits()), rgb.bytesPerLine());
-        cv::cvtColor(mat, sourceBgr_, cv::COLOR_RGB2BGR);
-        if (sourceBgr_.empty()) { QMessageBox::warning(this, "Error", "Could not read image."); return; }
-        canvas_->setImage(matToQImage(sourceBgr_));
-        autoDets_.clear();
-        if (models_->detector()) {
-            QApplication::setOverrideCursor(Qt::WaitCursor);
-            try { autoDets_ = models_->detector()->detect(sourceBgr_); } catch (...) {}
-            QApplication::restoreOverrideCursor();
-        }
-        sel_.clear();
-        currentSel_ = -1;
-        candModel_->clear();
-        pushStateToQml();
+    connect(pasteShortcut, &QShortcut::activated, this, [this] {
+        const QImage pasted = handlePasteImage();
+        if (!pasted.isNull())
+            requestImage(pasted);
     });
+}
+
+void DetectionPage::requestImage(const QImage &image, const QString &path)
+{
+    if (image.isNull())
+        return;
+    if (detecting_) {
+        QMessageBox::information(this, "Please wait", "Detection is running.");
+        return;
+    }
+    if (!pendingImage_.isNull()) {
+        QMessageBox::information(this,
+                                 "Please wait",
+                                 "An image is already waiting for the models to load.");
+        return;
+    }
+
+    pendingImage_ = image;
+    pendingImagePath_ = path;
+
+    if (models_->isLoading())
+        return;
+
+    if (models_->tcgCore()) {
+        finishPendingImage();
+        return;
+    }
+
+    if (Config::instance().getCurModelPath().isEmpty()
+        || Config::instance().getCurYoloModelPath().isEmpty()) {
+        pendingImage_ = QImage();
+        pendingImagePath_.clear();
+        QMessageBox::information(this,
+                                 "Model paths required",
+                                 "Set both model paths in Settings first.");
+        return;
+    }
+
+    try {
+        models_->load(true);
+    } catch (const std::exception &error) {
+        pendingImage_ = QImage();
+        pendingImagePath_.clear();
+        QMessageBox::critical(this, "Model loading failed", QString::fromUtf8(error.what()));
+    } catch (...) {
+        pendingImage_ = QImage();
+        pendingImagePath_.clear();
+        QMessageBox::critical(this, "Model loading failed", "The models could not be loaded.");
+    }
+}
+
+void DetectionPage::finishPendingImage()
+{
+    if (pendingImage_.isNull())
+        return;
+
+    if (models_->isLoading())
+        return;
+
+    const QImage image = pendingImage_;
+    const QString path = pendingImagePath_;
+    pendingImage_ = QImage();
+    pendingImagePath_.clear();
+
+    if (!models_->tcgCore() || detecting_) {
+        QMessageBox::information(this,
+                                 "Image not opened",
+                                 "The models are unavailable or detection is running. Try again.");
+        return;
+    }
+
+    const QImage rgb = image.convertToFormat(QImage::Format_RGB888);
+    if (rgb.isNull()) {
+        QMessageBox::warning(this, "Error", "Unsupported image format.");
+        return;
+    }
+
+    cv::Mat mat(rgb.height(),
+                rgb.width(),
+                CV_8UC3,
+                const_cast<uchar *>(rgb.constBits()),
+                rgb.bytesPerLine());
+    cv::cvtColor(mat, sourceBgr_, cv::COLOR_RGB2BGR);
+    if (sourceBgr_.empty()) {
+        QMessageBox::warning(this, "Error", "Could not read image.");
+        return;
+    }
+
+    sourcePath_ = path;
+    canvas_->setImage(matToQImage(sourceBgr_));
+    autoDets_.clear();
+    if (models_->detector()) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        try {
+            autoDets_ = models_->detector()->detect(sourceBgr_);
+        } catch (...) {
+        }
+        QApplication::restoreOverrideCursor();
+    }
+    sel_.clear();
+    currentSel_ = -1;
+    candModel_->clear();
+    pushStateToQml();
 }
 
 void DetectionPage::openOfficialCard(const QString &cardCode)
@@ -119,20 +207,17 @@ void DetectionPage::openOfficialCard(const QString &cardCode)
         return;
 
     const QUrl url(dbUtil_->officialCardPageUrl(cardCode));
-    if (!url.isValid() || url.isEmpty())
+
+    if (!url.isValid() || url.host().isEmpty()
+        || (url.scheme() != QStringLiteral("https") && url.scheme() != QStringLiteral("http"))) {
+        QMessageBox::warning(this,
+                             "Official card page",
+                             "No valid official page URL is available for this card.");
         return;
-
-    QImage cropImage;
-
-    if (currentSel_ >= 0 && currentSel_ < sel_.size()) {
-        const cv::Mat crop = cropForSelection(canvasIndexFor(currentSel_));
-
-        if (!crop.empty())
-            cropImage = matToQImage(crop).copy();
     }
 
-    if (cardBrowserDialog_) {
-        cardBrowserDialog_->showCard(cardCode, url, cropImage);
+    if (!QDesktopServices::openUrl(url)) {
+        QMessageBox::warning(this, "Official card page", "Could not open your web browser.");
     }
 }
 
@@ -320,13 +405,23 @@ void DetectionPage::buildUi() {
     connect(bridge_, &UiBridge::confirmCodeRequested, this, &DetectionPage::confirmCandidateCode);
     connect(bridge_, &UiBridge::exportRequested,     this, &DetectionPage::exportDeck);
     connect(bridge_, &UiBridge::detectRequested,     this, &DetectionPage::runDetection);
-    connect(bridge_, &UiBridge::quantityRequested,   this, [this](int q) {
-        if (currentSel_ >= 0 && currentSel_ < sel_.size()) {
-            sel_[currentSel_].qty = q;
-            canvas_->setSelectionState(currentSel_, sel_[currentSel_].confirmed,
-                                       QString("%1 x%2").arg(QString::fromStdString(sel_[currentSel_].cardId)).arg(q));
-            pushStateToQml();
+    connect(bridge_, &UiBridge::quantityRequested, this, [this](int q) {
+        if (currentSel_ < 0 || currentSel_ >= sel_.size())
+            return;
+        if (!sel_[currentSel_].confirmed)
+            return;
+
+        const int copies = qBound(1, q, 999);
+        sel_[currentSel_].qty = copies;
+        const int canvasIndex = canvasIndexFor(currentSel_);
+        if (canvasIndex >= 0) {
+            canvas_->setSelectionState(canvasIndex,
+                                       true,
+                                       QString("%1 x%2")
+                                           .arg(QString::fromStdString(sel_[currentSel_].cardId))
+                                           .arg(copies));
         }
+        pushStateToQml();
     });
     connect(bridge_, &UiBridge::openCompareRequested, this, &DetectionPage::openCompareDialog);
     connect(bridge_, &UiBridge::searchFilteredRequested, this, &DetectionPage::runFilteredSearch);
@@ -614,36 +709,34 @@ void DetectionPage::pushStateToQml() {
                                   : QString());
 }
 
-void DetectionPage::openImage() {
-    if (models_->isLoading()) {
-        QMessageBox::information(this, "Please wait", "The model is still loading.\nCheck status in settings.");
-        return;
-    }
-    if (detecting_){
+void DetectionPage::openImage()
+{
+    if (detecting_) {
         QMessageBox::information(this, "Please wait", "Detection is running.");
         return;
     }
-    if (!models_->tcgCore()) {
-        QMessageBox::information(this, "No model", "Load a model in Settings first.");
+    if (!pendingImage_.isNull()) {
+        QMessageBox::information(this,
+                                 "Please wait",
+                                 "An image is already waiting for the models to load.");
         return;
     }
-    QString p = QFileDialog::getOpenFileName(this, "Open image", {},
-                                             "Images (*.png *.jpg *.jpeg *.webp *.bmp)");
-    if (p.isEmpty()) return;
-    sourceBgr_ = cv::imread(p.toStdString(), cv::IMREAD_COLOR);
-    if (sourceBgr_.empty()) { QMessageBox::warning(this, "Error", "Could not read image."); return; }
-    sourcePath_ = p;
-    canvas_->setImage(matToQImage(sourceBgr_));
-    autoDets_.clear();
-    if (models_->detector()) {
-        QApplication::setOverrideCursor(Qt::WaitCursor);
-        try { autoDets_ = models_->detector()->detect(sourceBgr_); } catch (...) {}
-        QApplication::restoreOverrideCursor();
+
+    const QString path = QFileDialog::getOpenFileName(this,
+                                                      "Open image",
+                                                      {},
+                                                      "Images (*.png *.jpg *.jpeg *.webp *.bmp)");
+    if (path.isEmpty())
+        return;
+
+    QImageReader reader(path);
+    reader.setAutoTransform(true);
+    const QImage image = reader.read();
+    if (image.isNull()) {
+        QMessageBox::warning(this, "Error", "Could not read image: " + reader.errorString());
+        return;
     }
-    sel_.clear();
-    currentSel_ = -1;
-    candModel_->clear();
-    pushStateToQml();
+    requestImage(image, path);
 }
 
 cv::Mat DetectionPage::cropForSelection(int index) const {
@@ -953,10 +1046,41 @@ void DetectionPage::exportDeck() {
     if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
         QMessageBox::warning(this, "Error", "Could not write file."); return;
     }
-    QTextStream out(&f);
-    for (const QString& l : lines) out << l << "\n";
+    const QString edition = Config::instance().getCurDetectLocaleMode()
+                                    == Config::DetectLocaleMode::EN
+                                ? QStringLiteral("en")
+                                : QStringLiteral("jp");
+    bool writeOk = false;
+
+    {
+        QTextStream out(&f);
+
+        out << "# WSDeckImporter Exported\n"
+            << "# name=Detected%20cards\n"
+            << "Name: Detected cards\n"
+            << "Date: " << QDateTime::currentDateTime().toString("HH:mm  dd-MM-yyyy") << '\n'
+            << "Sleeve: \n\n"
+            << "Cards:\n";
+
+        for (const QString &code : lines)
+            out << code << '\n';
+
+        out.flush();
+        writeOk = out.status() == QTextStream::Ok;
+    }
+
     f.close();
-    QMessageBox::information(this, "Exported",
+
+    if (!writeOk) {
+        QMessageBox::warning(
+            this,
+            "Export failed",
+            "Could not finish writing the deck file. Please try another location.");
+        return;
+    }
+
+    QMessageBox::information(this,
+                             "Exported",
                              QString("Wrote %1 cards to:\n%2").arg(lines.size()).arg(p));
 }
 

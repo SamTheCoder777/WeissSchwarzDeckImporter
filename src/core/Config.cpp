@@ -48,6 +48,16 @@ void Config::load() {
             .toInt());
     settings_->endGroup();
 
+    settings_->beginGroup("CardData");
+    cardDataSource_
+        = settings_->value("CardDataSource", QStringLiteral("local")).toString().trimmed().toLower();
+    if (cardDataSource_ != QStringLiteral("local") && cardDataSource_ != QStringLiteral("encore")) {
+        cardDataSource_ = QStringLiteral("local");
+    }
+    localDatabaseLastManualCheckUtc_ = settings_->value("LastManualCheckUtc", 0).toLongLong();
+    localDatabaseUpdatePending_ = settings_->value("UpdatePending", false).toBool();
+    settings_->endGroup();
+
     settings_->beginGroup("MissingCards");
     missingPurgeInterval_
         = settings_->value("MissingPurgeInterval", (int) MissingPurgeInterval::Never).toInt();
@@ -55,6 +65,10 @@ void Config::load() {
 
     settings_->beginGroup("Acceleration");
     useAcceleration_ = settings_->value("UseAcceleration", true).toBool();
+    settings_->endGroup();
+
+    settings_->beginGroup("Models");
+    loadModelsOnStartup_ = settings_->value("LoadOnStartup", true).toBool();
     settings_->endGroup();
 
     settings_->beginGroup("UpdateChecks");
@@ -74,6 +88,15 @@ void Config::load() {
 
     settings_->beginGroup("AppUpdater");
     appUpdaterStates_ = settings_->value("States").toMap();
+    settings_->endGroup();
+
+    settings_->beginGroup("LocalDatabase");
+    localDatabaseHash_ = settings_->value("ZipHash").toString().trimmed().toLower();
+    localDatabaseLastCheckUtc_ = settings_->value("LastCheckUtc", 0).toLongLong();
+    settings_->endGroup();
+
+    settings_->beginGroup("Gallery");
+    galleryCardScalePercent_ = qBound(80, settings_->value("CardScalePercent", 120).toInt(), 200);
     settings_->endGroup();
 }
 
@@ -103,12 +126,20 @@ void Config::save() {
     settings_->setValue("CurDetectLocaleMode", static_cast<int>(curDetectLocaleMode_));
     settings_->endGroup();
 
+    settings_->beginGroup("CardData");
+    settings_->setValue("Source", cardDataSource_);
+    settings_->endGroup();
+
     settings_->beginGroup("MissingCards");
     settings_->setValue("MissingPurgeInterval", missingPurgeInterval_);
     settings_->endGroup();
 
     settings_->beginGroup("Acceleration");
     settings_->setValue("UseAcceleration", useAcceleration_);
+    settings_->endGroup();
+
+    settings_->beginGroup("Models");
+    settings_->setValue("LoadOnStartup", loadModelsOnStartup_);
     settings_->endGroup();
 
     settings_->beginGroup("UpdateChecks");
@@ -119,6 +150,17 @@ void Config::save() {
 
     settings_->beginGroup("AppUpdater");
     settings_->setValue("States", appUpdaterStates_);
+    settings_->endGroup();
+
+    settings_->beginGroup("LocalDatabase");
+    settings_->setValue("ZipHash", localDatabaseHash_);
+    settings_->setValue("LastCheckUtc", localDatabaseLastCheckUtc_);
+    settings_->setValue("LastManualCheckUtc", localDatabaseLastManualCheckUtc_);
+    settings_->setValue("UpdatePending", localDatabaseUpdatePending_);
+    settings_->endGroup();
+
+    settings_->beginGroup("Gallery");
+    settings_->setValue("CardScalePercent", galleryCardScalePercent_);
     settings_->endGroup();
 
     settings_->sync();
@@ -198,6 +240,21 @@ void Config::clearCardListEtags()
 void Config::clearCardListEtags(DetectLocaleMode m)
 {
     (m == DetectLocaleMode::JP ? cardListEtag_ : enCardListEtag_).clear();
+    save();
+}
+
+void Config::setCardDataSource(const QString &source)
+{
+    const QString selected = source.trimmed().toLower();
+
+    if (selected != QStringLiteral("encore") && selected != QStringLiteral("local")) {
+        return;
+    }
+
+    if (selected == cardDataSource_)
+        return;
+
+    cardDataSource_ = selected;
     save();
 }
 
@@ -323,5 +380,59 @@ void Config::setAppUpdaterState(const QString &repository, const QVariantMap &st
 void Config::setUseAcceleration(bool use)
 {
     useAcceleration_ = use;
+    save();
+}
+
+void Config::setLoadModelsOnStartup(bool enabled)
+{
+    if (loadModelsOnStartup_ == enabled)
+        return;
+    loadModelsOnStartup_ = enabled;
+    save();
+}
+
+void Config::setLocalDatabaseHash(const QString &hash)
+{
+    const QString normalized = hash.trimmed().toLower();
+    if (localDatabaseHash_ == normalized)
+        return;
+    localDatabaseHash_ = normalized;
+    save();
+}
+
+void Config::setLocalDatabaseLastCheckUtc(qint64 timestamp)
+{
+    if (localDatabaseLastCheckUtc_ == timestamp)
+        return;
+    localDatabaseLastCheckUtc_ = timestamp;
+    save();
+}
+
+void Config::setLocalDatabaseLastManualCheckUtc(qint64 timestamp)
+{
+    if (localDatabaseLastManualCheckUtc_ == timestamp)
+        return;
+
+    localDatabaseLastManualCheckUtc_ = timestamp;
+    save();
+}
+
+void Config::setLocalDatabaseUpdatePending(bool pending)
+{
+    if (localDatabaseUpdatePending_ == pending)
+        return;
+
+    localDatabaseUpdatePending_ = pending;
+    save();
+}
+
+void Config::setGalleryCardScalePercent(int percent)
+{
+    percent = qBound(80, percent, 200);
+
+    if (galleryCardScalePercent_ == percent)
+        return;
+
+    galleryCardScalePercent_ = percent;
     save();
 }

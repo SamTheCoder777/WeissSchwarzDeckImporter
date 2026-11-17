@@ -6,6 +6,7 @@
 #include <QSqlDatabase>
 #include <QStackedWidget>
 #include <QStringList>
+#include <QUrl>
 #include <QtNetwork>
 #include <vector>
 
@@ -14,7 +15,6 @@
 
 class QLabel;
 class QPushButton;
-class CardBrowserWidget;
 
 class CompareDialog : public QDialog {
     Q_OBJECT
@@ -23,6 +23,7 @@ public:
                   const std::vector<Candidate>& candidates,
                   int startIndex, QSqlDatabase& db, DatabaseUtil* dbUtil,
                   QWidget* parent = nullptr);
+    ~CompareDialog() override;
 
     int confirmedIndex() const { return confirmed_; }
 
@@ -44,13 +45,20 @@ private:
     bool requiresOfficialData(const QString &code) const;
     void showLoadedImage(const QString &code, const QImage &image);
 
-    CardBrowserWidget *browserPanel_ = nullptr;
+    void cancelImageRequest();
 
     QImage crop_;
     std::vector<Candidate> cands_;
     int cur_ = 0;
     int confirmed_ = -1;
     quint64 imageGeneration_ = 0;
+    quint64 imageRequestId_ = 0;
+    QString imageMessage_;
+
+    QWidget *officialPage_ = nullptr;
+    QLabel *officialPageLabel_ = nullptr;
+    QPushButton *officialPageButton_ = nullptr;
+    QUrl officialPageUrl_;
 
     QLabel* cropLabel_;
     QLabel* candLabel_;

@@ -15,6 +15,29 @@ Rectangle {
     readonly property color text1: "#e8eaed"
     readonly property color text2: "#9aa0a6"
 
+    property string searchDataContext: cardDatabase.imageContext()
+
+    Connections {
+        target: cardDatabase
+
+        function onCardDataChanged() {
+            var context = cardDatabase.imageContext();
+
+            if (root.searchDataContext !== context)
+                bridge.clearFilter();
+
+            root.searchDataContext = context;
+
+            if (cardSearchPopup.visible)
+                cardSearchPopup.runSearch();
+
+            if (advSearchPopup.visible) {
+                advSearchPopup.reloadLists();
+                advSearchPopup.recount();
+            }
+        }
+    }
+
     component FilterCombo: ComboBox {
         id: fc
         Layout.fillWidth: true
@@ -539,6 +562,7 @@ Rectangle {
                         Repeater {
                             model: 4
                             Rectangle {
+                                required property int index
                                 width: 32
                                 height: 28
                                 radius: 6
@@ -562,6 +586,29 @@ Rectangle {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: bridge.setQuantity(index + 1)
                                 }
+                            }
+                        }
+                        Rectangle {
+                            width: 64
+                            height: 28
+                            radius: 6
+                            opacity: bridge.isConfirmed ? 1 : 0.3
+                            color: bridge.quantity > 4 ? root.accent : customQuantityMouse.containsMouse ? "#3b424d" : "#2e3238"
+                            border.color: "#48515e"
+                            Label {
+                                anchors.centerIn: parent
+                                text: bridge.quantity > 4 ? "×" + bridge.quantity : "Custom"
+                                color: bridge.quantity > 4 ? "white" : root.text1
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
+                            MouseArea {
+                                id: customQuantityMouse
+                                anchors.fill: parent
+                                enabled: bridge.isConfirmed && bridge.currentIndex >= 0
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: quantityPopup.showForSelection()
                             }
                         }
                     }
@@ -758,6 +805,19 @@ Rectangle {
                                 delegateRoot.imageFallback = cardDatabase.imageUsesOtherRarity(c);
                             }
                         }
+                        function onCardDataChanged() {
+                            delegateRoot.dataLoading = false;
+                            delegateRoot.fetchFailed = false;
+                            delegateRoot.failReason = "";
+                            delegateRoot.imageLoaded = false;
+
+                            delegateRoot.imageFallback = cardDatabase.imageUsesOtherRarity(delegateRoot.code);
+
+                            delegateRoot.refreshCardData();
+
+                            if (delegateRoot.code)
+                                cardDatabase.ensureCardData(delegateRoot.code);
+                        }
                     }
 
                     RowLayout {
@@ -777,7 +837,10 @@ Rectangle {
                                 anchors.margins: 2
                                 fillMode: Image.PreserveAspectFit
                                 asynchronous: true
-                                source: deckCode ? "image://cardcache/" + encodeURIComponent(deckCode) : ""
+                                source: {
+                                    var revision = cardDatabase.dataRevision;
+                                    return cardDatabase.cardImageSource(deckCode);
+                                }
                                 cache: true
                                 visible: !delegateRoot.fetchFailed && status === Image.Ready
                             }
@@ -1208,7 +1271,10 @@ Rectangle {
                                 anchors.margins: 1
                                 fillMode: Image.PreserveAspectFit
                                 asynchronous: true
-                                source: "image://cardcache/" + encodeURIComponent(modelData.cardCode)
+                                source: {
+                                    var revision = cardDatabase.dataRevision;
+                                    return cardDatabase.cardImageSource(modelData.cardCode);
+                                }
                             }
                         }
                         ColumnLayout {
@@ -1268,6 +1334,30 @@ Rectangle {
         property var triggerModel: ["Any", "None"]
         property var traitList: []
 
+        function toggleCardType(code) {
+            if (code === "") {
+                selectedTypes = [];
+                scheduleRecount();
+                return;
+            }
+
+            if (["CH", "EV", "CX"].indexOf(code) < 0)
+                return;
+
+            var selected = selectedTypes.filter(function (value) {
+                return value === "CH" || value === "EV" || value === "CX";
+            });
+
+            var position = selected.indexOf(code);
+
+            if (position >= 0)
+                selected.splice(position, 1);
+            else
+                selected.push(code);
+
+            selectedTypes = selected;
+            scheduleRecount();
+        }
         function traitValue() {
             return fTrait.text.trim();
         }
@@ -1533,7 +1623,7 @@ Rectangle {
                             delegate: Rectangle {
                                 id: typeChip
                                 required property var modelData
-                                readonly property bool on: advSearchPopup.selectedTypes.indexOf(modelData.code) >= 0
+                                readonly property bool on: typeChip.modelData.code === "" ? advSearchPopup.selectedTypes.length === 0 : advSearchPopup.selectedTypes.indexOf(typeChip.modelData.code) >= 0
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 28
                                 radius: 6
@@ -1550,14 +1640,7 @@ Rectangle {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        var arr = advSearchPopup.selectedTypes.slice();
-                                        var i = arr.indexOf(typeChip.modelData.code);
-                                        if (i >= 0)
-                                            arr.splice(i, 1);
-                                        else
-                                            arr.push(typeChip.modelData.code);
-                                        advSearchPopup.selectedTypes = arr;
-                                        advSearchPopup.scheduleRecount();
+                                        advSearchPopup.toggleCardType(typeChip.modelData.code);
                                     }
                                 }
                             }
@@ -1813,6 +1896,109 @@ Rectangle {
                         bridge.searchFiltered(advSearchPopup.filters(), advSearchPopup.summary());
                         advSearchPopup.close();
                     }
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: quantityPopup
+        parent: root.Overlay.overlay || root
+        anchors.centerIn: parent
+        popupType: Popup.Item
+        width: Math.min(280, parent.width - 24)
+        height: contentItem.implicitHeight + topPadding + bottomPadding
+        padding: 16
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        property int selectionIndex: -1
+        property string selectionLabel: ""
+
+        function showForSelection() {
+            if (!bridge.isConfirmed || bridge.currentIndex < 0)
+                return;
+            selectionIndex = bridge.currentIndex;
+            selectionLabel = bridge.confirmedText;
+            quantityInput.text = String(bridge.quantity);
+            open();
+        }
+        function acceptQuantity() {
+            if (!quantityInput.acceptableInput)
+                return;
+            if (!bridge.isConfirmed || bridge.currentIndex !== selectionIndex || bridge.confirmedText !== selectionLabel) {
+                close();
+                return;
+            }
+            bridge.setQuantity(Number(quantityInput.text));
+            close();
+        }
+        onOpened: Qt.callLater(function () {
+            if (quantityPopup.visible) {
+                quantityInput.forceActiveFocus();
+                quantityInput.selectAll();
+            }
+        })
+        Connections {
+            target: bridge
+            function onStateChanged() {
+                if (quantityPopup.visible && (!bridge.isConfirmed || bridge.currentIndex !== quantityPopup.selectionIndex || bridge.confirmedText !== quantityPopup.selectionLabel)) {
+                    quantityPopup.close();
+                }
+            }
+        }
+        background: Rectangle {
+            color: "#242a33"
+            radius: 10
+            border.color: "#4b586a"
+        }
+        contentItem: ColumnLayout {
+            spacing: 10
+            Label {
+                text: "Number of copies"
+                color: root.text1
+                font.pixelSize: 14
+                font.bold: true
+            }
+            TextField {
+                id: quantityInput
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                color: root.text1
+                font.pixelSize: 16
+                horizontalAlignment: Text.AlignHCenter
+                selectByMouse: true
+                inputMethodHints: Qt.ImhDigitsOnly
+                validator: IntValidator {
+                    bottom: 1
+                    top: 999
+                }
+                onAccepted: quantityPopup.acceptQuantity()
+                background: Rectangle {
+                    color: "#1b2028"
+                    radius: 6
+                    border.color: quantityInput.activeFocus ? root.accent : "#48515e"
+                }
+            }
+            Label {
+                text: "1–999 · Enter to confirm · Esc to cancel"
+                color: root.text2
+                font.pixelSize: 10
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Item {
+                    Layout.fillWidth: true
+                }
+                SmallButton {
+                    text: "Cancel"
+                    onClicked: quantityPopup.close()
+                }
+                SmallButton {
+                    text: "Apply"
+                    primary: true
+                    enabled: quantityInput.acceptableInput
+                    onClicked: quantityPopup.acceptQuantity()
                 }
             }
         }

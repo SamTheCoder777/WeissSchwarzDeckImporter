@@ -60,6 +60,12 @@ public:
     QString getDismissedReleaseTag() const { return dismissedReleaseTag_; }
     void setDismissedReleaseTag(const QString &tag);
 
+    // Local db
+    QString localDatabaseVersionUrl_ = QStringLiteral(
+        "https://ws-db.deckimporter.workers.dev/version.json");
+    QString localDatabaseDownloadUrl_ = QStringLiteral(
+        "https://ws-db.deckimporter.workers.dev/db.zip");
+
     // ----- Dataset config ------
 
     // seriest list
@@ -130,6 +136,11 @@ public:
     void clearCardListEtags();
     void clearCardListEtags(DetectLocaleMode m);
 
+    // --- Local DB Settings ---
+    QString getCardDataSource() const { return cardDataSource_; }
+
+    void setCardDataSource(const QString &source);
+
     // ---------------------------
 
     bool getModelNative() const {return native_;}
@@ -144,11 +155,14 @@ public:
         : indexInstallPath_;
     }
     void setIndexInstallPath(const QString& p);
-    QString getIndexManifestUrl() const {
-        return curDetectLocaleMode_ == DetectLocaleMode::JP
+    QString getIndexManifestUrl(DetectLocaleMode mode) const
+    {
+        return mode == DetectLocaleMode::JP
                    ? (indexManifestUrl_.isEmpty() ? kDefaultManifestUrl : indexManifestUrl_)
                    : (enIndexManifestUrl_.isEmpty() ? kEnDefaultManifestUrl : enIndexManifestUrl_);
     }
+
+    QString getIndexManifestUrl() const { return getIndexManifestUrl(curDetectLocaleMode_); }
     void setIndexManifestUrl(const QString& u);
     // check if index name is valid
     Q_INVOKABLE bool isValidIndexName(const QString &name);
@@ -202,6 +216,25 @@ public:
     // --- Hardware acceleration settings ---
     bool getUseAcceleration() const { return useAcceleration_; }
     void setUseAcceleration(bool use);
+    bool getLoadModelsOnStartup() const { return loadModelsOnStartup_; }
+    void setLoadModelsOnStartup(bool enabled);
+
+    // local db
+    QString getLocalDatabaseHash() const { return localDatabaseHash_; }
+    void setLocalDatabaseHash(const QString &hash);
+
+    qint64 getLocalDatabaseLastCheckUtc() const { return localDatabaseLastCheckUtc_; }
+    void setLocalDatabaseLastCheckUtc(qint64 timestamp);
+
+    qint64 getLocalDatabaseLastManualCheckUtc() const { return localDatabaseLastManualCheckUtc_; }
+    void setLocalDatabaseLastManualCheckUtc(qint64 timestamp);
+
+    bool getLocalDatabaseUpdatePending() const { return localDatabaseUpdatePending_; }
+    void setLocalDatabaseUpdatePending(bool pending);
+
+    // gallery settings
+    int getGalleryCardScalePercent() const { return galleryCardScalePercent_; }
+    void setGalleryCardScalePercent(int percent);
 
 signals:
     void detectLocaleModeChanged();
@@ -251,6 +284,9 @@ private:
                                                 .filePath("enCardList.db");
     QMap<QString, QString> enCardListEtag_;
 
+    // Local DB Settings
+    QString cardDataSource_ = QStringLiteral("local");
+
     // ---------------------------
 
     bool native_ = true;
@@ -278,6 +314,17 @@ private:
 
     // --- Hardware acceleration settings ---
     bool useAcceleration_ = true;
+    bool loadModelsOnStartup_ = true;
+
+    // --- Local db ---
+    QString localDatabaseHash_;
+    qint64 localDatabaseLastCheckUtc_ = 0;
+
+    qint64 localDatabaseLastManualCheckUtc_ = 0;
+    bool localDatabaseUpdatePending_ = false;
+
+    // --- Gallery settings ---
+    int galleryCardScalePercent_ = 120;
 };
 
 

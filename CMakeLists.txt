@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(WSDeckImporter LANGUAGES CXX)
+project(WSDeckImporter LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -30,7 +30,31 @@ endif()
 
 find_package(faiss CONFIG REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickWidgets Network Concurrent Sql Svg QuickControls2 WebEngineWidgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickWidgets Network Concurrent Sql Svg QuickControls2)
+
+set(WS_MINIZ_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz")
+
+add_library(ws_miniz STATIC
+    "${WS_MINIZ_DIR}/miniz.c"
+)
+
+target_include_directories(ws_miniz PUBLIC
+    "${WS_MINIZ_DIR}"
+)
+
+target_compile_definitions(ws_miniz PUBLIC
+    MINIZ_NO_STDIO
+    MINIZ_NO_ZLIB_COMPATIBLE_NAMES
+)
+
+set_target_properties(ws_miniz PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED ON
+    AUTOMOC OFF
+    AUTOUIC OFF
+    AUTORCC OFF
+)
+
 
 add_executable(WSDeckImporter WIN32
     main.cpp
@@ -63,10 +87,18 @@ add_executable(WSDeckImporter WIN32
     src/models/index_builder.cpp src/models/index_builder.h src/models/tcg_core.cpp src/models/tcg_core.h src/models/tcg_infer.cpp src/models/tcg_infer.h
     src/models/tcg_util.h
     src/index/IndexGenerationPage.h src/index/IndexGenerationPage.cpp
-    src/browser/CardBrowserDialog.h src/browser/CardBrowserDialog.cpp
-    src/browser/CardBrowserWidget.h src/browser/CardBrowserWidget.cpp
     src/network/NetGuard.cpp src/network/NetGuard.h
     src/core/AppUpdateController.cpp src/core/AppUpdateController.h
+    src/database/LocalCardStore.cpp src/database/LocalCardStore.h
+    src/database/LocalCardStore.cpp src/database/LocalCardStore.h
+    src/deckbuilder/DeckBuilderImages.cpp src/deckbuilder/DeckBuilderImages.h src/deckbuilder/DeckBuilderPage.cpp src/deckbuilder/DeckBuilderPage.h
+    qml/deckbuilder/DeckBuilderPage.qml
+    src/database/TriggerAliases.h
+    src/database/ReferenceSearch.h
+    src/deckbuilder/DeckCode.h src/deckbuilder/DeckCode.cpp
+    src/deckbuilder/DeckBuilderController.h src/deckbuilder/DeckBuilderController.cpp
+    src/gallery/GalleryController.h src/gallery/GalleryController.cpp
+    src/database/LocalDatabaseUpdater.h src/database/LocalDatabaseUpdater.cpp
 )
 
 set(APP_VERSION "")
@@ -87,6 +119,7 @@ target_compile_definitions(WSDeckImporter PRIVATE APP_VERSION="${APP_VERSION}")
 
 target_include_directories(WSDeckImporter PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(WSDeckImporter PRIVATE
+    ws_miniz
     Qt6::Widgets
     Qt6::Quick
     Qt6::QuickWidgets
@@ -95,7 +128,6 @@ target_link_libraries(WSDeckImporter PRIVATE
     Qt6::Sql
     Qt6::Svg
     Qt6::QuickControls2
-    Qt6::WebEngineWidgets
     onnxruntime
     faiss
     ${OpenCV_LIBS}

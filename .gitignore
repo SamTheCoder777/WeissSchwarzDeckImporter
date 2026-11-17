@@ -6,6 +6,8 @@
 *.onnx.*
 onnxruntime-*
 manifest.*
+*.sqlite
+*.db
 
 # C++ objects and libs
 *.slo
@@ -63,3 +65,6 @@ compile_commands.json
 *creator.user*
 
 *_qmlcache.qrc
+
+# Third party
+third_party/*

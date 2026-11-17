@@ -74,6 +74,11 @@ private:
     // missing cards cache
     QComboBox *missingIntervalCombo_ = nullptr;
 
+    // local db updates
+    QPushButton *localDatabaseCheckButton_ = nullptr;
+    QLabel *localDatabaseStatus_ = nullptr;
+    bool localDatabaseCheckBusy_ = false;
+
     using Region = Config::DetectLocaleMode;
 
     struct DatasetRow
@@ -93,4 +98,7 @@ private:
     void setDatasetRowChecking(Region region);
     void updateActiveRegionBadges();
     bool confirmDestructive(const QString &title, const QString &text);
+
+    void checkLocalDatabaseUpdate();
+    void updateLocalDatabaseCheckButton();
 };
